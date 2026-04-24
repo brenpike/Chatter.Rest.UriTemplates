@@ -9,6 +9,7 @@
 ## 2. Solution Structure
 
 ```
+Chatter.Rest.UriTemplates.sln             <- solution file (repo root)
 src/
   Chatter.Rest.UriTemplates/
     Chatter.Rest.UriTemplates.csproj     <- targets net8.0;netstandard2.0
@@ -26,8 +27,6 @@ test/
     UriTemplateEdgeCaseTests.cs
     UriTemplateGetVariablesTests.cs
 ```
-
-> **Note:** no `.sln` file — `dotnet` CLI discovers the two projects from the repo root.
 
 **Target frameworks:**
 
