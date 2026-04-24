@@ -1,0 +1,111 @@
+# CLAUDE.md
+
+## Project Overview
+
+Chatter.Rest.Hal is a .NET/C# implementation of the HAL (Hypertext Application Language) specification for building and consuming RESTful APIs. It provides a fluent builder API, System.Text.Json serialization/deserialization, and a Roslyn source generator package.
+
+**Repository:** https://github.com/brenpike/Chatter.Rest.Hal
+**HAL Specification:** https://datatracker.ietf.org/doc/html/draft-kelly-json-hal
+**License:** MIT
+**Author:** Brennan Pike
+
+## Documentation Index
+
+| Doc | Contents |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | TODO |
+| [docs/usage.md](docs/uri-templates/usage.md) | URI template expansion practical usage guide |
+| [docs/architecture.md](docs/uri-templates/architecture.md) | URI template engine design, operator reference, encoding rules |
+
+## Solution Structure
+
+| Project | NuGet Package |
+|---|---|
+| `src/Chatter.Rest.Hal/` | `Chatter.Rest.Hal` |
+| `src/Chatter.Rest.Hal.CodeGenerators/` | `Chatter.Rest.Hal.CodeGenerators` |
+| `src/Chatter.Rest.Hal.Core/` | Shared types; no standalone package |
+| `src/Chatter.Rest.UriTemplates/` | `Chatter.Rest.UriTemplates` |
+| `test/Chatter.Rest.Hal.Tests/` | — |
+| `test/Chatter.Rest.Hal.CodeGenerators.Tests/` | — |
+| `test/Chatter.Rest.UriTemplates.Tests/` | — |
+
+## Multi-Agent Governance
+
+This repository uses a constrained multi-agent workflow.
+
+Canonical governance files:
+- `agent-system-policy.md` — shared agent roles, authority, tool policy, escalation, and reporting
+- `branching-pr-workflow.md` — MANDATORY branching, commit, PR, merge, and validation workflow
+
+These files must ALWAYS be respected unless the user says otherwise.
+
+Role-specific behavior is defined in:
+- `orchestrator.md`
+- `planner.md`
+- `coder.md`
+- `designer.md`
+
+## Build and Test Commands
+
+See [docs/development.md](docs/development.md) for all build, test, and pack commands.
+
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for domain model, builder internals, converters, and source generator pipeline.
+
+## Testing Conventions
+
+See [docs/development.md](docs/development.md) for test framework, assertions, naming conventions, and fixture patterns.
+
+## Code Style and Conventions
+
+See [docs/development.md](docs/development.md) for editorconfig rules (line endings, indentation, braces).
+
+Additional conventions observed in the codebase:
+
+- All collection types are `sealed record` implementing `ICollection<T>` and `IHalPart`
+- Domain types use the `Chatter.Rest.Hal` namespace
+- Converters use the `Chatter.Rest.Hal.Converters` namespace
+- Builders use the `Chatter.Rest.Hal.Builders` namespace with stages in sub-namespaces
+- Internal members are exposed to test assemblies via `InternalsVisibleTo`
+
+## Test Plan
+
+`docs/HAL_TEST_PLAN.md` maps every normative and behavioral HAL spec requirement to testable scenarios, cross-referenced against the existing test suite. Consult it when:
+- Answering questions about expected behavior
+- Adding new tests for spec compliance
+- Evaluating whether a bug is a spec violation or implementation choice
+
+## CI/CD
+
+See [docs/development.md](docs/development.md) for CI/CD workflow details.
+
+## Package Versions
+
+- `Chatter.Rest.Hal` — v1.0.1
+- `Chatter.Rest.Hal.CodeGenerators` — v0.3.0
+- `Chatter.Rest.UriTemplates` — v0.1.0
+
+## Memory Usage
+
+- Use `claude-mem` first when prior context, earlier decisions, constraints, risks, or continuity may materially improve accuracy, efficiency, or consistency.
+- Treat memory as a continuity and token-efficiency aid, not as a substitute for current repo inspection, validation, or other required verification.
+- Reuse still-valid prior context when helpful, but continue normally if no relevant memory is found.
+- If `mem-search` or another memory tool fails, retry at most once if the failure appears transient, then fall back to normal tools and available context.
+- Memory-tool failure alone must not block execution.
+
+## Codebase Exploration Guidance
+
+Use local repo inspection first for codebase exploration and change understanding.
+
+Preferred tools:
+- `Read` for targeted file inspection
+- `Grep` and `Glob` for discovery
+- read-only shell commands for repository structure and search
+- `Context7` only when external framework, library, platform, or API documentation is needed
+- `claude-mem` when prior project or session context can reduce rediscovery
+
+For code review, debugging, and refactoring:
+1. start with the smallest local inspection that can answer the question
+2. widen scope only when necessary
+3. validate conclusions with the actual files being changed
