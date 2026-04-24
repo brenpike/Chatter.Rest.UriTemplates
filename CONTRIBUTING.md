@@ -4,7 +4,7 @@ Contributions are welcome. For non-trivial changes, please open an issue first t
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/brenpike/Chatter.Rest.Hal/issues) to report bugs or request features. Please include:
+Use [GitHub Issues](https://github.com/brenpike/Chatter.Rest.UriTemplates/issues) to report bugs or request features. Please include:
 
 - .NET SDK version
 - Package version
@@ -21,8 +21,8 @@ Prerequisites:
 Clone and build:
 
 ```bash
-git clone https://github.com/brenpike/Chatter.Rest.Hal.git
-cd Chatter.Rest.Hal
+git clone https://github.com/brenpike/Chatter.Rest.UriTemplates.git
+cd Chatter.Rest.UriTemplates
 dotnet restore
 dotnet build
 ```
@@ -61,9 +61,7 @@ Run `dotnet build` before submitting - zero warnings expected on `net8.0`.
 
 - All new behavior must include tests
 - Framework: xunit 2.4.x with FluentAssertions 6.x
-- Test naming: `Method_Scenario_Expected` (example: `AddLink_WithDuplicateRelation_ThrowsInvalidOperationException`)
-- JSON fixtures go in `test/Chatter.Rest.Hal.Tests/Json/`
-- Use `TestHelpers` factory methods for common setup
+- Test naming: `Method_Scenario_Expected` (example: `Expand_WithUndefinedVariable_OmitsVariable`)
 
 ## Pull Request Checklist
 

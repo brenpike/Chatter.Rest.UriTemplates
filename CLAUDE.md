@@ -2,10 +2,10 @@
 
 ## Project Overview
 
-Chatter.Rest.Hal is a .NET/C# implementation of the HAL (Hypertext Application Language) specification for building and consuming RESTful APIs. It provides a fluent builder API, System.Text.Json serialization/deserialization, and a Roslyn source generator package.
+Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-3. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with no external NuGet dependencies.
 
-**Repository:** https://github.com/brenpike/Chatter.Rest.Hal
-**HAL Specification:** https://datatracker.ietf.org/doc/html/draft-kelly-json-hal
+**Repository:** https://github.com/brenpike/Chatter.Rest.UriTemplates
+**RFC 6570 Specification:** https://datatracker.ietf.org/doc/html/rfc6570
 **License:** MIT
 **Author:** Brennan Pike
 
@@ -13,29 +13,26 @@ Chatter.Rest.Hal is a .NET/C# implementation of the HAL (Hypertext Application L
 
 | Doc | Contents |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | TODO |
-| [docs/usage.md](docs/uri-templates/usage.md) | URI template expansion practical usage guide |
-| [docs/architecture.md](docs/uri-templates/architecture.md) | URI template engine design, operator reference, encoding rules |
+| [docs/architecture.md](docs/architecture.md) | URI template engine design, operator reference, encoding rules, type design |
+| [docs/usage.md](docs/usage.md) | Practical usage guide with API reference and operator examples |
+| [docs/test-plan.md](docs/test-plan.md) | RFC 6570 test coverage map, test scenarios by level and operator |
+| [docs/development.md](docs/development.md) | Build commands, test commands, NuGet packaging, CI/CD parity, code style, test conventions |
+| [docs/branching-pr-workflow.md](docs/branching-pr-workflow.md) | Mandatory branching and PR workflow |
 
 ## Solution Structure
 
 | Project | NuGet Package |
 |---|---|
-| `src/Chatter.Rest.Hal/` | `Chatter.Rest.Hal` |
-| `src/Chatter.Rest.Hal.CodeGenerators/` | `Chatter.Rest.Hal.CodeGenerators` |
-| `src/Chatter.Rest.Hal.Core/` | Shared types; no standalone package |
 | `src/Chatter.Rest.UriTemplates/` | `Chatter.Rest.UriTemplates` |
-| `test/Chatter.Rest.Hal.Tests/` | — |
-| `test/Chatter.Rest.Hal.CodeGenerators.Tests/` | — |
-| `test/Chatter.Rest.UriTemplates.Tests/` | — |
+| `test/Chatter.Rest.UriTemplates.Tests/` | - |
 
 ## Multi-Agent Governance
 
 This repository uses a constrained multi-agent workflow.
 
 Canonical governance files:
-- `agent-system-policy.md` — shared agent roles, authority, tool policy, escalation, and reporting
-- `branching-pr-workflow.md` — MANDATORY branching, commit, PR, merge, and validation workflow
+- `agent-system-policy.md` - shared agent roles, authority, tool policy, escalation, and reporting
+- `docs/branching-pr-workflow.md` - MANDATORY branching, commit, PR, merge, and validation workflow
 
 These files must ALWAYS be respected unless the user says otherwise.
 
@@ -51,11 +48,11 @@ See [docs/development.md](docs/development.md) for all build, test, and pack com
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for domain model, builder internals, converters, and source generator pipeline.
+See [docs/architecture.md](docs/architecture.md) for engine design, operator reference, encoding rules, and type design.
 
 ## Testing Conventions
 
-See [docs/development.md](docs/development.md) for test framework, assertions, naming conventions, and fixture patterns.
+See [docs/development.md](docs/development.md) for test framework, assertions, naming conventions, and coverage setup.
 
 ## Code Style and Conventions
 
@@ -63,15 +60,13 @@ See [docs/development.md](docs/development.md) for editorconfig rules (line endi
 
 Additional conventions observed in the codebase:
 
-- All collection types are `sealed record` implementing `ICollection<T>` and `IHalPart`
-- Domain types use the `Chatter.Rest.Hal` namespace
-- Converters use the `Chatter.Rest.Hal.Converters` namespace
-- Builders use the `Chatter.Rest.Hal.Builders` namespace with stages in sub-namespaces
-- Internal members are exposed to test assemblies via `InternalsVisibleTo`
+- `UriTemplate` is the only public type; all other types (`UriTemplateParser`, `UriTemplateExpander`, `UriTemplateExpression`, `UriTemplateOperator`) are internal
+- All types use the `Chatter.Rest.UriTemplates` namespace
+- Internal members are exposed to test assembly via `InternalsVisibleTo` in the csproj
 
 ## Test Plan
 
-`docs/HAL_TEST_PLAN.md` maps every normative and behavioral HAL spec requirement to testable scenarios, cross-referenced against the existing test suite. Consult it when:
+`docs/test-plan.md` maps every RFC 6570 normative and behavioral requirement to testable scenarios, organized by level and operator. Consult it when:
 - Answering questions about expected behavior
 - Adding new tests for spec compliance
 - Evaluating whether a bug is a spec violation or implementation choice
@@ -82,9 +77,7 @@ See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
 ## Package Versions
 
-- `Chatter.Rest.Hal` — v1.0.1
-- `Chatter.Rest.Hal.CodeGenerators` — v0.3.0
-- `Chatter.Rest.UriTemplates` — v0.1.0
+- `Chatter.Rest.UriTemplates` - v0.1.0
 
 ## Memory Usage
 

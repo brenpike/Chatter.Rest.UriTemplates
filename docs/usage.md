@@ -245,38 +245,7 @@ t.Expand(("path", "/foo/bar?q=1"));
 
 ## 7. LinkObject Integration
 
-When using `Chatter.Rest.Hal`, the `LinkObject` class has two methods that delegate to the URI template engine:
-
-### `LinkObject.GetTemplateVariables()`
-
-Returns all variable names from the link's `Href` when `Templated` is `true`. Returns an empty list when `Templated` is `false` or `Href` is empty.
-
-```csharp
-var resource = ResourceBuilder.New()
-    .AddLink("search").AddLinkObject("/orders{?status,page}").Templated()
-    .Build();
-
-var link = resource!.GetLinkObjectOrDefault("search");
-var vars = link!.GetTemplateVariables();
-// Result: ["status", "page"]
-```
-
-### `LinkObject.Expand()`
-
-Expands the URI template with provided variables. Returns `Href` unchanged when `Templated` is not `true`.
-
-```csharp
-var expandedUri = link!.Expand(new Dictionary<string, string>
-{
-    ["status"] = "shipped",
-    ["page"] = "2"
-});
-// Result: "/orders?status=shipped&page=2"
-
-// Tuple overload:
-var expandedUri2 = link!.Expand(("status", "shipped"), ("page", "2"));
-// Result: "/orders?status=shipped&page=2"
-```
+For integration with the HAL `LinkObject`, see the [Chatter.Rest.Hal](https://github.com/brenpike/Chatter.Rest.Hal) package.
 
 ---
 
@@ -319,4 +288,4 @@ var t = new UriTemplate("/items{?list*}");
 
 The exception message is: `"RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status."`
 
-Level 4 is deferred because it requires list and dictionary value types, which are beyond the `IDictionary<string, string>` API surface. See [docs/uri-templates/architecture.md](architecture.md) for the Level 4 TODO and future implementation requirements.
+Level 4 is deferred because it requires list and dictionary value types, which are beyond the `IDictionary<string, string>` API surface. See [architecture.md](architecture.md) for the Level 4 TODO and future implementation requirements.

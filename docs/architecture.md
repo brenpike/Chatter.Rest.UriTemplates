@@ -6,7 +6,7 @@ Spec: https://datatracker.ietf.org/doc/html/rfc6570
 
 ## Overview
 
-New project `src/Chatter.Rest.UriTemplates/` implementing RFC 6570 URI Template expansion for Levels 1–3. Ships as its own NuGet package (`Chatter.Rest.UriTemplates`). `Chatter.Rest.Hal` project-references it; `LinkObject.GetTemplateVariables()` and `Expand()` delegate to the new engine.
+Standalone .NET library implementing RFC 6570 URI Template expansion for Levels 1–3. Ships as NuGet package `Chatter.Rest.UriTemplates`. No external NuGet dependencies.
 
 Level 4 (value modifiers — prefix `:N` and explode `*`) is explicitly deferred. See [Level 4 TODO](#level-4-todo).
 
@@ -28,7 +28,6 @@ Level 4 (value modifiers — prefix `:N` and explode `*`) is explicitly deferred
 
 - No external NuGet dependencies
 - Target `netstandard2.0` and `net8.0` (matching the rest of the solution)
-- `Chatter.Rest.Hal` project-references `Chatter.Rest.UriTemplates`
 - Package ID: `Chatter.Rest.UriTemplates`
 
 ### Out of Scope
@@ -208,40 +207,9 @@ Pct-encoded sequences (`%XX`) in the source value are also passed through unenco
 
 ---
 
-## Integration with `LinkObject`
+## HAL Integration
 
-After this project is implemented:
-
-1. `LinkObject.GetTemplateVariables()` refactors to:
-   ```csharp
-   public IReadOnlyList<string> GetTemplateVariables() =>
-       Templated == true && !string.IsNullOrEmpty(Href)
-           ? new UriTemplate(Href).GetVariables()
-           : Array.Empty<string>();
-   ```
-
-2. `LinkObject.Expand(IDictionary<string, string> variables)` refactors to:
-   ```csharp
-   public string Expand(IDictionary<string, string> variables)
-   {
-       if (variables is null) throw new ArgumentNullException(nameof(variables));
-       if (Templated != true || string.IsNullOrEmpty(Href)) return Href;
-       return new UriTemplate(Href).Expand(variables);
-   }
-   ```
-
-3. The `params (string Key, string Value)[]` overload remains unchanged (delegates to the `IDictionary` overload).
-
-### Behavioural changes after integration
-
-| Behaviour | Before (Level 1 only) | After (Levels 1–3) |
-|---|---|---|
-| `GetTemplateVariables()` on `{?status,page}` | `[]` | `["status", "page"]` |
-| `Expand()` on `{?status,page}` | `/orders{?status,page}` (unexpanded) | `/orders?status=open&page=2` |
-| `GetTemplateVariables()` on `{+path}` | `[]` | `["path"]` |
-| `Expand()` on `{+path}` | `/proxy/{+path}` (unexpanded) | `/proxy/foo/bar` |
-
-Existing `LinkObjectTemplateExpansionTests` cover Level 1 behaviour and remain valid. No existing tests are expected to break; Level 2–3 expansion is additive.
+For integration with HAL `LinkObject`, see the [Chatter.Rest.Hal](https://github.com/brenpike/Chatter.Rest.Hal) repository.
 
 ---
 
@@ -254,5 +222,3 @@ Future implementation requires:
 - Per-operator explode logic for each of the 8 operators
 - Prefix truncation logic applied before encoding
 - New overloads on `UriTemplate.Expand()` accepting the richer value type
-
-Track in the feature backlog as a stretch goal for IDEA-01.
