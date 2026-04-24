@@ -8,11 +8,11 @@
     <Version>0.1.0</Version>
     <Authors>Brennan Pike</Authors>
     <Owners>Brennan Pike</Owners>
-    <Description>RFC 6570 URI Template expansion for Chatter.Rest.Hal</Description>
+    <Description>RFC 6570 URI Template expansion for .NET (Levels 1–3)</Description>
     <PackageId>Chatter.Rest.UriTemplates</PackageId>
-    <RepositoryUrl>https://github.com/brenpike/Chatter.Rest.Hal</RepositoryUrl>
+    <RepositoryUrl>https://github.com/brenpike/Chatter.Rest.UriTemplates</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>.net;Chatter;REST;HAL;URI Templates;RFC 6570</PackageTags>
+    <PackageTags>.net;Chatter;REST;URI Templates;RFC 6570</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IsPackable>true</IsPackable>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
