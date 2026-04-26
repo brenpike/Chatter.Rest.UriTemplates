@@ -74,8 +74,10 @@ Operator: none. Encoding: unreserved. Separator: `,`. Prefix: none.
 | Existing | `SingleVar_SimpleValue` | `{var}` | `value` |
 | Existing | `SingleVar_WithSpaceAndBang` | `{hello}` | `Hello%20World%21` |
 | Planned | `SingleVar_PercentEncoded` | `{half}` | `50%25` |
-| Existing | `SingleVar_EmptyValue` | `O{empty}X` | `OX` |
-| Existing | `SingleVar_Undefined` | `O{undef}X` | `OX` |
+| Existing | `SingleVar_EmptyValue` | `{empty}` | *(empty string)* |
+| Existing | `SingleVar_Undefined` | `{undef}` | *(empty string)* |
+| Planned | `SingleVar_EmptyValueWrappedByLiterals` | `O{empty}X` | `OX` |
+| Planned | `SingleVar_UndefinedWrappedByLiterals` | `O{undef}X` | `OX` |
 | Existing | `SingleVar_WithSlashes` | `{path}` | `%2Ffoo%2Fbar` |
 | Existing | `MultipleVars_TwoValues` | `{x,y}` | `1024,768` |
 | Existing | `MultipleVars_ThreeValues` | `{x,hello,y}` | `1024,Hello%20World%21,768` |
@@ -499,7 +501,7 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 
 | Area | Existing | Planned | Gap | Deferred |
 |---|---:|---:|---:|---:|
-| Level 1 simple string | 22 | 9 | 5 | 0 |
+| Level 1 simple string | 22 | 11 | 5 | 0 |
 | Level 2 reserved and fragment | 19 | 6 | 6 | 0 |
 | Level 3 operators | 39 | 20 | 2 | 0 |
 | Variable discovery | 9 | 2 | 0 | 1 |
