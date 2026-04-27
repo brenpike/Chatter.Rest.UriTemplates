@@ -771,6 +771,25 @@ namespace Chatter.Rest.UriTemplates.Tests
 				.And.Message.Should().Contain("keys");
 		}
 
+		// Associative array with null key -> FormatException
+
+		[Fact]
+		public void AssociativeArrayWithNullKey_ThrowsFormatException()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["keys"] = new List<KeyValuePair<string, string>>
+				{
+					new("semi", ";"),
+					new(null!, "value"),
+				},
+			};
+			var template = new UriTemplate("{keys}");
+			Action act = () => template.Expand(vars);
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("keys");
+		}
+
 		// D4: IEnumerable<KeyValuePair<string,string>> dispatch path via List<KVP>
 
 		[Fact]

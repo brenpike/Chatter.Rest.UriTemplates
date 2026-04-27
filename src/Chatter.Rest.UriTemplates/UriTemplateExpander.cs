@@ -216,10 +216,16 @@ internal static class UriTemplateExpander
                 $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{varName}').");
         }
 
-        // Materialize to check emptiness and validate values
+        // Materialize to check emptiness and validate keys/values
         var pairList = new List<KeyValuePair<string, string>>();
         foreach (var kvp in pairs)
         {
+            if (kvp.Key is null)
+            {
+                throw new FormatException(
+                    $"Variable '{varName}' contains a null key. " +
+                    "Associative array keys must be non-null strings.");
+            }
             if (kvp.Value is null)
             {
                 throw new FormatException(
