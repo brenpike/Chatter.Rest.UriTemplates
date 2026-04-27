@@ -78,11 +78,11 @@ public sealed class UriTemplate
         {
             if (token is UriTemplateExpression expression)
             {
-                foreach (var varName in expression.Variables)
+                foreach (var varSpec in expression.Variables)
                 {
-                    if (seen.Add(varName))
+                    if (seen.Add(varSpec.Name))
                     {
-                        result.Add(varName);
+                        result.Add(varSpec.Name);
                     }
                 }
             }

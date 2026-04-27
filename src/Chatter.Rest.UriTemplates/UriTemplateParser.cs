@@ -78,7 +78,7 @@ internal static class UriTemplateParser
 
             // Split variable names on ','
             var rawNames = varsPart.Split(',');
-            var variables = new List<string>(rawNames.Length);
+            var variables = new List<UriTemplateVarSpec>(rawNames.Length);
 
             for (var i = 0; i < rawNames.Length; i++)
             {
@@ -87,6 +87,13 @@ internal static class UriTemplateParser
                 // Detect Level 4 modifiers before varname validation
                 var colonIdx = name.IndexOf(':');
                 var starIdx = name.IndexOf('*');
+
+                // Mutual-exclusion check: both prefix and explode present
+                if (colonIdx >= 0 && starIdx >= 0)
+                {
+                    throw new FormatException(
+                        "Prefix modifier ':N' and explode modifier '*' are mutually exclusive per RFC 6570.");
+                }
 
                 if (colonIdx >= 0)
                 {
@@ -115,8 +122,17 @@ internal static class UriTemplateParser
                             $"Prefix modifier length must be between 1 and 9999, got ':{suffix}'.");
                     }
 
-                    throw new NotSupportedException(
-                        "RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status.");
+                    var varName = name.Substring(0, colonIdx);
+
+                    if (varName.Length == 0)
+                    {
+                        throw new FormatException("Empty variable name in expression.");
+                    }
+
+                    ValidateVarName(varName);
+
+                    variables.Add(new UriTemplateVarSpec(varName, prefixLen, false));
+                    continue;
                 }
 
                 if (starIdx >= 0)
@@ -128,8 +144,17 @@ internal static class UriTemplateParser
                             $"Explode modifier '*' must appear at the end of the variable name, not at position {starIdx} in '{name}'.");
                     }
 
-                    throw new NotSupportedException(
-                        "RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status.");
+                    var varName = name.Substring(0, starIdx);
+
+                    if (varName.Length == 0)
+                    {
+                        throw new FormatException("Empty variable name in expression.");
+                    }
+
+                    ValidateVarName(varName);
+
+                    variables.Add(new UriTemplateVarSpec(varName, null, true));
+                    continue;
                 }
 
                 if (name.Length == 0)
@@ -139,7 +164,7 @@ internal static class UriTemplateParser
 
                 ValidateVarName(name);
 
-                variables.Add(name);
+                variables.Add(new UriTemplateVarSpec(name, null, false));
             }
 
             tokens.Add(new UriTemplateExpression(op, variables));

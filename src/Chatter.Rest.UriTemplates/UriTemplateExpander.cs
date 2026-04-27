@@ -9,8 +9,10 @@ internal static class UriTemplateExpander
         var op = expression.Operator;
         var parts = new List<string>();
 
-        foreach (var varName in expression.Variables)
+        foreach (var varSpec in expression.Variables)
         {
+            var varName = varSpec.Name;
+
             if (!variables.TryGetValue(varName, out var value) || value is null)
             {
                 // Undefined or null: omit per RFC 6570 §2.3
