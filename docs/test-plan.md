@@ -73,17 +73,17 @@ Operator: none. Encoding: unreserved. Separator: `,`. Prefix: none.
 |---|---|---|---|
 | Existing | `SingleVar_SimpleValue` | `{var}` | `value` |
 | Existing | `SingleVar_WithSpaceAndBang` | `{hello}` | `Hello%20World%21` |
-| Planned | `SingleVar_PercentEncoded` | `{half}` | `50%25` |
+| Existing | `SingleVar_PercentEncoded` | `{half}` | `50%25` |
 | Existing | `SingleVar_EmptyValue` | `{empty}` | *(empty string)* |
 | Existing | `SingleVar_Undefined` | `{undef}` | *(empty string)* |
-| Planned | `SingleVar_EmptyValueWrappedByLiterals` | `O{empty}X` | `OX` |
-| Planned | `SingleVar_UndefinedWrappedByLiterals` | `O{undef}X` | `OX` |
+| Existing | `SingleVar_EmptyValueWrappedByLiterals` | `O{empty}X` | `OX` |
+| Existing | `SingleVar_UndefinedWrappedByLiterals` | `O{undef}X` | `OX` |
 | Existing | `SingleVar_WithSlashes` | `{path}` | `%2Ffoo%2Fbar` |
 | Existing | `NoOp_TwoVars` | `{x,y}` | `1024,768` |
 | Existing | `NoOp_ThreeVars` | `{x,hello,y}` | `1024,Hello%20World%21,768` |
-| Planned | `MultipleVars_WithEmpty` | `?{x,empty}` | `?1024,` |
-| Planned | `MultipleVars_WithUndefinedTail` | `?{x,undef}` | `?1024` |
-| Planned | `MultipleVars_WithUndefinedHead` | `?{undef,y}` | `?768` |
+| Existing | `MultipleVars_WithEmpty` | `?{x,empty}` | `?1024,` |
+| Existing | `MultipleVars_WithUndefinedTail` | `?{x,undef}` | `?1024` |
+| Existing | `MultipleVars_WithUndefinedHead` | `?{undef,y}` | `?768` |
 
 Note: the multi-variable simple expansion rows are currently covered by `UriTemplateLevel3Tests`, where this suite groups Level 3 multi-variable behavior.
 
@@ -96,7 +96,7 @@ Note: the multi-variable simple expansion rows are currently covered by `UriTemp
 | Existing | `TrailingLiteral` | `{var}/orders` | `value/orders` |
 | Existing | `MiddleLiteral` | `/orders/{var}/items` | `/orders/value/items` |
 | Existing | `EmptyTemplate` | *(empty string)* | *(empty string)* |
-| Planned | `Literal_PctTripletPreserved` | `/already/%7Eencoded` | `/already/%7Eencoded` |
+| Existing | `Literal_PctTripletPreserved` | `/already/%7Eencoded` | `/already/%7Eencoded` |
 | Gap | `Literal_NonAsciiEncoded` | `/caf\u00e9/{var}` | `/caf%C3%A9/value` |
 | Gap | `Literal_SpaceRejected` | `/bad literal/{var}` | `FormatException` |
 | Gap | `Literal_InvalidPercentTripletRejected` | `/bad/%zz/{var}` | `FormatException` |
@@ -108,8 +108,8 @@ Note: the multi-variable simple expansion rows are currently covered by `UriTemp
 |---|---|---|---|
 | Existing | `TwoExpressions` | `/orders/{x}/items/{y}` | `/orders/1024/items/768` |
 | Existing | `ConsecutiveExpressions` | `{x}{y}` | `1024768` |
-| Planned | `RepeatedVariable_StaticValue` | `{var}/{var}` | `value/value` |
-| Planned | `SameVariableDifferentOperators` | `{path}{+path}{/path}` | `%2Ffoo%2Fbar/foo/bar/%2Ffoo%2Fbar` |
+| Existing | `RepeatedVariable_StaticValue` | `{var}/{var}` | `value/value` |
+| Existing | `SameVariableDifferentOperators` | `{path}{+path}{/path}` | `%2Ffoo%2Fbar/foo/bar/%2Ffoo%2Fbar` |
 
 ### 1.4 Encoding edge cases
 
@@ -123,10 +123,10 @@ Note: the multi-variable simple expansion rows are currently covered by `UriTemp
 | Existing | `Encoding_UnderscoreNotEncoded` | `var="val_ue"` | `val_ue` |
 | Existing | `Encoding_ReservedColonEncoded` | `var="val:ue"` | `val%3Aue` |
 | Existing | `Encoding_ReservedAmpersandEncoded` | `var="a&b"` | `a%26b` |
-| Planned | `Encoding_PercentEncoded` | `half="50%"` | `50%25` |
-| Planned | `Encoding_UnicodeUtf8Encoded` | `var="caf\u00e9"` | `caf%C3%A9` |
-| Planned | `Encoding_EmojiUtf8Encoded` | `var="\uD83D\uDE00"` | `%F0%9F%98%80` |
-| Planned | `Encoding_ExistingPctTripletEncodedForSimple` | `var="%7E"` | `%257E` |
+| Existing | `Encoding_PercentEncoded` | `half="50%"` | `50%25` |
+| Existing | `Encoding_UnicodeUtf8Encoded` | `var="caf\u00e9"` | `caf%C3%A9` |
+| Existing | `Encoding_EmojiUtf8Encoded` | `var="\uD83D\uDE00"` | `%F0%9F%98%80` |
+| Existing | `Encoding_ExistingPctTripletEncodedForSimple` | `var="%7E"` | `%257E` |
 
 ### 1.5 Guard conditions
 
@@ -135,8 +135,8 @@ Note: the multi-variable simple expansion rows are currently covered by `UriTemp
 | Existing | `NullDictionary_Throws` | `variables = null` | `ArgumentNullException` |
 | Existing | `EmptyDictionary_AllExpressionsEmpty` | `{var}`, `{}` | *(empty string)* |
 | Gap | `NullDictionaryValue_TreatedAsUndefined` | `["var"] = null` | *(empty string)* |
-| Planned | `TupleOverload_NullArrayThrows` | `variables = null` | `ArgumentNullException` |
-| Planned | `TupleOverload_DuplicateKeys_FirstWins` | `("var","first"),("var","second")` | `first` |
+| Existing | `TupleOverload_NullArrayThrows` | `variables = null` | `ArgumentNullException` |
+| Existing | `TupleOverload_DuplicateKeys_FirstWins` | `("var","first"),("var","second")` | `first` |
 
 ## 2. Level 2 Reserved and Fragment Expansion
 
@@ -151,21 +151,21 @@ Operator: `+`. Encoding: reserved. Separator: `,`. Prefix: none.
 | Existing | `Plus_SimpleValue` | `{+var}` | `value` |
 | Existing | `Plus_WithSpace` | `{+hello}` | `Hello%20World!` |
 | Gap | `Plus_PercentEncoded` | `{+half}` | `50%25` |
-| Planned | `Plus_BaseReservedCharsPreserved` | `{+base}index` | `http://example.com/home/index` |
-| Planned | `Simple_BaseReservedCharsEncoded` | `{base}index` | `http%3A%2F%2Fexample.com%2Fhome%2Findex` |
+| Existing | `Plus_BaseReservedCharsPreserved` | `{+base}index` | `http://example.com/home/index` |
+| Existing | `Simple_BaseReservedCharsEncoded` | `{base}index` | `http%3A%2F%2Fexample.com%2Fhome%2Findex` |
 | Existing | `Plus_WithSlashes_PreservesSlashes` | `{+path}` | `/foo/bar` |
 | Existing | `Plus_TrailingLiteral` | `{+path}/here` | `/foo/bar/here` |
 | Existing | `Plus_InQueryContext` | `here?ref={+path}` | `here?ref=/foo/bar` |
-| Planned | `Plus_AdjacentSimpleExpression` | `up{+path}{var}/here` | `up/foo/barvalue/here` |
+| Existing | `Plus_AdjacentSimpleExpression` | `up{+path}{var}/here` | `up/foo/barvalue/here` |
 | Existing | `Plus_EmptyValue` | `{+empty}` | *(empty string)* |
 | Existing | `Plus_Undefined` | `{+undef}` | *(empty string)* |
-| Planned | `Plus_EmptyValueWrappedByLiterals` | `O{+empty}X` | `OX` |
-| Planned | `Plus_UndefinedWrappedByLiterals` | `O{+undef}X` | `OX` |
+| Existing | `Plus_EmptyValueWrappedByLiterals` | `O{+empty}X` | `OX` |
+| Existing | `Plus_UndefinedWrappedByLiterals` | `O{+undef}X` | `OX` |
 | Existing | `Plus_MultipleVars` | `{+x,hello,y}` | `1024,Hello%20World!,768` |
 | Existing | `Plus_MultipleVarsWithPath` | `{+path,x}/here` | `/foo/bar,1024/here` |
 | Existing | `Plus_AmpersandPreserved` | `{+var}`, `var="a&b"` | `a&b` |
 | Existing | `Plus_ColonPreserved` | `{+var}`, `var="a:b"` | `a:b` |
-| Planned | `Plus_ExistingPctTripletPreserved` | `{+var}`, `var="x%2Fy"` | `x%2Fy` |
+| Existing | `Plus_ExistingPctTripletPreserved` | `{+var}`, `var="x%2Fy"` | `x%2Fy` |
 | Gap | `Plus_BarePercentEncoded` | `{+var}`, `var="x%y"` | `x%25y` |
 | Gap | `Plus_InvalidPctTripletEncoded` | `{+var}`, `var="x%zz"` | `x%25zz` |
 
@@ -183,9 +183,9 @@ Operator: `#`. Encoding: reserved. Separator: `,`. Prefix: `#` when at least one
 | Existing | `Hash_MultipleVars` | `{#x,hello,y}` | `#1024,Hello%20World!,768` |
 | Existing | `Hash_EmptyValue` | `{#empty}` | `#` |
 | Existing | `Hash_Undefined_NoHash` | `{#undef}` | *(empty string)* |
-| Planned | `Hash_EmptyValueWrappedByLiteral` | `foo{#empty}` | `foo#` |
-| Planned | `Hash_UndefinedWrappedByLiteral` | `foo{#undef}` | `foo` |
-| Planned | `Hash_ExistingPctTripletPreserved` | `{#var}`, `var="x%2Fy"` | `#x%2Fy` |
+| Existing | `Hash_EmptyValueWrappedByLiteral` | `foo{#empty}` | `foo#` |
+| Existing | `Hash_UndefinedWrappedByLiteral` | `foo{#undef}` | `foo` |
+| Existing | `Hash_ExistingPctTripletPreserved` | `{#var}`, `var="x%2Fy"` | `#x%2Fy` |
 | Gap | `Hash_BarePercentEncoded` | `{#var}`, `var="x%y"` | `#x%25y` |
 
 ## 3. Level 3 Multiple Variables and Operator Expansion
@@ -201,8 +201,8 @@ Class: `UriTemplateLevel3Tests`
 | Existing | `NoOp_WithUndefined_OmitsUndefined` | `{x,undef,y}` | `1024,768` |
 | Existing | `NoOp_AllUndefined` | `{undef,undef}` | *(empty string)* |
 | Existing | `NoOp_WithEmpty` | `{x,empty,y}` | `1024,,768` |
-| Planned | `NoOp_PercentValue` | `{half,who}` | `50%25,fred` |
-| Planned | `NoOp_SlashValueEncoded` | `{who,dub}` | `fred,me%2Ftoo` |
+| Existing | `NoOp_PercentValue` | `{half,who}` | `50%25,fred` |
+| Existing | `NoOp_SlashValueEncoded` | `{who,dub}` | `fred,me%2Ftoo` |
 
 ### 3.2 Reserved multi-variable `{+x,y}`
 
@@ -227,14 +227,14 @@ Class: `UriTemplateLevel3Tests`
 | Existing | `Dot_TwoVars` | `{.x,y}` | `.1024.768` |
 | Existing | `Dot_Undefined` | `{.undef}` | *(empty string)* |
 | Existing | `Dot_EmptyValue` | `{.empty}` | `.` |
-| Planned | `Dot_SingleVarWrappedByLiteral` | `X{.var}` | `X.value` |
-| Planned | `Dot_TwoVarsWrappedByLiteral` | `X{.x,y}` | `X.1024.768` |
-| Planned | `Dot_UndefinedWrappedByLiteral` | `X{.undef}` | `X` |
-| Planned | `Dot_EmptyValueWrappedByLiteral` | `X{.empty}` | `X.` |
+| Existing | `Dot_SingleVarWrappedByLiteral` | `X{.var}` | `X.value` |
+| Existing | `Dot_TwoVarsWrappedByLiteral` | `X{.x,y}` | `X.1024.768` |
+| Existing | `Dot_UndefinedWrappedByLiteral` | `X{.undef}` | `X` |
+| Existing | `Dot_EmptyValueWrappedByLiteral` | `X{.empty}` | `X.` |
 | Existing | `Dot_InPath` | `/api{.format}` | `/api.value` |
 | Existing | `Dot_MixedDefinedUndefined` | `{.x,undef,y}` | `.1024.768` |
-| Planned | `Dot_PercentValue` | `{.half,who}` | `.50%25.fred` |
-| Planned | `Dot_ValueContainingDotAddsLabels` | `{.var}`, `var="a.b"` | `.a.b` |
+| Existing | `Dot_PercentValue` | `{.half,who}` | `.50%25.fred` |
+| Existing | `Dot_ValueContainingDotAddsLabels` | `{.var}`, `var="a.b"` | `.a.b` |
 
 ### 3.5 Path segment expansion `{/var}`
 
@@ -246,9 +246,9 @@ Class: `UriTemplateLevel3Tests`
 | Existing | `Slash_EmptyValue` | `{/empty}` | `/` |
 | Existing | `Slash_InPath` | `/base{/var}` | `/base/value` |
 | Existing | `Slash_MixedDefinedUndefined` | `{/x,undef,y}` | `/1024/768` |
-| Planned | `Slash_PercentValue` | `{/half,who}` | `/50%25/fred` |
-| Planned | `Slash_ValueContainingSlashEncoded` | `{/who,dub}` | `/fred/me%2Ftoo` |
-| Planned | `Slash_VarEmptyAndUndefined` | `{/var,empty,undef}` | `/value/` |
+| Existing | `Slash_PercentValue` | `{/half,who}` | `/50%25/fred` |
+| Existing | `Slash_ValueContainingSlashEncoded` | `{/who,dub}` | `/fred/me%2Ftoo` |
+| Existing | `Slash_VarEmptyAndUndefined` | `{/var,empty,undef}` | `/value/` |
 
 ### 3.6 Path-style parameter expansion `{;var}`
 
@@ -261,11 +261,11 @@ Empty value rule: variable name is included without `=`.
 | Existing | `Semicolon_EmptyValue_NoEquals` | `{;empty}` | `;empty` |
 | Existing | `Semicolon_Undefined_Omitted` | `{;undef}` | *(empty string)* |
 | Existing | `Semicolon_MixedDefinedUndefined` | `{;x,undef,y}` | `;x=1024;y=768` |
-| Planned | `Semicolon_RfcNames` | `{;v,empty,who}` | `;v=6;empty;who=fred` |
-| Planned | `Semicolon_UndefinedMiddle` | `{;v,bar,who}` | `;v=6;who=fred` |
-| Planned | `Semicolon_PercentValue` | `{;half}` | `;half=50%25` |
-| Planned | `Semicolon_DottedVarName` | `{;a.b}`, `["a.b"]="1"` | `;a.b=1` |
-| Planned | `Semicolon_PctEncodedVarName` | `{;%78}`, `["%78"]="1"` | `;%78=1` |
+| Existing | `Semicolon_RfcNames` | `{;v,empty,who}` | `;v=6;empty;who=fred` |
+| Existing | `Semicolon_UndefinedMiddle` | `{;v,bar,who}` | `;v=6;who=fred` |
+| Existing | `Semicolon_PercentValue` | `{;half}` | `;half=50%25` |
+| Existing | `Semicolon_DottedVarName` | `{;a.b}`, `["a.b"]="1"` | `;a.b=1` |
+| Existing | `Semicolon_PctEncodedVarName` | `{;%78}`, `["%78"]="1"` | `;%78=1` |
 
 ### 3.7 Form-style query expansion `{?var}`
 
@@ -281,10 +281,10 @@ Empty value rule: variable name is included with `=` and no value.
 | Existing | `Query_EmptyOnly` | `{?empty}` | `?empty=` |
 | Existing | `Query_MixedDefinedUndefined` | `{?x,undef,y}` | `?x=1024&y=768` |
 | Existing | `Query_InFullPath` | `/orders{?x,y}` | `/orders?x=1024&y=768` |
-| Planned | `Query_RfcWho` | `{?who}` | `?who=fred` |
-| Planned | `Query_PercentValue` | `{?half}` | `?half=50%25` |
-| Planned | `Query_DottedVarName` | `{?a.b}`, `["a.b"]="1"` | `?a.b=1` |
-| Planned | `Query_PctEncodedVarName` | `{?%78}`, `["%78"]="1"` | `?%78=1` |
+| Existing | `Query_RfcWho` | `{?who}` | `?who=fred` |
+| Existing | `Query_PercentValue` | `{?half}` | `?half=50%25` |
+| Existing | `Query_DottedVarName` | `{?a.b}`, `["a.b"]="1"` | `?a.b=1` |
+| Existing | `Query_PctEncodedVarName` | `{?%78}`, `["%78"]="1"` | `?%78=1` |
 
 ### 3.8 Form-style query continuation expansion `{&var}`
 
@@ -298,10 +298,10 @@ Empty value rule: same as `?`.
 | Existing | `Ampersand_WithUndefined_OmitsUndefined` | `{&x,y,undef}` | `&x=1024&y=768` |
 | Existing | `Ampersand_Undefined_NoPrefix` | `{&undef}` | *(empty string)* |
 | Existing | `Ampersand_InQueryString` | `/orders?sort=date{&x,y}` | `/orders?sort=date&x=1024&y=768` |
-| Planned | `Ampersand_RfcFixedQuery` | `?fixed=yes{&x}` | `?fixed=yes&x=1024` |
-| Planned | `Ampersand_PercentValue` | `{&half}` | `&half=50%25` |
-| Planned | `Ampersand_DottedVarName` | `{&a.b}`, `["a.b"]="1"` | `&a.b=1` |
-| Planned | `Ampersand_PctEncodedVarName` | `{&%78}`, `["%78"]="1"` | `&%78=1` |
+| Existing | `Ampersand_RfcFixedQuery` | `?fixed=yes{&x}` | `?fixed=yes&x=1024` |
+| Existing | `Ampersand_PercentValue` | `{&half}` | `&half=50%25` |
+| Existing | `Ampersand_DottedVarName` | `{&a.b}`, `["a.b"]="1"` | `&a.b=1` |
+| Existing | `Ampersand_PctEncodedVarName` | `{&%78}`, `["%78"]="1"` | `&%78=1` |
 
 ## 4. Variable Discovery
 
@@ -320,8 +320,8 @@ Class: `UriTemplateGetVariablesTests`
 | Existing | `DeduplicatesAcrossExpressions` | `{x}/foo/{x}` | `["x"]` |
 | Existing | `NoExpressions` | `/literal` | `[]` |
 | Existing | `AllOperators` | `{a}{+b}{#c}{.d}{/e}{;f}{?g}{&h}` | `["a","b","c","d","e","f","g","h"]` |
-| Planned | `CaseSensitiveDistinctNames` | `{var,Var}` | `["var", "Var"]` |
-| Planned | `DottedAndPctEncodedNames` | `{a.b,%78}` | `["a.b", "%78"]` |
+| Existing | `CaseSensitiveDistinctNames` | `{var,Var}` | `["var", "Var"]` |
+| Existing | `DottedAndPctEncodedNames` | `{a.b,%78}` | `["a.b", "%78"]` |
 | Deferred | `Level4ModifiersReturnBaseName` | `{var:3}{list*}` | `["var", "list"]` after Level 4 support exists |
 
 ## 5. Parser and Edge Cases
@@ -347,7 +347,7 @@ Class: `UriTemplateEdgeCaseTests`
 | Existing | `Level1AndLevel3Query` | `/orders/{id}{?status,page}` | `/orders/42?status=open&page=2` |
 | Existing | `Level1AndLevel2Reserved` | `/proxy/{+path}/tail` | `/proxy/foo/bar/tail` |
 | Existing | `Level2AndLevel3` | `{+base}{/segment}` | `/root/value` |
-| Planned | `MixedReservedAndSimpleEncoding` | `{+base}{var}{?half}` | `http://example.com/home/value?half=50%25` |
+| Existing | `MixedReservedAndSimpleEncoding` | `{+base}{var}{?half}` | `http://example.com/home/value?half=50%25` |
 
 ### 5.3 Malformed expression handling
 
@@ -394,7 +394,7 @@ Valid Level 4 modifiers are unsupported by this package today. Malformed modifie
 | Existing | `PrefixModifier_Throws` | `{var:3}` | `NotSupportedException` |
 | Existing | `ExplodeModifier_Throws` | `{list*}` | `NotSupportedException` |
 | Existing | `ExplodeWithOperator_Throws` | `{/list*}` | `NotSupportedException` |
-| Planned | `PrefixModifierMaxLengthFourDigits_Throws` | `{var:9999}` | `NotSupportedException` |
+| Existing | `PrefixModifierMaxLengthFourDigits_Throws` | `{var:9999}` | `NotSupportedException` |
 | Gap | `PrefixModifierZero_ThrowsFormat` | `{var:0}` | `FormatException` |
 | Gap | `PrefixModifierTooLarge_ThrowsFormat` | `{var:10000}` | `FormatException` |
 | Gap | `PrefixModifierNonNumeric_ThrowsFormat` | `{var:abc}` | `FormatException` |
@@ -407,7 +407,7 @@ Valid Level 4 modifiers are unsupported by this package today. Malformed modifie
 |---|---|---|---|
 | Existing | `VariableNames_CaseSensitive` | `{Var}` with `Var="upper"` and `var="lower"` in default dict | `upper` |
 | Gap | `CaseInsensitiveDictionaryDoesNotChangeTemplateSemantics` | `{Var}` with case-insensitive dict containing only `var="lower"` | *(empty string)* |
-| Planned | `OrdinalDuplicateNamesRemainDistinct` | `{var,Var}` with both values | `lower,upper` |
+| Existing | `OrdinalDuplicateNamesRemainDistinct` | `{var,Var}` with both values | `lower,upper` |
 
 ## 6. Level 4 Deferred Compliance Matrix
 
@@ -511,11 +511,11 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 
 | Area | Existing | Planned | Gap | Deferred |
 |---|---:|---:|---:|---:|
-| Level 1 simple string | 22 | 11 | 5 | 0 |
-| Level 2 reserved and fragment | 19 | 10 | 6 | 0 |
-| Level 3 operators | 39 | 24 | 2 | 0 |
-| Variable discovery | 9 | 2 | 0 | 1 |
-| Parser and edge cases | 18 | 2 | 28 | 0 |
+| Level 1 simple string | 37 | 0 | 5 | 0 |
+| Level 2 reserved and fragment | 28 | 0 | 6 | 0 |
+| Level 3 operators | 63 | 0 | 2 | 0 |
+| Variable discovery | 11 | 0 | 0 | 1 |
+| Parser and edge cases | 21 | 0 | 28 | 0 |
 | Level 4 matrix | 0 | 0 | 0 | 45 |
 | Official compliance harness | 0 | 2 | 1 | 2 |
 | HAL `LinkObject` integration | 0 | 7 | 0 | 0 |
