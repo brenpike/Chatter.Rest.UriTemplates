@@ -150,7 +150,7 @@ Per-operator expansion algorithm:
    - Look up `varSpec.Name` in the `variables` dictionary. If absent or `null` (undefined): skip entirely.
    - Dispatch by runtime type (see table above).
    - **String values:**
-     - If `varSpec.PrefixLength` is set, truncate the value to that many Unicode text elements using `StringInfo.SubstringByTextElements`. This correctly handles surrogate pairs and combining character sequences.
+     - If `varSpec.PrefixLength` is set, truncate the value to that many Unicode code points (per RFC 6570 §2.4.1) using the internal `TruncateByCodePoints` method. The method walks the UTF-16 string, pairing valid high+low surrogate pairs as a single code point. This works on both `net8.0` and `netstandard2.0` without a `System.Text.Rune` dependency. Note: combining marks (e.g., `e` + U+0301) count as separate code points, so `{var:1}` on `"é"` keeps only `e`.
      - If the (possibly truncated) value is empty: apply operator-specific empty-value rule (see [Operator Reference](#operator-reference)).
      - If non-empty: encode per operator encoding rule, then format per operator.
    - **List values (non-explode):** encode each member, comma-join into a single composite value. For named operators, prepend `varname=`. Empty list is treated as undefined and omitted.
@@ -246,8 +246,8 @@ The table below summarizes explode behavior for list and associative-array value
 | `&` | yes | `&varname=val1&varname=val2&...` | `&key1=val1&key2=val2&...` | `varname=` / `key=` |
 
 **Prefix modifier (`:N`):**
-- Applies only to scalar string values. Truncates the value to `N` Unicode text elements (using `StringInfo.SubstringByTextElements`) before encoding.
-- Correctly handles surrogate pairs and combining character sequences.
+- Applies only to scalar string values. Truncates the value to `N` Unicode code points (per RFC 6570 §2.4.1) before encoding.
+- The implementation walks UTF-16 with surrogate-pair pairing and works on both `net8.0` and `netstandard2.0` without `System.Text.Rune`. Combining marks count as separate code points; a surrogate pair counts as one code point.
 - Applying a prefix modifier to a list or associative-array value throws `FormatException`.
 
 **Explode modifier (`*`):**

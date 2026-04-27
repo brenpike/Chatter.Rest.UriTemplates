@@ -296,7 +296,7 @@ This applies consistently across all operator types. Operator prefixes (`?`, `#`
 
 RFC 6570 Level 4 adds two value modifiers and composite value types:
 
-- **Prefix** (`{var:3}`) — truncate a string value to a maximum number of Unicode text elements before expansion.
+- **Prefix** (`{var:3}`) — truncate a string value to a maximum number of Unicode code points before expansion (per RFC 6570 §2.4.1). Surrogate pairs count as one code point; combining marks (e.g., `e` + U+0301) count as separate code points.
 - **Explode** (`{var*}`) — expand list or associative array values into separate segments per the operator's rules.
 
 Level 4 expansion requires the `Expand(IDictionary<string, object?>)` overload so that list and associative-array values can be supplied alongside string values.

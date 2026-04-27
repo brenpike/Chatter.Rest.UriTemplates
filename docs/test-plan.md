@@ -487,7 +487,7 @@ Class: `UriTemplateLevel4Tests` (edge case methods) and `UriTemplateEdgeCaseTest
 | Existing | `ListWithEmptyStringMembers_QueryExplode` | List with empty-string members applies ifEmp rules for query explode. |
 | Existing | `ListWithEmptyStringMembers_SemicolonExplode` | List with empty-string members applies ifEmp rules for semicolon explode. |
 | Existing | `PrefixLargerThanLength_ReturnsFullValue` | Prefix larger than value length returns full value. |
-| Existing | `PrefixOnEmoji_ReturnsSingleTextElement` | Unicode prefix truncation via `StringInfo.SubstringByTextElements`. |
+| Existing | `PrefixOnEmoji_ReturnsSingleTextElement` | Unicode prefix truncation via code-point counting (`TruncateByCodePoints`). |
 | Existing | `MixedLevel1Through4_InOneTemplate` | Mixed Level 1-4 expressions in a single template. |
 | Existing | `UnsupportedValueType_Int_ThrowsFormatException` | `int` value throws `FormatException`. |
 | Existing | `UnsupportedValueType_Bool_ThrowsFormatException` | `bool` value throws `FormatException`. |
