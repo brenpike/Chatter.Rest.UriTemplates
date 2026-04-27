@@ -1,225 +1,306 @@
 # Chatter.Rest.UriTemplates
 
-> RFC 6570 URI Template expansion for .NET (Levels 1-3)
+RFC 6570 URI Template expansion for .NET.
 
 [![CI](https://github.com/brenpike/Chatter.Rest.UriTemplates/actions/workflows/uritemplate-cicd.yml/badge.svg)](https://github.com/brenpike/Chatter.Rest.UriTemplates/actions/workflows/uritemplate-cicd.yml)
 [![NuGet](https://img.shields.io/nuget/v/Chatter.Rest.UriTemplates?label=Chatter.Rest.UriTemplates)](https://www.nuget.org/packages/Chatter.Rest.UriTemplates)
 
-## Features
-
-- RFC 6570 URI Template expansion, Levels 1-3
-- All 8 operators: `{var}`, `{+var}`, `{#var}`, `{.var}`, `{/var}`, `{;var}`, `{?var}`, `{&var}`
-- Zero external NuGet dependencies
-- Targets `net8.0` and `netstandard2.0`
-- Percent-encoding per RFC 3986 (unreserved and reserved strategies)
-- Undefined variables omitted per RFC 6570 rules
-- Level 4 modifiers (`:N` prefix, `*` explode) detected and throw `NotSupportedException`
-
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [API Reference](#api-reference)
-- [Operator Reference](#operator-reference)
-- [Encoding](#encoding)
-- [Undefined Variables](#undefined-variables)
-- [Level 4 Not Supported](#level-4-not-supported)
-- [Additional Resources](#additional-resources)
-- [License](#license)
-- [Contributing](#contributing)
-
-## Quick Start
-
-```bash
-dotnet add package Chatter.Rest.UriTemplates
-```
+`Chatter.Rest.UriTemplates` helps API clients expand templated links like
+`/orders/{id}{?status,page}` into safe, correctly encoded URIs. It is useful
+when working with REST APIs, HAL links, OpenAPI-style client code, or any API
+that returns URI templates for clients to fill in.
 
 ```csharp
 using Chatter.Rest.UriTemplates;
 
-var template = new UriTemplate("/orders{?status,page}");
+var template = new UriTemplate("/orders/{id}{?status,page}");
 
-var uri = template.Expand(new Dictionary<string, string>
-{
-    ["status"] = "shipped",
-    ["page"] = "2"
-});
-// Result: "/orders?status=shipped&page=2"
+var uri = template.Expand(
+    ("id", "42"),
+    ("status", "shipped"),
+    ("page", "2"));
+
+// "/orders/42?status=shipped&page=2"
 ```
+
+## Why Use It
+
+- Expand RFC 6570 URI Templates without hand-building paths and query strings.
+- Get correct UTF-8 percent-encoding for path, query, fragment, and reserved expansions.
+- Omit undefined variables according to RFC 6570 instead of leaving broken placeholders behind.
+- Support all RFC 6570 Levels 1-3 operators with a small, dependency-free API.
+- Target both modern .NET and broad .NET Standard consumers.
 
 ## Installation
 
+Install from NuGet:
+
 ```bash
 dotnet add package Chatter.Rest.UriTemplates
 ```
 
-**Namespace:**
+Then import the namespace:
 
 ```csharp
 using Chatter.Rest.UriTemplates;
 ```
 
-Targets `netstandard2.0` and `net8.0` with no external dependencies.
+The package targets `net8.0` and `netstandard2.0` and has no external runtime
+NuGet dependencies.
 
-## API Reference
+## Quick Start
 
-### `UriTemplate(string template)`
-
-Constructor. Parses the template string eagerly on construction.
-
-- Throws `ArgumentNullException` if `template` is null.
-- Throws `FormatException` for malformed templates (unclosed `{`, nested `{`, empty `{}`).
-- Throws `NotSupportedException` for Level 4 modifier syntax (`:N` prefix, `*` explode).
+Create a template once, then expand it with either a dictionary or tuple pairs.
 
 ```csharp
-var template = new UriTemplate("/search{?q,lang}");
-```
+var template = new UriTemplate("/search{?q,limit}");
 
-### `string Expand(IDictionary<string, string> variables)`
-
-Expands the URI template using the provided variable dictionary. Variables absent from the dictionary are treated as undefined and omitted per RFC 6570 rules.
-
-- Throws `ArgumentNullException` if `variables` is null.
-
-```csharp
 var uri = template.Expand(new Dictionary<string, string>
 {
-    ["q"] = "dotnet",
-    ["lang"] = "en"
+    ["q"] = "uri templates",
+    ["limit"] = "10"
 });
-// Result: "/search?q=dotnet&lang=en"
+
+// "/search?q=uri%20templates&limit=10"
 ```
 
-### `string Expand(params (string Key, string Value)[] variables)`
-
-Tuple convenience overload. First-wins for duplicate keys.
-
-- Throws `ArgumentNullException` if `variables` is null.
+Tuple pairs are convenient for short calls:
 
 ```csharp
-var uri = template.Expand(
-    ("q", "dotnet"),
-    ("lang", "en")
-);
-// Result: "/search?q=dotnet&lang=en"
+var uri = new UriTemplate("/users/{id}")
+    .Expand(("id", "brennan@example.com"));
+
+// "/users/brennan%40example.com"
 ```
 
-Duplicate handling:
+## Common Examples
+
+### Path Values
 
 ```csharp
-var uri = template.Expand(
-    ("q", "first"),
-    ("q", "second")    // ignored -- "first" wins
-);
-// Result: "/search?q=first"
+var uri = new UriTemplate("/customers/{customerId}/orders/{orderId}")
+    .Expand(
+        ("customerId", "cust_123"),
+        ("orderId", "ord_456"));
+
+// "/customers/cust_123/orders/ord_456"
 ```
 
-### `IReadOnlyList<string> GetVariables()`
+### Query Strings
 
-Returns all variable names referenced in the template, deduplicated, in order of first appearance.
+Use `{?var}` to start a query string and `{&var}` to append to an existing one.
 
 ```csharp
-var template = new UriTemplate("/orders{?status,page}{&lang}");
-var vars = template.GetVariables();
-// Result: ["status", "page", "lang"]
+var listOrders = new UriTemplate("/orders{?status,page,pageSize}");
+
+var uri = listOrders.Expand(
+    ("status", "ready to ship"),
+    ("page", "2"),
+    ("pageSize", "50"));
+
+// "/orders?status=ready%20to%20ship&page=2&pageSize=50"
 ```
-
-## Operator Reference
-
-| Operator | Level | Example | Prefix | Separator | Encoding |
-|---|---|---|---|---|---|
-| *(none)* | 1 | `{var}` | -- | `,` | unreserved |
-| `+` | 2 | `{+var}` | -- | `,` | reserved |
-| `#` | 2 | `{#var}` | `#` | `,` | reserved |
-| `.` | 3 | `{.var}` | `.` | `.` | unreserved |
-| `/` | 3 | `{/var}` | `/` | `/` | unreserved |
-| `;` | 3 | `{;var}` | `;` | `;` | unreserved |
-| `?` | 3 | `{?var}` | `?` | `&` | unreserved |
-| `&` | 3 | `{&var}` | `&` | `&` | unreserved |
-
-**Simple expansion** -- values are percent-encoded using unreserved encoding:
 
 ```csharp
-var t = new UriTemplate("/users/{id}");
-t.Expand(("id", "42"));
-// Result: "/users/42"
+var uri = new UriTemplate("/orders?sort=created{&status,page}")
+    .Expand(("status", "open"), ("page", "3"));
+
+// "/orders?sort=created&status=open&page=3"
 ```
 
-**Reserved expansion** -- reserved characters pass through unencoded:
+### Reserved Path Expansion
+
+Use `{+var}` when a value intentionally contains URI reserved characters, such
+as a path that should keep its slashes.
 
 ```csharp
-var t = new UriTemplate("/proxy/{+path}");
-t.Expand(("path", "foo/bar/baz"));
-// Result: "/proxy/foo/bar/baz"
+var uri = new UriTemplate("/proxy/{+path}")
+    .Expand(("path", "files/2026/report.pdf"));
+
+// "/proxy/files/2026/report.pdf"
 ```
 
-**Form-style query** -- prepends `?` and joins with `&`:
+Using `{var}` instead would encode the slashes:
 
 ```csharp
-var t = new UriTemplate("/orders{?status,page}");
-t.Expand(("status", "shipped"), ("page", "2"));
-// Result: "/orders?status=shipped&page=2"
+var uri = new UriTemplate("/proxy/{path}")
+    .Expand(("path", "files/2026/report.pdf"));
+
+// "/proxy/files%2F2026%2Freport.pdf"
 ```
+
+### Optional Variables
+
+Variables that are not supplied are omitted. Prefixes such as `?`, `&`, `/`,
+and `.` are only emitted when at least one variable in the expression has a
+value.
+
+```csharp
+var template = new UriTemplate("/orders/{id}{?status,page}");
+
+var uri = template.Expand(("id", "42"), ("status", "open"));
+
+// "/orders/42?status=open"
+```
+
+If every query variable is missing, no query string is added:
+
+```csharp
+var uri = new UriTemplate("/orders{?status,page}")
+    .Expand(new Dictionary<string, string>());
+
+// "/orders"
+```
+
+### Empty Values
+
+Empty strings are defined values and are expanded according to the operator.
+
+```csharp
+new UriTemplate("/orders{?status}")
+    .Expand(("status", ""));
+// "/orders?status="
+
+new UriTemplate("/matrix{;flag}")
+    .Expand(("flag", ""));
+// "/matrix;flag"
+```
+
+### Inspect Required Variables
+
+Use `GetVariables()` when you need to validate input, build UI prompts, or log
+which values a template expects.
+
+```csharp
+var template = new UriTemplate("/orders/{id}{?status,page}{&locale}");
+
+var variables = template.GetVariables();
+
+// ["id", "status", "page", "locale"]
+```
+
+## API
+
+### `new UriTemplate(string template)`
+
+Parses the template eagerly.
+
+- Throws `ArgumentNullException` when `template` is `null`.
+- Throws `FormatException` for malformed templates, such as unclosed braces,
+  nested braces, or empty `{}` expressions.
+- Throws `NotSupportedException` for RFC 6570 Level 4 modifiers.
+
+### `Expand(IDictionary<string, string> variables)`
+
+Expands the template using string values from a dictionary.
+
+```csharp
+var uri = new UriTemplate("/search{?q,lang}")
+    .Expand(new Dictionary<string, string>
+    {
+        ["q"] = "dotnet",
+        ["lang"] = "en"
+    });
+
+// "/search?q=dotnet&lang=en"
+```
+
+### `Expand(params (string Key, string Value)[] variables)`
+
+Expands the template using tuple pairs. If the same key is supplied more than
+once, the first value wins.
+
+```csharp
+var uri = new UriTemplate("/search{?q}")
+    .Expand(("q", "first"), ("q", "second"));
+
+// "/search?q=first"
+```
+
+### `GetVariables()`
+
+Returns variable names in first-seen order with duplicates removed. Variable
+names are case-sensitive.
+
+```csharp
+var variables = new UriTemplate("/{resource}/{id}{?id,format}")
+    .GetVariables();
+
+// ["resource", "id", "format"]
+```
+
+## Supported Template Features
+
+The library supports RFC 6570 Levels 1-3 for string values.
+
+| Operator | Level | Purpose | Example |
+| --- | --- | --- | --- |
+| `{var}` | 1 | Simple string expansion | `/users/{id}` |
+| `{+var}` | 2 | Reserved expansion | `/proxy/{+path}` |
+| `{#var}` | 2 | Fragment expansion | `/docs{#section}` |
+| `{.var}` | 3 | Label expansion | `/api{.version}` |
+| `{/var}` | 3 | Path segment expansion | `/files{/folder,name}` |
+| `{;var}` | 3 | Path-style parameters | `/matrix{;x,y}` |
+| `{?var}` | 3 | Form-style query | `/orders{?status,page}` |
+| `{&var}` | 3 | Form-style query continuation | `/orders?sort=date{&page}` |
+
+All variables are supplied as `string` values. Lists, dictionaries, explode
+modifiers, and prefix modifiers are intentionally outside the current API.
 
 ## Encoding
 
-The library applies two encoding strategies per RFC 6570:
+`Chatter.Rest.UriTemplates` percent-encodes values as UTF-8 bytes.
 
-**Unreserved encoding** (Level 1, `.`, `/`, `;`, `?`, `&` operators): only unreserved characters (`A-Z a-z 0-9 - . _ ~`) pass through unencoded. Everything else is percent-encoded as UTF-8 bytes.
-
-```csharp
-var t = new UriTemplate("/search/{query}");
-t.Expand(("query", "hello world!"));
-// Result: "/search/hello%20world%21"
-```
-
-**Reserved encoding** (Level 2: `+` and `#` operators): both unreserved and reserved characters (`: / ? # [ ] @ ! $ & ' ( ) * + , ; = %`) pass through unencoded. Only characters outside both sets are percent-encoded.
+- Simple, label, path segment, path-style parameter, and query operators encode
+  everything except RFC 3986 unreserved characters: `A-Z a-z 0-9 - . _ ~`.
+- Reserved and fragment operators preserve reserved URI characters such as `/`,
+  `?`, `#`, `&`, and `=`.
+- Already percent-encoded sequences are preserved for reserved and fragment
+  expansion.
 
 ```csharp
-var t = new UriTemplate("{+path}");
-t.Expand(("path", "/foo/bar?q=1"));
-// Result: "/foo/bar?q=1"   (slashes, ?, = all preserved)
+new UriTemplate("/search/{q}")
+    .Expand(("q", "hello world!"));
+// "/search/hello%20world%21"
+
+new UriTemplate("{+url}")
+    .Expand(("url", "https://example.com/docs?q=uri%20templates"));
+// "https://example.com/docs?q=uri%20templates"
 ```
 
-## Undefined Variables
+## Not Supported
 
-When a variable referenced in the template is absent from the provided dictionary, it is treated as undefined and omitted entirely per RFC 6570 rules. No placeholder or literal `{var}` text is left in the output. Operator prefixes (`?`, `#`, `.`, `/`, `;`, `&`) are only emitted when at least one variable in the expression produces a value.
+RFC 6570 Level 4 is not supported:
 
-```csharp
-var t = new UriTemplate("/orders{?status,page}");
+- Prefix modifiers: `{var:3}`
+- Explode modifiers: `{list*}`
+- List and associative-array values
 
-// Only "status" provided; "page" is undefined:
-t.Expand(("status", "shipped"));
-// Result: "/orders?status=shipped"
+Templates containing Level 4 modifiers throw `NotSupportedException` during
+construction. Level 4 requires value types beyond the current
+`IDictionary<string, string>` API. See [docs/architecture.md](docs/architecture.md)
+for implementation notes.
 
-// All variables undefined:
-t.Expand(new Dictionary<string, string>());
-// Result: "/orders"
+## More Documentation
+
+- [Usage guide](docs/usage.md)
+- [Architecture and design](docs/architecture.md)
+- [RFC 6570 test plan](docs/test-plan.md)
+- [RFC 6570 specification](https://datatracker.ietf.org/doc/html/rfc6570)
+
+## Development
+
+Build and test locally with the .NET SDK:
+
+```bash
+dotnet restore
+dotnet test
 ```
-
-## Level 4 Not Supported
-
-RFC 6570 Level 4 defines two value modifiers -- prefix (`{var:3}`) and explode (`{var*}`) -- that are not supported by this library. Templates containing these modifiers throw `NotSupportedException` at construction time.
-
-```csharp
-// Throws NotSupportedException:
-var t = new UriTemplate("{var:3}");
-var t = new UriTemplate("{list*}");
-```
-
-Level 4 is deferred because it requires list and dictionary value types, which are beyond the current `IDictionary<string, string>` API surface. See [docs/architecture.md](docs/architecture.md) for design details.
-
-## Additional Resources
-
-- [Usage Guide](docs/usage.md)
-- [Architecture & Design](docs/architecture.md)
-- [RFC 6570 Test Plan](docs/test-plan.md)
-- [RFC 6570 -- URI Template Specification](https://datatracker.ietf.org/doc/html/rfc6570)
-
-## License
-
-MIT -- see [LICENSE](LICENSE)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
