@@ -28,7 +28,8 @@ var uri = template.Expand(
 - Expand RFC 6570 URI Templates without hand-building paths and query strings.
 - Get correct UTF-8 percent-encoding for path, query, fragment, and reserved expansions.
 - Omit undefined variables according to RFC 6570 instead of leaving broken placeholders behind.
-- Support all RFC 6570 Levels 1-3 operators with a small, dependency-free API.
+- Support all RFC 6570 Levels 1-4 operators, including prefix modifiers, explode modifiers, list values, and associative-array values.
+- Small, dependency-free API.
 - Target both modern .NET and broad .NET Standard consumers.
 
 ## Installation
@@ -187,8 +188,8 @@ Parses the template eagerly.
 
 - Throws `ArgumentNullException` when `template` is `null`.
 - Throws `FormatException` for malformed templates, such as unclosed braces,
-  nested braces, or empty `{}` expressions.
-- Throws `NotSupportedException` for RFC 6570 Level 4 modifiers.
+  nested braces, empty `{}` expressions, or mutually exclusive prefix and
+  explode modifiers.
 
 ### `Expand(IDictionary<string, string> variables)`
 
@@ -203,6 +204,22 @@ var uri = new UriTemplate("/search{?q,lang}")
     });
 
 // "/search?q=dotnet&lang=en"
+```
+
+### `Expand(IDictionary<string, object?> variables)`
+
+Expands the template using a dictionary that supports composite value types for
+Level 4 expansion. Supported value types: `string`, `IEnumerable<string>`,
+`IDictionary<string, string>`, `IEnumerable<KeyValuePair<string, string>>`, and
+`null` (treated as undefined).
+
+```csharp
+var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
+{
+    ["list"] = new[] { "a", "b", "c" }
+});
+
+// "?list=a&list=b&list=c"
 ```
 
 ### `Expand(params (string Key, string Value)[] variables)`
@@ -231,7 +248,7 @@ var variables = new UriTemplate("/{resource}/{id}{?id,format}")
 
 ## Supported Template Features
 
-The library supports RFC 6570 Levels 1-3 for string values.
+The library supports RFC 6570 Levels 1-4.
 
 | Operator | Level | Purpose | Example |
 | --- | --- | --- | --- |
@@ -243,9 +260,12 @@ The library supports RFC 6570 Levels 1-3 for string values.
 | `{;var}` | 3 | Path-style parameters | `/matrix{;x,y}` |
 | `{?var}` | 3 | Form-style query | `/orders{?status,page}` |
 | `{&var}` | 3 | Form-style query continuation | `/orders?sort=date{&page}` |
+| `{var:3}` | 4 | Prefix modifier | `/search{?q:10}` |
+| `{var*}` | 4 | Explode modifier | `/items{?tag*}` |
 
-All variables are supplied as `string` values. Lists, dictionaries, explode
-modifiers, and prefix modifiers are intentionally outside the current API.
+Variables are supplied as `string` for simple values. Level 4 composite values
+(lists and associative arrays) are supported via the
+`Expand(IDictionary<string, object?>)` overload.
 
 ## Encoding
 
@@ -268,24 +288,49 @@ new UriTemplate("{+url}")
 // "https://example.com/docs?q=uri%20templates"
 ```
 
-## Not Supported
+## Level 4: Prefix, Explode, and Composite Values
 
-RFC 6570 Level 4 is not supported:
+Level 4 templates use the `Expand(IDictionary<string, object?>)` overload to
+supply list and associative-array values alongside strings.
 
-- Prefix modifiers: `{var:3}`
-- Explode modifiers: `{list*}`
-- List and associative-array values
+```csharp
+// Prefix modifier: truncate value to 3 characters
+var uri = new UriTemplate("{var:3}").Expand(new Dictionary<string, object?>
+{
+    ["var"] = "value"
+});
+// "val"
 
-Templates containing Level 4 modifiers throw `NotSupportedException` during
-construction. Level 4 requires value types beyond the current
-`IDictionary<string, string>` API. See [docs/architecture.md](docs/architecture.md)
-for implementation notes.
+// List value with explode: expand each member as a query parameter
+var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, object?>
+{
+    ["color"] = new[] { "red", "green", "blue" }
+});
+// "?color=red&color=green&color=blue"
+
+// Associative array with explode
+var keys = new List<KeyValuePair<string, string>>
+{
+    new("semi", ";"),
+    new("dot", "."),
+};
+
+var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, object?>
+{
+    ["keys"] = keys
+});
+// "?semi=%3B&dot=."
+```
+
+The `Expand(IDictionary<string, string>)` overload continues to work for
+string-only values, including templates with prefix modifiers.
 
 ## More Documentation
 
 - [Usage guide](docs/usage.md)
 - [Architecture and design](docs/architecture.md)
 - [RFC 6570 test plan](docs/test-plan.md)
+- [Backlog](docs/backlog.md)
 - [RFC 6570 specification](https://datatracker.ietf.org/doc/html/rfc6570)
 
 ## Development

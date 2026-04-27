@@ -6,25 +6,24 @@ Canonical test suite: https://github.com/uri-templates/uritemplate-test
 Coverage status:
 
 - Existing: test is implemented in the current test suite.
-- Planned: missing test for behavior the current Level 1-3 API should support.
+- Planned: missing test for behavior the current Level 1-4 API should support.
 - Gap: test documents an implementation or documentation gap that must be fixed before the test can pass.
-- Deferred: RFC 6570 Level 4 behavior intentionally out of scope for the current `IDictionary<string, string>` API.
 
 ## RFC Review Findings
 
-The current implementation covers the primary RFC 6570 Level 1-3 expansion operators for simple string values. The following gaps remain and should drive future work:
+The current implementation covers RFC 6570 Level 1-4 expansion operators for simple string values, list values, and associative-array values. The following gaps remain and should drive future work:
 
 | Area | RFC basis | Current state | Required follow-up |
 |---|---|---|---|
 | Literal expansion | Sections 2.1 and 3.1 require literals outside expressions to be valid URI-template literals and to percent-encode non-URI characters as UTF-8. | Literal text is copied unchanged. Spaces, non-ASCII literals, invalid `%` triplets, and lone `}` are not validated or encoded. | Add literal validation/encoding policy and tests. |
-| Variable-name grammar | Section 2.3 defines `varname = varchar *( ["."] varchar )`, where `varchar = ALPHA / DIGIT / "_" / pct-encoded`. | Parser accepts almost any string, trims whitespace, allows empty varspecs, allows invalid dot placement, and allows invalid `%` sequences. | Validate variable-list grammar and distinguish malformed varspecs from valid-but-unsupported Level 4 modifiers. |
-| Reserved operators | Section 2.2 reserves `=`, `,`, `!`, `@`, and `|` as operators for future extensions. | These are parsed as part of a variable name instead of rejected or reported as unsupported. | Detect reserved operators explicitly and throw `NotSupportedException` or `FormatException` consistently. |
+| Variable-name grammar | Section 2.3 defines `varname = varchar *( ["."] varchar )`, where `varchar = ALPHA / DIGIT / "_" / pct-encoded`. | Parser validates variable names, dot placement, pct-encoded sequences, and Level 4 modifier syntax. | Remaining edge cases around uncommon pct-encoded variable names. |
+| Reserved operators | Section 2.2 reserves `=`, `,`, `!`, `@`, and `|` as operators for future extensions. | Detected and rejected with `NotSupportedException`. | None. |
 | Reserved expansion `%` handling | Section 3.2.1 allows `%` through only as part of pct-encoded triplets for `+` and `#`; bare `%` must become `%25`. | `EncodeReserved` preserves bare `%` because `%` is treated as a reserved character. | Fix reserved encoding and add `half = "50%"`, invalid percent, and existing triplet tests. |
 | Undefined null values | Section 2.3 allows unknown or null values to be treated as undefined; Section 3.2.1 says undefined variables are ignored. | A dictionary entry whose value is `null` causes `NullReferenceException`. | Treat null dictionary values as undefined or explicitly reject them; tests should lock the chosen RFC-compatible behavior. |
 | Case-sensitive lookup | Section 2.3 says variable names are case-sensitive. | Lookup depends on the caller's `IDictionary` comparer; a case-insensitive dictionary can expand `{Var}` from `var`. | Copy input to an ordinal dictionary or otherwise enforce ordinal lookup. |
 | Query/path parameter names | Sections 3.2.7-3.2.9 append the variable name encoded as a literal string. | Current behavior is correct for simple valid ASCII names, but invalid names are not rejected and pct-encoded names are not covered by tests. | Add tests for dotted names, pct-encoded names, and invalid names. |
-| Canonical RFC examples | RFC Sections 3.2.2-3.2.9 include examples using `who`, `half`, `base`, `dub`, `v`, `list`, `keys`, and `empty_keys`. | Only a subset using `var`, `hello`, `empty`, `path`, `x`, and `y` is tested. | Add all Level 1-3 simple-string canonical examples; Level 4/list/dictionary examples remain deferred. |
-| Official test suite | The URI Templates community test suite covers broader syntax and edge cases. | The plan links it, but the project does not consume it. | Add a data-driven compliance test harness for Level 1-3 cases and expected failures/deferred cases. |
+| Canonical RFC examples | RFC Sections 3.2.2-3.2.9 include examples using `who`, `half`, `base`, `dub`, `v`, `list`, `keys`, and `empty_keys`. | Level 1-3 simple-string examples and Level 4 prefix/list/dictionary examples are covered. | Add remaining canonical examples not yet tested. |
+| Official test suite | The URI Templates community test suite covers broader syntax and edge cases. | The plan links it, but the project does not consume it. | Add a data-driven compliance test harness for Level 1-4 cases and expected failures. |
 | Docs accuracy | `docs/architecture.md` and `docs/usage.md` describe literal text as unchanged and list `%` as reserved passthrough. | These statements conflict with RFC literal expansion and reserved `%` rules. | Update docs when implementation behavior is fixed. |
 
 ## Shared Fixtures
@@ -34,8 +33,8 @@ Use RFC 6570 Section 3.2 example values where possible:
 ```csharp
 var Variables = new Dictionary<string, string>
 {
-    ["count"] = "one,two,three", // string-only approximation; true list is Level 4/deferred
-    ["dom"] = "example.com",     // string-only approximation; true list is Level 4/deferred
+    ["count"] = "one,two,three", // string-only approximation; see Level 4 tests for true list expansion
+    ["dom"] = "example.com",     // string-only approximation; see Level 4 tests for true list expansion
     ["dub"] = "me/too",
     ["hello"] = "Hello World!",
     ["half"] = "50%",
@@ -51,15 +50,13 @@ var Variables = new Dictionary<string, string>
 // "undef" is intentionally absent.
 ```
 
-Level 4 list/dictionary fixtures from the RFC:
+Level 4 list/dictionary fixtures from the RFC (used in `UriTemplateLevel4Tests`):
 
 ```csharp
 list := ("red", "green", "blue")
 keys := [("semi",";"),("dot","."),("comma",",")]
 empty_keys := []
 ```
-
-These require a future value model and are listed in the Level 4 deferred section.
 
 ## 1. Level 1 Simple String Expansion `{var}`
 
@@ -322,7 +319,8 @@ Class: `UriTemplateGetVariablesTests`
 | Existing | `AllOperators` | `{a}{+b}{#c}{.d}{/e}{;f}{?g}{&h}` | `["a","b","c","d","e","f","g","h"]` |
 | Existing | `CaseSensitiveDistinctNames` | `{var,Var}` | `["var", "Var"]` |
 | Existing | `DottedAndPctEncodedNames` | `{a.b,%78}` | `["a.b", "%78"]` |
-| Deferred | `Level4ModifiersReturnBaseName` | `{var:3}{list*}` | `["var", "list"]` after Level 4 support exists |
+| Existing | `Level4ModifiersReturnBaseName_PrefixAndExplode` | `{var:3}{list*}` | `["var", "list"]` |
+| Existing | `Level4ModifiersReturnBaseName_MixedExpression` | `{/var:1,var}` | `["var"]` |
 
 ## 5. Parser and Edge Cases
 
@@ -385,16 +383,13 @@ RFC 6570 reserves `=`, `,`, `!`, `@`, and `|` as operator characters. The curren
 | Existing | `ReservedAtOperator_Throws` | `{@var}` | `NotSupportedException` |
 | Existing | `ReservedPipeOperator_Throws` | `{|var}` | `NotSupportedException` |
 
-### 5.5 Level 4 detection and malformed modifiers
+### 5.5 Level 4 modifier validation
 
-Valid Level 4 modifiers are unsupported by this package today. Malformed modifier syntax should be a format error, not silently treated as a variable name.
+Level 4 modifiers (prefix `:N` and explode `*`) are now fully supported. Malformed modifier syntax remains a `FormatException`. Prefix and explode are mutually exclusive per RFC 6570.
 
 | Status | Test name | Input | Expected |
 |---|---|---|---|
-| Existing | `PrefixModifier_Throws` | `{var:3}` | `NotSupportedException` |
-| Existing | `ExplodeModifier_Throws` | `{list*}` | `NotSupportedException` |
-| Existing | `ExplodeWithOperator_Throws` | `{/list*}` | `NotSupportedException` |
-| Existing | `PrefixModifierMaxLengthFourDigits_Throws` | `{var:9999}` | `NotSupportedException` |
+| Existing | `PrefixAndExplodeBoth_ThrowsFormat` | `{var:3*}`, `{var*:3}` | `FormatException` (mutual exclusion) |
 | Existing | `PrefixModifierZero_ThrowsFormat` | `{var:0}` | `FormatException` |
 | Existing | `PrefixModifierTooLarge_ThrowsFormat` | `{var:10000}` | `FormatException` |
 | Existing | `PrefixModifierNonNumeric_ThrowsFormat` | `{var:abc}` | `FormatException` |
@@ -409,73 +404,102 @@ Valid Level 4 modifiers are unsupported by this package today. Malformed modifie
 | Existing | `CaseInsensitiveDictionaryDoesNotChangeTemplateSemantics` | `{Var}` with case-insensitive dict containing only `var="lower"` | *(empty string)* |
 | Existing | `OrdinalDuplicateNamesRemainDistinct` | `{var,Var}` with both values | `lower,upper` |
 
-## 6. Level 4 Deferred Compliance Matrix
+## 6. Level 4 Compliance Matrix
 
-Class: future `UriTemplateLevel4Tests`
-
-These tests should remain documented as Deferred until the public API can represent string, list, and associative-array values. The parser should still identify syntactically valid Level 4 templates as unsupported today.
+Class: `UriTemplateLevel4Tests`
 
 ### 6.1 Prefix modifiers
 
-| Status | Test name | Template | Expected after Level 4 |
+| Status | Test name | Template | Expected |
 |---|---|---|---|
-| Deferred | `Prefix_Simple` | `{var:3}` | `val` |
-| Deferred | `Prefix_LongerThanValue` | `{var:30}` | `value` |
-| Deferred | `Prefix_Reserved` | `{+path:6}/here` | `/foo/b/here` |
-| Deferred | `Prefix_Fragment` | `{#path:6}/here` | `#/foo/b/here` |
-| Deferred | `Prefix_Label` | `X{.var:3}` | `X.val` |
-| Deferred | `Prefix_Path` | `{/var:1,var}` | `/v/value` |
-| Deferred | `Prefix_PathWithPctEncoding` | `{/list*,path:4}` | `/red/green/blue/%2Ffoo` |
-| Deferred | `Prefix_Semicolon` | `{;hello:5}` | `;hello=Hello` |
-| Deferred | `Prefix_Query` | `{?var:3}` | `?var=val` |
-| Deferred | `Prefix_Ampersand` | `{&var:3}` | `&var=val` |
-| Deferred | `Prefix_UnicodeCountsCodePoints` | `{var:1}`, `var="\uD83D\uDE00x"` | `%F0%9F%98%80` |
-| Deferred | `Prefix_DoesNotSplitPctTriplet` | `{var:2}`, `var="%7Ex"` | `%7E` or documented decoded-value behavior |
+| Existing | `Prefix_Simple` | `{var:3}` | `val` |
+| Existing | `Prefix_LongerThanValue` | `{var:30}` | `value` |
+| Existing | `Prefix_Reserved` | `{+path:6}/here` | `/foo/b/here` |
+| Existing | `Prefix_Fragment` | `{#path:6}/here` | `#/foo/b/here` |
+| Existing | `Prefix_Label` | `X{.var:3}` | `X.val` |
+| Existing | `Prefix_Path` | `{/var:1,var}` | `/v/value` |
+| Existing | `Prefix_PathWithPctEncoding` | `{/list*,path:4}` | `/red/green/blue/%2Ffoo` |
+| Existing | `Prefix_Semicolon` | `{;hello:5}` | `;hello=Hello` |
+| Existing | `Prefix_Query` | `{?var:3}` | `?var=val` |
+| Existing | `Prefix_Ampersand` | `{&var:3}` | `&var=val` |
+| Existing | `Prefix_UnicodeCountsCodePoints` | `{var:1}`, `var="\uD83D\uDE00x"` | `%F0%9F%98%80` |
+| Existing | `Prefix_DoesNotSplitPctTriplet` | `{var:2}`, `var="%7Ex"` | `%257Ex` |
 
 ### 6.2 List values
 
-| Status | Test name | Template | Expected after Level 4 |
+| Status | Test name | Template | Expected |
 |---|---|---|---|
-| Deferred | `List_Simple` | `{list}` | `red,green,blue` |
-| Deferred | `List_SimpleExplode` | `{list*}` | `red,green,blue` |
-| Deferred | `List_Reserved` | `{+list}` | `red,green,blue` |
-| Deferred | `List_ReservedExplode` | `{+list*}` | `red,green,blue` |
-| Deferred | `List_Fragment` | `{#list}` | `#red,green,blue` |
-| Deferred | `List_FragmentExplode` | `{#list*}` | `#red,green,blue` |
-| Deferred | `List_Label` | `X{.list}` | `X.red,green,blue` |
-| Deferred | `List_LabelExplode` | `X{.list*}` | `X.red.green.blue` |
-| Deferred | `List_Path` | `{/list}` | `/red,green,blue` |
-| Deferred | `List_PathExplode` | `{/list*}` | `/red/green/blue` |
-| Deferred | `List_Semicolon` | `{;list}` | `;list=red,green,blue` |
-| Deferred | `List_SemicolonExplode` | `{;list*}` | `;list=red;list=green;list=blue` |
-| Deferred | `List_Query` | `{?list}` | `?list=red,green,blue` |
-| Deferred | `List_QueryExplode` | `{?list*}` | `?list=red&list=green&list=blue` |
-| Deferred | `List_Ampersand` | `{&list}` | `&list=red,green,blue` |
-| Deferred | `List_AmpersandExplode` | `{&list*}` | `&list=red&list=green&list=blue` |
-| Deferred | `EmptyList_IsUndefined` | `{?empty_keys}` | *(empty string)* |
+| Existing | `List_Simple` | `{list}` | `red,green,blue` |
+| Existing | `List_SimpleExplode` | `{list*}` | `red,green,blue` |
+| Existing | `List_Reserved` | `{+list}` | `red,green,blue` |
+| Existing | `List_ReservedExplode` | `{+list*}` | `red,green,blue` |
+| Existing | `List_Fragment` | `{#list}` | `#red,green,blue` |
+| Existing | `List_FragmentExplode` | `{#list*}` | `#red,green,blue` |
+| Existing | `List_Label` | `X{.list}` | `X.red,green,blue` |
+| Existing | `List_LabelExplode` | `X{.list*}` | `X.red.green.blue` |
+| Existing | `List_Path` | `{/list}` | `/red,green,blue` |
+| Existing | `List_PathExplode` | `{/list*}` | `/red/green/blue` |
+| Existing | `List_Semicolon` | `{;list}` | `;list=red,green,blue` |
+| Existing | `List_SemicolonExplode` | `{;list*}` | `;list=red;list=green;list=blue` |
+| Existing | `List_Query` | `{?list}` | `?list=red,green,blue` |
+| Existing | `List_QueryExplode` | `{?list*}` | `?list=red&list=green&list=blue` |
+| Existing | `List_Ampersand` | `{&list}` | `&list=red,green,blue` |
+| Existing | `List_AmpersandExplode` | `{&list*}` | `&list=red&list=green&list=blue` |
+| Existing | `EmptyList_IsUndefined` | `{?empty_keys}` | *(empty string)* |
 
 ### 6.3 Associative arrays
 
-| Status | Test name | Template | Expected after Level 4 |
+| Status | Test name | Template | Expected |
 |---|---|---|---|
-| Deferred | `Keys_Simple` | `{keys}` | `semi,%3B,dot,.,comma,%2C` |
-| Deferred | `Keys_SimpleExplode` | `{keys*}` | `semi=%3B,dot=.,comma=%2C` |
-| Deferred | `Keys_Reserved` | `{+keys}` | `semi,;,dot,.,comma,,` |
-| Deferred | `Keys_ReservedExplode` | `{+keys*}` | `semi=;,dot=.,comma=,` |
-| Deferred | `Keys_Fragment` | `{#keys}` | `#semi,;,dot,.,comma,,` |
-| Deferred | `Keys_FragmentExplode` | `{#keys*}` | `#semi=;,dot=.,comma=,` |
-| Deferred | `Keys_Label` | `X{.keys}` | `X.semi,%3B,dot,.,comma,%2C` |
-| Deferred | `Keys_LabelExplode` | `X{.keys*}` | `X.semi=%3B.dot=..comma=%2C` |
-| Deferred | `Keys_Path` | `{/keys}` | `/semi,%3B,dot,.,comma,%2C` |
-| Deferred | `Keys_PathExplode` | `{/keys*}` | `/semi=%3B/dot=./comma=%2C` |
-| Deferred | `Keys_Semicolon` | `{;keys}` | `;keys=semi,%3B,dot,.,comma,%2C` |
-| Deferred | `Keys_SemicolonExplode` | `{;keys*}` | `;semi=%3B;dot=.;comma=%2C` |
-| Deferred | `Keys_Query` | `{?keys}` | `?keys=semi,%3B,dot,.,comma,%2C` |
-| Deferred | `Keys_QueryExplode` | `{?keys*}` | `?semi=%3B&dot=.&comma=%2C` |
-| Deferred | `Keys_Ampersand` | `{&keys}` | `&keys=semi,%3B,dot,.,comma,%2C` |
-| Deferred | `Keys_AmpersandExplode` | `{&keys*}` | `&semi=%3B&dot=.&comma=%2C` |
-| Deferred | `EmptyKeys_IsUndefined` | `X{.empty_keys}` | `X` |
-| Deferred | `EmptyKeysExploded_IsUndefined` | `X{.empty_keys*}` | `X` |
+| Existing | `Keys_Simple` | `{keys}` | `semi,%3B,dot,.,comma,%2C` |
+| Existing | `Keys_SimpleExplode` | `{keys*}` | `semi=%3B,dot=.,comma=%2C` |
+| Existing | `Keys_Reserved` | `{+keys}` | `semi,;,dot,.,comma,,` |
+| Existing | `Keys_ReservedExplode` | `{+keys*}` | `semi=;,dot=.,comma=,` |
+| Existing | `Keys_Fragment` | `{#keys}` | `#semi,;,dot,.,comma,,` |
+| Existing | `Keys_FragmentExplode` | `{#keys*}` | `#semi=;,dot=.,comma=,` |
+| Existing | `Keys_Label` | `X{.keys}` | `X.semi,%3B,dot,.,comma,%2C` |
+| Existing | `Keys_LabelExplode` | `X{.keys*}` | `X.semi=%3B.dot=..comma=%2C` |
+| Existing | `Keys_Path` | `{/keys}` | `/semi,%3B,dot,.,comma,%2C` |
+| Existing | `Keys_PathExplode` | `{/keys*}` | `/semi=%3B/dot=./comma=%2C` |
+| Existing | `Keys_Semicolon` | `{;keys}` | `;keys=semi,%3B,dot,.,comma,%2C` |
+| Existing | `Keys_SemicolonExplode` | `{;keys*}` | `;semi=%3B;dot=.;comma=%2C` |
+| Existing | `Keys_Query` | `{?keys}` | `?keys=semi,%3B,dot,.,comma,%2C` |
+| Existing | `Keys_QueryExplode` | `{?keys*}` | `?semi=%3B&dot=.&comma=%2C` |
+| Existing | `Keys_Ampersand` | `{&keys}` | `&keys=semi,%3B,dot,.,comma,%2C` |
+| Existing | `Keys_AmpersandExplode` | `{&keys*}` | `&semi=%3B&dot=.&comma=%2C` |
+| Existing | `EmptyKeys_IsUndefined` | `X{.empty_keys}` | `X` |
+| Existing | `EmptyKeysExploded_IsUndefined` | `X{.empty_keys*}` | `X` |
+
+### 6.4 Level 4 edge cases
+
+Class: `UriTemplateLevel4Tests` (edge case methods) and `UriTemplateEdgeCaseTests` (parser-level checks).
+
+| Status | Test name | Description |
+|---|---|---|
+| Existing | `PrefixAndExplode_ThrowsFormatException` | Mutual exclusion: `{var:3*}` and `{var*:3}` both throw `FormatException`. |
+| Existing | `PrefixOnListValue_ThrowsFormatException` | Prefix modifier on a list value throws `FormatException`. |
+| Existing | `PrefixOnAssociativeArrayValue_ThrowsFormatException` | Prefix modifier on an associative-array value throws `FormatException`. |
+| Existing | `EmptyList_ProducesNoOutput` | Empty `string[]` treated as undefined across multiple operators. |
+| Existing | `EmptyAssociativeArray_ProducesNoOutput` | Empty `List<KeyValuePair<string,string>>` treated as undefined across multiple operators. |
+| Existing | `SingleMemberList_ExpandsCorrectly` | Single-element list expands correctly for no-explode and explode across operators. |
+| Existing | `SinglePairAssociativeArray_NoExplode` | Single-pair associative array, no-explode. |
+| Existing | `SinglePairAssociativeArray_Explode` | Single-pair associative array, explode. |
+| Existing | `ListWithEmptyStringMembers_QueryExplode` | List with empty-string members applies ifEmp rules for query explode. |
+| Existing | `ListWithEmptyStringMembers_SemicolonExplode` | List with empty-string members applies ifEmp rules for semicolon explode. |
+| Existing | `PrefixLargerThanLength_ReturnsFullValue` | Prefix larger than value length returns full value. |
+| Existing | `PrefixOnEmoji_ReturnsSingleTextElement` | Unicode prefix truncation via code-point counting (`TruncateByCodePoints`). |
+| Existing | `MixedLevel1Through4_InOneTemplate` | Mixed Level 1-4 expressions in a single template. |
+| Existing | `UnsupportedValueType_Int_ThrowsFormatException` | `int` value throws `FormatException`. |
+| Existing | `UnsupportedValueType_Bool_ThrowsFormatException` | `bool` value throws `FormatException`. |
+| Existing | `UnsupportedValueType_Object_ThrowsFormatException` | `object` value throws `FormatException`. |
+| Existing | `NullValueInObjectDictionary_TreatedAsUndefined` | `null` in `IDictionary<string, object?>` treated as undefined. |
+| Existing | `NullValueInObjectDictionary_WrappedByLiterals` | `null` value between literals produces only the literals. |
+| Existing | `ListWithNullElement_ThrowsFormatException` | List containing a `null` element throws `FormatException`. |
+| Existing | `AssociativeArrayWithNullValue_ThrowsFormatException` | Associative array with a `null` value throws `FormatException`. |
+| Existing | `ListOfKeyValuePairs_DispatchesAsAssociativeArray` | `IEnumerable<KeyValuePair<string,string>>` dispatches as assoc-array. |
+| Existing | `DictionaryOfStringString_DispatchesAsAssociativeArray` | `IDictionary<string,string>` dispatches as assoc-array. |
+| Existing | `StringDictionaryOverload_WorksWithPrefixModifier` | `Expand(IDictionary<string,string>)` works with prefix modifier templates. |
+| Existing | `StringDictionaryOverload_WorksWithExplodeModifier` | `Expand(IDictionary<string,string>)` works with explode modifier (string value, no composite). |
 
 ## 7. Official URI Template Test Suite
 
@@ -485,11 +509,9 @@ Add a data-driven harness around https://github.com/uri-templates/uritemplate-te
 
 | Status | Test group | Expected handling |
 |---|---|---|
-| Planned | `spec-examples.json` Level 1-3 string cases | Must pass. |
-| Deferred | `spec-examples.json` Level 4 prefix/list/dictionary cases | Mark skipped until Level 4 API exists. |
-| Planned | `extended-tests.json` valid Level 1-3 string cases | Must pass after parser/encoding gaps are closed. |
+| Planned | `spec-examples.json` Level 1-4 string/list/dictionary cases | Must pass. |
+| Planned | `extended-tests.json` valid Level 1-4 cases | Must pass after parser/encoding gaps are closed. |
 | Gap | Invalid grammar cases | Must assert `FormatException` or the chosen diagnostic API behavior. |
-| Deferred | Explode/list/dictionary cases | Mark skipped until Level 4 API exists. |
 
 ## 8. LinkObject Integration Tests
 
@@ -509,21 +531,20 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 
 ## 9. Coverage Summary
 
-| Area | Existing | Planned | Gap | Deferred |
-|---|---:|---:|---:|---:|
-| Level 1 simple string | 42 | 0 | 0 | 0 |
-| Level 2 reserved and fragment | 32 | 0 | 0 | 0 |
-| Level 3 operators | 65 | 0 | 0 | 0 |
-| Variable discovery | 11 | 0 | 0 | 1 |
-| Parser and edge cases | 45 | 0 | 0 | 0 |
-| Level 4 matrix | 0 | 0 | 0 | 45 |
-| Official compliance harness | 0 | 2 | 1 | 2 |
-| HAL `LinkObject` integration | 0 | 7 | 0 | 0 |
+| Area | Existing | Planned | Gap |
+|---|---:|---:|---:|
+| Level 1 simple string | 42 | 0 | 0 |
+| Level 2 reserved and fragment | 32 | 0 | 0 |
+| Level 3 operators | 65 | 0 | 0 |
+| Variable discovery | 13 | 0 | 0 |
+| Parser and edge cases | 42 | 0 | 0 |
+| Level 4 compliance (prefix, list, assoc-array) | 47 | 0 | 0 |
+| Level 4 edge cases | 24 | 0 | 0 |
+| Official compliance harness | 0 | 2 | 1 |
+| HAL `LinkObject` integration | 0 | 7 | 0 |
 
-The highest-priority implementation fixes are:
+The highest-priority remaining implementation fixes are:
 
 1. Correct reserved expansion handling for bare `%`.
-2. Add RFC 6570 variable-name and expression grammar validation.
-3. Decide and implement literal validation/encoding behavior.
-4. Enforce ordinal case-sensitive lookup independent of caller dictionary comparer.
-5. Treat null dictionary values as undefined or document and test a stricter API contract.
+2. Decide and implement literal validation/encoding behavior.
+3. Add a data-driven compliance test harness against the official URI Templates test suite.

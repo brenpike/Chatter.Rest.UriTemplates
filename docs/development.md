@@ -24,6 +24,7 @@ test/
     UriTemplateLevel1Tests.cs
     UriTemplateLevel2Tests.cs
     UriTemplateLevel3Tests.cs
+    UriTemplateLevel4Tests.cs
     UriTemplateEdgeCaseTests.cs
     UriTemplateGetVariablesTests.cs
 ```
@@ -75,7 +76,8 @@ dotnet test test/Chatter.Rest.UriTemplates.Tests/Chatter.Rest.UriTemplates.Tests
 - `UriTemplateLevel1Tests` — simple string expansion
 - `UriTemplateLevel2Tests` — reserved and fragment expansion
 - `UriTemplateLevel3Tests` — multi-variable and operator expansion
-- `UriTemplateEdgeCaseTests` — malformed templates, mixed-level, Level 4 detection
+- `UriTemplateLevel4Tests` — prefix modifiers, list values, associative arrays, explode behavior
+- `UriTemplateEdgeCaseTests` — malformed templates, mixed-level, modifier validation
 - `UriTemplateGetVariablesTests` — variable enumeration across all operator types
 
 ## 5. NuGet Packaging
@@ -84,7 +86,7 @@ dotnet test test/Chatter.Rest.UriTemplates.Tests/Chatter.Rest.UriTemplates.Tests
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.1.0.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.2.0.
 
 ## 6. CI/CD Parity
 

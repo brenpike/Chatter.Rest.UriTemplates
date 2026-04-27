@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-3. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with no external NuGet dependencies.
+Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-4. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with prefix modifier, explode modifier, list value, and associative-array value support. No external NuGet dependencies.
 
 **Repository:** https://github.com/brenpike/Chatter.Rest.UriTemplates
 **RFC 6570 Specification:** https://datatracker.ietf.org/doc/html/rfc6570
@@ -17,6 +17,7 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | [docs/usage.md](docs/usage.md) | Practical usage guide with API reference and operator examples |
 | [docs/test-plan.md](docs/test-plan.md) | RFC 6570 test coverage map, test scenarios by level and operator |
 | [docs/development.md](docs/development.md) | Build commands, test commands, NuGet packaging, CI/CD parity, code style, test conventions |
+| [docs/backlog.md](docs/backlog.md) | Deferred work and follow-ups |
 | [docs/branching-pr-workflow.md](docs/branching-pr-workflow.md) | Mandatory branching and PR workflow |
 
 ## Solution Structure
@@ -77,7 +78,7 @@ See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
 ## Package Versions
 
-- `Chatter.Rest.UriTemplates` - v0.1.0
+- `Chatter.Rest.UriTemplates` - v0.2.0
 
 ## Memory Usage
 

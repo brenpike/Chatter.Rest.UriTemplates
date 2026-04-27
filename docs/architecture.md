@@ -6,9 +6,7 @@ Spec: https://datatracker.ietf.org/doc/html/rfc6570
 
 ## Overview
 
-Standalone .NET library implementing RFC 6570 URI Template expansion for Levels 1–3. Ships as NuGet package `Chatter.Rest.UriTemplates`. No external NuGet dependencies.
-
-Level 4 (value modifiers — prefix `:N` and explode `*`) is explicitly deferred. See [Level 4 TODO](#level-4-todo).
+Standalone .NET library implementing RFC 6570 URI Template expansion for Levels 1–4. Ships as NuGet package `Chatter.Rest.UriTemplates`. No external NuGet dependencies.
 
 ---
 
@@ -17,12 +15,13 @@ Level 4 (value modifiers — prefix `:N` and explode `*`) is explicitly deferred
 ### Functional
 
 - Parse URI template strings containing `{expression}` tokens per RFC 6570 Section 2
-- Expand Level 1, Level 2, and Level 3 expressions (see [Operator Reference](#operator-reference))
+- Expand Level 1, Level 2, Level 3, and Level 4 expressions (see [Operator Reference](#operator-reference))
 - Return literal text outside expressions unchanged
 - Undefined variables (key absent from input dictionary) are omitted per RFC 6570 rules
 - Empty-string values are handled per operator semantics (see [Operator Reference](#operator-reference))
 - Percent-encode values per RFC 3986 rules appropriate to each operator (see [Encoding Rules](#encoding-rules))
-- Detect Level 4 modifier syntax (`:N`, `*`) and throw `NotSupportedException` with a descriptive message
+- Support Level 4 prefix modifier (`:N`) for string values and explode modifier (`*`) for list and associative-array values
+- Prefix and explode modifiers are mutually exclusive per RFC 6570; the parser enforces this and throws `FormatException`
 
 ### Non-Functional
 
@@ -34,9 +33,6 @@ Level 4 (value modifiers — prefix `:N` and explode `*`) is explicitly deferred
 
 | Feature | Reason |
 |---|---|
-| Level 4 prefix modifier `{var:N}` | Deferred — see [Level 4 TODO](#level-4-todo) |
-| Level 4 explode modifier `{var*}` | Deferred — requires list/dict value types |
-| List and dictionary value types | Tied to Level 4; `string` values are sufficient for Levels 1–3 |
 | URI template composition or merging | Outside RFC 6570 scope |
 
 ---
@@ -59,6 +55,7 @@ test/
     UriTemplateLevel1Tests.cs
     UriTemplateLevel2Tests.cs
     UriTemplateLevel3Tests.cs
+    UriTemplateLevel4Tests.cs
     UriTemplateEdgeCaseTests.cs
     UriTemplateGetVariablesTests.cs
 ```
@@ -83,6 +80,23 @@ internal enum UriTemplateOperator
 }
 ```
 
+### `UriTemplateVarSpec` (internal record)
+
+Represents a single variable specifier within an expression, including optional Level 4 modifiers.
+
+```csharp
+internal sealed record UriTemplateVarSpec(
+    string Name,
+    int? PrefixLength,
+    bool Explode
+);
+```
+
+- `Name` — the variable name (base name, without modifiers).
+- `PrefixLength` — when non-null, the prefix modifier value (1–9999). Applies only to scalar string values; applying a prefix to a composite value (list or associative array) throws `FormatException` at expansion time.
+- `Explode` — when `true`, the explode modifier (`*`) is present. Per-operator explode behavior is applied at expansion time.
+- Prefix and explode are mutually exclusive. The parser throws `FormatException` if both are present on a single varspec.
+
 ### `UriTemplateExpression` (internal record)
 
 Represents one parsed `{expression}` token.
@@ -90,7 +104,7 @@ Represents one parsed `{expression}` token.
 ```csharp
 internal sealed record UriTemplateExpression(
     UriTemplateOperator Operator,
-    IReadOnlyList<string> Variables
+    IReadOnlyList<UriTemplateVarSpec> Variables
 );
 ```
 
@@ -101,9 +115,10 @@ Scans a template string left to right. Emits a sequence of string literals and `
 Responsibilities:
 - Detect the operator character immediately after `{` (if any)
 - Split comma-separated variable names within the expression
-- Validate variable names: RFC 6570 `varname` = `varchar *( ["."] varchar )` where `varchar = ALPHA / DIGIT / "_"` and pct-encoded sequences. For Levels 1–3, dots and pct-encoded names are uncommon but must not cause a parse error.
-- Detect Level 4 modifier characters (`:` for prefix, `*` for explode) and throw `NotSupportedException` with the message: `"RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status."`
-- Throw `FormatException` for malformed templates (unclosed `{`, nested `{`)
+- Validate variable names: RFC 6570 `varname` = `varchar *( ["."] varchar )` where `varchar = ALPHA / DIGIT / "_"` and pct-encoded sequences. Dots and pct-encoded names are uncommon but must not cause a parse error.
+- Parse Level 4 modifier syntax: prefix (`:N` where N is 1–9999) and explode (`*` at the end of a varspec). Produces `UriTemplateVarSpec` instances with the appropriate modifier fields set.
+- Enforce mutual exclusion of prefix and explode modifiers on a single varspec; throw `FormatException` if both are present.
+- Throw `FormatException` for malformed templates (unclosed `{`, nested `{`, invalid modifier syntax)
 
 ### `UriTemplateExpander` (internal static)
 
@@ -114,19 +129,39 @@ internal static class UriTemplateExpander
 {
     internal static string Expand(
         UriTemplateExpression expression,
-        IDictionary<string, string> variables);
+        IDictionary<string, object?> variables);
 }
 ```
 
+The expander performs runtime type dispatch on each variable value:
+
+| Runtime type | Dispatch path | Notes |
+|---|---|---|
+| `string` | Scalar string expansion | Supports prefix truncation via `:N` modifier. |
+| `IDictionary<string, string>` | Associative array expansion | Checked before `IEnumerable<string>` to avoid false match. |
+| `IEnumerable<KeyValuePair<string, string>>` | Associative array expansion | Preserves insertion order for deterministic output. |
+| `IEnumerable<string>` | List expansion | Checked after dictionary/KVP to avoid matching `string` (which is `IEnumerable<char>`). |
+| `null` | Treated as undefined | Omitted per RFC 6570 §2.3. |
+| Any other type | `FormatException` | Unsupported value type. |
+
 Per-operator expansion algorithm:
 
-1. For each variable in `expression.Variables`:
-   - Look up in `variables` dictionary. If absent (undefined): skip entirely.
-   - If present but empty string: apply operator-specific empty-value rule (see [Operator Reference](#operator-reference)).
-   - If present and non-empty: encode per operator encoding rule, then format per operator.
+1. For each varspec in `expression.Variables`:
+   - Look up `varSpec.Name` in the `variables` dictionary. If absent or `null` (undefined): skip entirely.
+   - Dispatch by runtime type (see table above).
+   - **String values:**
+     - If `varSpec.PrefixLength` is set, truncate the value to that many Unicode code points (per RFC 6570 §2.4.1) using the internal `TruncateByCodePoints` method. The method walks the UTF-16 string, pairing valid high+low surrogate pairs as a single code point. This works on both `net8.0` and `netstandard2.0` without a `System.Text.Rune` dependency. Note: combining marks (e.g., `e` + U+0301) count as separate code points, so `{var:1}` on `"é"` keeps only `e`.
+     - If the (possibly truncated) value is empty: apply operator-specific empty-value rule (see [Operator Reference](#operator-reference)).
+     - If non-empty: encode per operator encoding rule, then format per operator.
+   - **List values (non-explode):** encode each member, comma-join into a single composite value. For named operators, prepend `varname=`. Empty list is treated as undefined and omitted.
+   - **List values (explode):** each member becomes a separate part. Named operators emit `varname=encodedMember` per member (with ifEmp rules for empty members); non-named operators emit value-only segments.
+   - **Associative array values (non-explode):** flatten to alternating `key,value,key,value,...` — each key and value individually encoded, comma-joined. For named operators, prepend `varname=`. Empty associative array is treated as undefined.
+   - **Associative array values (explode):** each pair becomes `encodedKey=encodedValue`, joined by operator separator. For named operators with empty values, ifEmp rules apply (`;` omits `=`; `?`/`&` include `=`).
+   - **Prefix on composite:** throws `FormatException`. Prefix modifier applies only to scalar string values.
+   - **Null elements/values in composites:** throws `FormatException`. List elements and associative array values must be non-null strings.
 2. Join the formatted variable results with the operator's separator.
 3. Prepend the operator's prefix (if any) to the joined result.
-4. If no variables produced output (all undefined): return empty string.
+4. If no variables produced output (all undefined or empty composites): return empty string.
 
 ### `UriTemplate` (public)
 
@@ -139,9 +174,24 @@ public sealed class UriTemplate
 
     /// <summary>
     /// Expands the URI template using the provided variable dictionary.
+    /// All values are treated as simple strings (Levels 1–3 inputs and
+    /// string-only Level 4 like {var:3}).
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     public string Expand(IDictionary<string, string> variables);
+
+    /// <summary>
+    /// Expands the URI template using the provided variable dictionary,
+    /// supporting composite value types for RFC 6570 Level 4 expansion.
+    /// Supported value types: string, IEnumerable&lt;string&gt;,
+    /// IDictionary&lt;string, string&gt;,
+    /// IEnumerable&lt;KeyValuePair&lt;string, string&gt;&gt;, and null.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="FormatException">Thrown when a variable value is not a supported type,
+    /// when a prefix modifier is applied to a composite value, or when a composite value
+    /// contains null elements.</exception>
+    public string Expand(IDictionary<string, object?> variables);
 
     /// <summary>
     /// Expands the URI template using the provided key-value pairs.
@@ -151,7 +201,7 @@ public sealed class UriTemplate
 
     /// <summary>
     /// Returns all variable names referenced in the template, in order of appearance, deduplicated.
-    /// Includes variables from all operator types (Levels 1–3).
+    /// For Level 4 varspecs, returns the base name (without :N or * modifiers).
     /// </summary>
     public IReadOnlyList<string> GetVariables();
 }
@@ -161,24 +211,52 @@ public sealed class UriTemplate
 
 ## Operator Reference
 
-The table below defines behaviour for every supported operator. "Prefix" is prepended to the entire expression result (only when at least one variable produced output). "Separator" joins multiple variable results within one expression. "Encoding" controls which characters are percent-encoded. "Empty value" describes output when a variable is present but is an empty string. "Undefined" describes output when a variable is absent from the input dictionary.
+The table below defines behaviour for every supported operator. "Prefix" is prepended to the entire expression result (only when at least one variable produced output). "Separator" joins multiple variable results within one expression. "Encoding" controls which characters are percent-encoded. "Empty value" describes output when a variable is present but is an empty string. "Undefined" describes output when a variable is absent from the input dictionary. "Named" indicates whether the operator emits `varname=value` format.
 
-| Operator | Level | Example | Prefix | Separator | Encoding | Empty value | Undefined |
-|---|---|---|---|---|---|---|---|
-| *(none)* | 1 | `{var}` | — | `,` | unreserved | *(empty string)* | omit |
-| `+` | 2 | `{+var}` | — | `,` | reserved | *(empty string)* | omit |
-| `#` | 2 | `{#var}` | `#` | `,` | reserved | `#` | omit / no `#` |
-| `.` | 3 | `{.var}` | `.` | `.` | unreserved | `.` | omit |
-| `/` | 3 | `{/var}` | `/` | `/` | unreserved | `/` | omit |
-| `;` | 3 | `{;var}` | `;` | `;` | unreserved | `;varname` *(no `=`)* | omit |
-| `?` | 3 | `{?var}` | `?` | `&` | unreserved | `varname=` *(with `=`)* | omit |
-| `&` | 3 | `{&var}` | `&` | `&` | unreserved | `varname=` *(with `=`)* | omit |
+| Operator | Level | Example | Prefix | Separator | Encoding | Empty value | Undefined | Named |
+|---|---|---|---|---|---|---|---|---|
+| *(none)* | 1 | `{var}` | — | `,` | unreserved | *(empty string)* | omit | no |
+| `+` | 2 | `{+var}` | — | `,` | reserved | *(empty string)* | omit | no |
+| `#` | 2 | `{#var}` | `#` | `,` | reserved | `#` | omit / no `#` | no |
+| `.` | 3 | `{.var}` | `.` | `.` | unreserved | `.` | omit | no |
+| `/` | 3 | `{/var}` | `/` | `/` | unreserved | `/` | omit | no |
+| `;` | 3 | `{;var}` | `;` | `;` | unreserved | `;varname` *(no `=`)* | omit | yes |
+| `?` | 3 | `{?var}` | `?` | `&` | unreserved | `varname=` *(with `=`)* | omit | yes |
+| `&` | 3 | `{&var}` | `&` | `&` | unreserved | `varname=` *(with `=`)* | omit | yes |
 
 **Notes:**
 - `#` prefix is emitted only when at least one variable produces a value. If all variables are undefined, the entire expression returns empty string (no lone `#`).
 - `.`, `/` prefixes behave the same way — emitted only when output is non-empty.
 - `;` empty-value rule: the variable name is included without `=` (e.g. `{;empty}` with `empty=""` → `;empty`).
 - `?` and `&` empty-value rule: the variable name is included with `=` but no value (e.g. `{?empty}` with `empty=""` → `?empty=`).
+
+### Level 4 Behavior by Operator
+
+The table below summarizes explode behavior for list and associative-array values across all operators. "Named" operators emit `varname=value` per member when exploding; non-named operators emit value-only segments.
+
+| Operator | Named | List explode | Assoc-array explode | ifEmp (explode, empty member/value) |
+|---|---|---|---|---|
+| *(none)* | no | `val1,val2,...` | `key1=val1,key2=val2,...` | *(empty string)* |
+| `+` | no | `val1,val2,...` | `key1=val1,key2=val2,...` | *(empty string)* |
+| `#` | no | `#val1,val2,...` | `#key1=val1,key2=val2,...` | *(empty string)* |
+| `.` | no | `.val1.val2....` | `.key1=val1.key2=val2....` | `.` |
+| `/` | no | `/val1/val2/...` | `/key1=val1/key2=val2/...` | `/` |
+| `;` | yes | `;varname=val1;varname=val2;...` | `;key1=val1;key2=val2;...` | `;varname` (no `=`) / `;key` (no `=`) |
+| `?` | yes | `?varname=val1&varname=val2&...` | `?key1=val1&key2=val2&...` | `varname=` / `key=` |
+| `&` | yes | `&varname=val1&varname=val2&...` | `&key1=val1&key2=val2&...` | `varname=` / `key=` |
+
+**Prefix modifier (`:N`):**
+- Applies only to scalar string values. Truncates the value to `N` Unicode code points (per RFC 6570 §2.4.1) before encoding.
+- The implementation walks UTF-16 with surrogate-pair pairing and works on both `net8.0` and `netstandard2.0` without `System.Text.Rune`. Combining marks count as separate code points; a surrogate pair counts as one code point.
+- Applying a prefix modifier to a list or associative-array value throws `FormatException`.
+
+**Explode modifier (`*`):**
+- For named operators (`;`, `?`, `&`): each list member becomes `varname=encodedMember`; each associative-array pair becomes `encodedKey=encodedValue`. Empty members/values follow the operator's ifEmp rule.
+- For non-named operators: each list member becomes a value-only segment; each associative-array pair becomes `encodedKey=encodedValue`.
+- Segments are joined by the operator's separator.
+
+**Empty composite values:**
+- An empty list (`Count == 0`) or empty associative array is treated as undefined per RFC 6570 §2.3 and produces no output.
 
 ---
 
@@ -213,12 +291,6 @@ For integration with HAL `LinkObject`, see the [Chatter.Rest.Hal](https://github
 
 ---
 
-## Level 4 TODO
+## Future Work
 
-Level 4 modifiers are not implemented. When the parser detects `:` (prefix) or `*` (explode) within an expression, it throws `NotSupportedException`.
-
-Future implementation requires:
-- `IDictionary<string, object>` value type (or a `UriTemplateValue` union type) to represent string, list, and dictionary values
-- Per-operator explode logic for each of the 8 operators
-- Prefix truncation logic applied before encoding
-- New overloads on `UriTemplate.Expand()` accepting the richer value type
+See [docs/backlog.md](backlog.md) for deferred follow-ups including a strongly-typed `UriTemplateValue` union type and a tuple overload for composite values.

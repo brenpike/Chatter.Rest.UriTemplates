@@ -275,34 +275,19 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<NotSupportedException>();
 		}
 
-		// 5.5 Level 4 detection and malformed modifiers (not supported)
+		// 5.5 Level 4 modifier validation
+		// Note: PrefixModifier_Throws, ExplodeModifier_Throws,
+		// ExplodeWithOperator_Throws, and PrefixModifierMaxLengthFourDigits_Throws
+		// were removed because Level 4 is now supported. Coverage moved to
+		// UriTemplateLevel4Tests. The remaining tests verify malformed modifier syntax.
 
-		[Fact]
-		public void PrefixModifier_Throws()
+		[Theory]
+		[InlineData("{var:3*}")]
+		[InlineData("{var*:3}")]
+		public void PrefixAndExplodeBoth_ThrowsFormat(string template)
 		{
-			Action act = () => new UriTemplate("{var:3}");
-			act.Should().Throw<NotSupportedException>();
-		}
-
-		[Fact]
-		public void ExplodeModifier_Throws()
-		{
-			Action act = () => new UriTemplate("{list*}");
-			act.Should().Throw<NotSupportedException>();
-		}
-
-		[Fact]
-		public void ExplodeWithOperator_Throws()
-		{
-			Action act = () => new UriTemplate("{/list*}");
-			act.Should().Throw<NotSupportedException>();
-		}
-
-		[Fact]
-		public void PrefixModifierMaxLengthFourDigits_Throws()
-		{
-			Action act = () => new UriTemplate("{var:9999}");
-			act.Should().Throw<NotSupportedException>();
+			Action act = () => new UriTemplate(template);
+			act.Should().Throw<FormatException>();
 		}
 
 		[Fact]
@@ -310,6 +295,19 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			Action act = () => new UriTemplate("{var:0}");
 			act.Should().Throw<FormatException>();
+		}
+
+		[Theory]
+		[InlineData("{var:01}")]
+		[InlineData("{var:001}")]
+		[InlineData("{var:0001}")]
+		[InlineData("{var:0123}")]
+		[InlineData("{var:00}")]
+		public void PrefixModifierLeadingZero_ThrowsFormat(string template)
+		{
+			Action act = () => new UriTemplate(template);
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("leading zeros");
 		}
 
 		[Fact]
