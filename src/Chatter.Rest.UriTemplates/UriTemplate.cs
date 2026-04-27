@@ -24,7 +24,8 @@ public sealed class UriTemplate
         // RFC 6570 §2.3: variable names are case-sensitive.  Copy into an
         // ordinal dictionary so lookup is always case-sensitive regardless of
         // the comparer the caller's dictionary was created with.
-        var ordinal = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Wrap string values as object? to match the internal expander signature.
+        var ordinal = new Dictionary<string, object?>(StringComparer.Ordinal);
 
         foreach (var kvp in variables)
         {
