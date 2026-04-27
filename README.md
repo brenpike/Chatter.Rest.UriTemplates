@@ -222,6 +222,23 @@ var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
 // "?list=a&list=b&list=c"
 ```
 
+### `Expand(IDictionary<string, UriTemplateValue> variables)`
+
+Strongly-typed alternative to the `object?` overload. Values are created through
+static factory methods on `UriTemplateValue`:
+
+```csharp
+var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, UriTemplateValue>
+{
+    ["color"] = UriTemplateValue.FromList(new[] { "red", "green", "blue" })
+});
+
+// "?color=red&color=green&color=blue"
+```
+
+Factory methods: `FromString(string)`, `FromList(IEnumerable<string>)`,
+`FromDictionary(IDictionary<string, string>)`.
+
 ### `Expand(params (string Key, string Value)[] variables)`
 
 Expands the template using tuple pairs. If the same key is supplied more than
@@ -265,7 +282,8 @@ The library supports RFC 6570 Levels 1-4.
 
 Variables are supplied as `string` for simple values. Level 4 composite values
 (lists and associative arrays) are supported via the
-`Expand(IDictionary<string, object?>)` overload.
+`Expand(IDictionary<string, object?>)` overload or the strongly-typed
+`Expand(IDictionary<string, UriTemplateValue>)` overload.
 
 ## Encoding
 

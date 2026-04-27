@@ -44,6 +44,7 @@ src/
   Chatter.Rest.UriTemplates/
     Chatter.Rest.UriTemplates.csproj
     UriTemplate.cs               ← public entry point
+    UriTemplateValue.cs          ← public strongly-typed value union
     UriTemplateOperator.cs       ← operator enum
     UriTemplateExpression.cs     ← one parsed {expression}
     UriTemplateParser.cs         ← tokenises template into literals + expressions
@@ -163,6 +164,45 @@ Per-operator expansion algorithm:
 3. Prepend the operator's prefix (if any) to the joined result.
 4. If no variables produced output (all undefined or empty composites): return empty string.
 
+### `UriTemplateValue` (public)
+
+A strongly-typed union representing a single URI template variable value. This is the second public type in the library alongside `UriTemplate`. It replaces the need for runtime type dispatch when callers supply composite values.
+
+**Discriminator (internal):**
+
+```csharp
+internal enum UriTemplateValueKind
+{
+    String,
+    List,
+    Dictionary
+}
+```
+
+**Class:**
+
+```csharp
+public sealed class UriTemplateValue
+{
+    internal UriTemplateValueKind Kind { get; }
+    internal string? StringValue { get; }
+    internal IReadOnlyList<string>? ListValue { get; }
+    internal IReadOnlyDictionary<string, string>? DictionaryValue { get; }
+
+    public static UriTemplateValue FromString(string value);
+    public static UriTemplateValue FromList(IEnumerable<string> values);
+    public static UriTemplateValue FromDictionary(IDictionary<string, string> pairs);
+}
+```
+
+- **`FromString`** — wraps a simple string value. Throws `ArgumentNullException` if `value` is null.
+- **`FromList`** — wraps a list of strings (defensively copied to a read-only list). Throws `ArgumentNullException` if `values` is null, `ArgumentException` if any element is null.
+- **`FromDictionary`** — wraps an associative array (defensively copied to a read-only dictionary). Throws `ArgumentNullException` if `pairs` is null, `ArgumentException` if any key or value is null.
+
+The constructor is private; instances are created exclusively through the factory methods. All internal properties are immutable snapshots — the caller's original collection is copied on creation.
+
+**Relationship to `Expand(IDictionary<string, object?>)`:** The existing `object?` overload is preserved for backward compatibility. The new `Expand(IDictionary<string, UriTemplateValue>)` overload provides compile-time safety by eliminating runtime type dispatch on the caller side.
+
 ### `UriTemplate` (public)
 
 The public entry point. Parses on construction; expands on demand.
@@ -192,6 +232,13 @@ public sealed class UriTemplate
     /// when a prefix modifier is applied to a composite value, or when a composite value
     /// contains null elements.</exception>
     public string Expand(IDictionary<string, object?> variables);
+
+    /// <summary>
+    /// Expands the URI template using strongly-typed <see cref="UriTemplateValue"/>
+    /// instances, supporting all RFC 6570 Level 1–4 value types with compile-time safety.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    public string Expand(IDictionary<string, UriTemplateValue> variables);
 
     /// <summary>
     /// Expands the URI template using the provided key-value pairs.
@@ -293,4 +340,4 @@ For integration with HAL `LinkObject`, see the [Chatter.Rest.Hal](https://github
 
 ## Future Work
 
-See [docs/backlog.md](backlog.md) for deferred follow-ups including a strongly-typed `UriTemplateValue` union type and a tuple overload for composite values.
+See [docs/backlog.md](backlog.md) for deferred follow-ups including a tuple overload for composite values.
