@@ -355,6 +355,17 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
+		public void CaseInsensitiveDictionaryDoesNotChangeTemplateSemantics()
+		{
+			var vars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+			{
+				["var"] = "lower",
+			};
+			var template = new UriTemplate("{Var}");
+			template.Expand(vars).Should().Be("");
+		}
+
+		[Fact]
 		public void OrdinalDuplicateNamesRemainDistinct()
 		{
 			var vars = new Dictionary<string, string>

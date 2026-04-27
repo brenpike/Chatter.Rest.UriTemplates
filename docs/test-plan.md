@@ -97,10 +97,10 @@ Note: the multi-variable simple expansion rows are currently covered by `UriTemp
 | Existing | `MiddleLiteral` | `/orders/{var}/items` | `/orders/value/items` |
 | Existing | `EmptyTemplate` | *(empty string)* | *(empty string)* |
 | Existing | `Literal_PctTripletPreserved` | `/already/%7Eencoded` | `/already/%7Eencoded` |
-| Gap | `Literal_NonAsciiEncoded` | `/caf\u00e9/{var}` | `/caf%C3%A9/value` |
-| Gap | `Literal_SpaceRejected` | `/bad literal/{var}` | `FormatException` |
-| Gap | `Literal_InvalidPercentTripletRejected` | `/bad/%zz/{var}` | `FormatException` |
-| Gap | `Literal_LoneClosingBraceRejected` | `/orders/}x` | `FormatException` |
+| Existing | `Literal_NonAsciiEncoded` | `/caf\u00e9/{var}` | `/caf%C3%A9/value` |
+| Existing | `Literal_SpaceRejected` | `/bad literal/{var}` | `FormatException` |
+| Existing | `Literal_InvalidPercentTripletRejected` | `/bad/%zz/{var}` | `FormatException` |
+| Existing | `Literal_LoneClosingBraceRejected` | `/orders/}x` | `FormatException` |
 
 ### 1.3 Multiple expressions
 
@@ -134,7 +134,7 @@ Note: the multi-variable simple expansion rows are currently covered by `UriTemp
 |---|---|---|---|
 | Existing | `NullDictionary_Throws` | `variables = null` | `ArgumentNullException` |
 | Existing | `EmptyDictionary_AllExpressionsEmpty` | `{var}`, `{}` | *(empty string)* |
-| Gap | `NullDictionaryValue_TreatedAsUndefined` | `["var"] = null` | *(empty string)* |
+| Existing | `NullDictionaryValue_TreatedAsUndefined` | `["var"] = null` | *(empty string)* |
 | Existing | `TupleOverload_NullArrayThrows` | `variables = null` | `ArgumentNullException` |
 | Existing | `TupleOverload_DuplicateKeys_FirstWins` | `("var","first"),("var","second")` | `first` |
 
@@ -150,7 +150,7 @@ Operator: `+`. Encoding: reserved. Separator: `,`. Prefix: none.
 |---|---|---|---|
 | Existing | `Plus_SimpleValue` | `{+var}` | `value` |
 | Existing | `Plus_WithSpace` | `{+hello}` | `Hello%20World!` |
-| Gap | `Plus_PercentEncoded` | `{+half}` | `50%25` |
+| Existing | `Plus_PercentEncoded` | `{+half}` | `50%25` |
 | Existing | `Plus_BaseReservedCharsPreserved` | `{+base}index` | `http://example.com/home/index` |
 | Existing | `Simple_BaseReservedCharsEncoded` | `{base}index` | `http%3A%2F%2Fexample.com%2Fhome%2Findex` |
 | Existing | `Plus_WithSlashes_PreservesSlashes` | `{+path}` | `/foo/bar` |
@@ -166,8 +166,8 @@ Operator: `+`. Encoding: reserved. Separator: `,`. Prefix: none.
 | Existing | `Plus_AmpersandPreserved` | `{+var}`, `var="a&b"` | `a&b` |
 | Existing | `Plus_ColonPreserved` | `{+var}`, `var="a:b"` | `a:b` |
 | Existing | `Plus_ExistingPctTripletPreserved` | `{+var}`, `var="x%2Fy"` | `x%2Fy` |
-| Gap | `Plus_BarePercentEncoded` | `{+var}`, `var="x%y"` | `x%25y` |
-| Gap | `Plus_InvalidPctTripletEncoded` | `{+var}`, `var="x%zz"` | `x%25zz` |
+| Existing | `Plus_BarePercentEncoded` | `{+var}`, `var="x%y"` | `x%25y` |
+| Existing | `Plus_InvalidPctTripletEncoded` | `{+var}`, `var="x%zz"` | `x%25zz` |
 
 ### 2.2 Fragment expansion `{#var}`
 
@@ -177,7 +177,7 @@ Operator: `#`. Encoding: reserved. Separator: `,`. Prefix: `#` when at least one
 |---|---|---|---|
 | Existing | `Hash_SimpleValue` | `{#var}` | `#value` |
 | Existing | `Hash_WithSpace` | `{#hello}` | `#Hello%20World!` |
-| Gap | `Hash_PercentEncoded` | `{#half}` | `#50%25` |
+| Existing | `Hash_PercentEncoded` | `{#half}` | `#50%25` |
 | Existing | `Hash_WithSlashes` | `{#path}` | `#/foo/bar` |
 | Existing | `Hash_TrailingLiteral` | `{#path,x}/here` | `#/foo/bar,1024/here` |
 | Existing | `Hash_MultipleVars` | `{#x,hello,y}` | `#1024,Hello%20World!,768` |
@@ -186,7 +186,7 @@ Operator: `#`. Encoding: reserved. Separator: `,`. Prefix: `#` when at least one
 | Existing | `Hash_EmptyValueWrappedByLiteral` | `foo{#empty}` | `foo#` |
 | Existing | `Hash_UndefinedWrappedByLiteral` | `foo{#undef}` | `foo` |
 | Existing | `Hash_ExistingPctTripletPreserved` | `{#var}`, `var="x%2Fy"` | `#x%2Fy` |
-| Gap | `Hash_BarePercentEncoded` | `{#var}`, `var="x%y"` | `#x%25y` |
+| Existing | `Hash_BarePercentEncoded` | `{#var}`, `var="x%y"` | `#x%25y` |
 
 ## 3. Level 3 Multiple Variables and Operator Expansion
 
@@ -210,14 +210,14 @@ Class: `UriTemplateLevel3Tests`
 |---|---|---|---|
 | Existing | `Plus_TwoVars` | `{+x,hello,y}` | `1024,Hello%20World!,768` |
 | Existing | `Plus_WithPath` | `{+path,x}/here` | `/foo/bar,1024/here` |
-| Gap | `Plus_PercentMultiVar` | `{+half,who}` | `50%25,fred` |
+| Existing | `Plus_PercentMultiVar` | `{+half,who}` | `50%25,fred` |
 
 ### 3.3 Fragment multi-variable `{#x,y}`
 
 | Status | Test name | Template | Expected |
 |---|---|---|---|
 | Existing | `Hash_TwoVars` | `{#x,hello,y}` | `#1024,Hello%20World!,768` |
-| Gap | `Hash_PercentMultiVar` | `{#half,who}` | `#50%25,fred` |
+| Existing | `Hash_PercentMultiVar` | `{#half,who}` | `#50%25,fred` |
 
 ### 3.4 Label expansion `{.var}`
 
@@ -358,20 +358,20 @@ The library currently chooses exceptions for malformed templates. Preserve that 
 | Existing | `UnclosedBrace_Throws` | `/orders/{id` | `FormatException` |
 | Existing | `NestedBraces_Throws` | `/orders/{{id}}` | `FormatException` |
 | Existing | `EmptyExpression_Throws` | `/orders/{}` | `FormatException` |
-| Gap | `OperatorOnlyQuery_Throws` | `{?}` | `FormatException` |
-| Gap | `TrailingComma_Throws` | `{x,}` | `FormatException` |
-| Gap | `LeadingComma_Throws` | `{,x}` | `NotSupportedException` |
-| Gap | `DoubleComma_Throws` | `{x,,y}` | `FormatException` |
-| Gap | `WhitespaceInExpression_Throws` | `{ x }` | `FormatException` |
-| Gap | `WhitespaceAfterComma_Throws` | `{x, y}` | `FormatException` |
-| Gap | `InvalidVarNameHyphen_Throws` | `{bad-name}` | `FormatException` |
-| Gap | `InvalidVarNameDollar_Throws` | `{bad$name}` | `FormatException` |
-| Gap | `InvalidVarNameSlash_Throws` | `{bad/name}` | `FormatException` |
-| Gap | `InvalidVarNameConsecutiveDots_Throws` | `{a..b}` | `FormatException` |
-| Gap | `InvalidVarNameTrailingDot_Throws` | `{a.}` | `FormatException` |
-| Gap | `InvalidVarNameLeadingDotNoOperator_Throws` | `{.}` | `FormatException` |
-| Gap | `InvalidPctEncodedVarName_Throws` | `{%zz}` | `FormatException` |
-| Gap | `DoubleOperator_Throws` | `{??x}` | `FormatException` |
+| Existing | `OperatorOnlyQuery_Throws` | `{?}` | `FormatException` |
+| Existing | `TrailingComma_Throws` | `{x,}` | `FormatException` |
+| Existing | `LeadingComma_Throws` | `{,x}` | `NotSupportedException` |
+| Existing | `DoubleComma_Throws` | `{x,,y}` | `FormatException` |
+| Existing | `WhitespaceInExpression_Throws` | `{ x }` | `FormatException` |
+| Existing | `WhitespaceAfterComma_Throws` | `{x, y}` | `FormatException` |
+| Existing | `InvalidVarNameHyphen_Throws` | `{bad-name}` | `FormatException` |
+| Existing | `InvalidVarNameDollar_Throws` | `{bad$name}` | `FormatException` |
+| Existing | `InvalidVarNameSlash_Throws` | `{bad/name}` | `FormatException` |
+| Existing | `InvalidVarNameConsecutiveDots_Throws` | `{a..b}` | `FormatException` |
+| Existing | `InvalidVarNameTrailingDot_Throws` | `{a.}` | `FormatException` |
+| Existing | `InvalidVarNameLeadingDotNoOperator_Throws` | `{.}` | `FormatException` |
+| Existing | `InvalidPctEncodedVarName_Throws` | `{%zz}` | `FormatException` |
+| Existing | `DoubleOperator_Throws` | `{??x}` | `FormatException` |
 
 ### 5.4 Reserved future operators
 
@@ -379,11 +379,11 @@ RFC 6570 reserves `=`, `,`, `!`, `@`, and `|` as operator characters. The curren
 
 | Status | Test name | Input | Expected |
 |---|---|---|---|
-| Gap | `ReservedEqualsOperator_Throws` | `{=var}` | `NotSupportedException` |
-| Gap | `ReservedCommaOperator_Throws` | `{,var}` | `NotSupportedException` |
-| Gap | `ReservedBangOperator_Throws` | `{!var}` | `NotSupportedException` |
-| Gap | `ReservedAtOperator_Throws` | `{@var}` | `NotSupportedException` |
-| Gap | `ReservedPipeOperator_Throws` | `{|var}` | `NotSupportedException` |
+| Existing | `ReservedEqualsOperator_Throws` | `{=var}` | `NotSupportedException` |
+| Existing | `ReservedCommaOperator_Throws` | `{,var}` | `NotSupportedException` |
+| Existing | `ReservedBangOperator_Throws` | `{!var}` | `NotSupportedException` |
+| Existing | `ReservedAtOperator_Throws` | `{@var}` | `NotSupportedException` |
+| Existing | `ReservedPipeOperator_Throws` | `{|var}` | `NotSupportedException` |
 
 ### 5.5 Level 4 detection and malformed modifiers
 
@@ -395,18 +395,18 @@ Valid Level 4 modifiers are unsupported by this package today. Malformed modifie
 | Existing | `ExplodeModifier_Throws` | `{list*}` | `NotSupportedException` |
 | Existing | `ExplodeWithOperator_Throws` | `{/list*}` | `NotSupportedException` |
 | Existing | `PrefixModifierMaxLengthFourDigits_Throws` | `{var:9999}` | `NotSupportedException` |
-| Gap | `PrefixModifierZero_ThrowsFormat` | `{var:0}` | `FormatException` |
-| Gap | `PrefixModifierTooLarge_ThrowsFormat` | `{var:10000}` | `FormatException` |
-| Gap | `PrefixModifierNonNumeric_ThrowsFormat` | `{var:abc}` | `FormatException` |
-| Gap | `ModifierInMiddle_ThrowsFormat` | `{va*r}` | `FormatException` |
-| Gap | `ColonWithoutLength_ThrowsFormat` | `{var:}` | `FormatException` |
+| Existing | `PrefixModifierZero_ThrowsFormat` | `{var:0}` | `FormatException` |
+| Existing | `PrefixModifierTooLarge_ThrowsFormat` | `{var:10000}` | `FormatException` |
+| Existing | `PrefixModifierNonNumeric_ThrowsFormat` | `{var:abc}` | `FormatException` |
+| Existing | `ModifierInMiddle_ThrowsFormat` | `{va*r}` | `FormatException` |
+| Existing | `ColonWithoutLength_ThrowsFormat` | `{var:}` | `FormatException` |
 
 ### 5.6 Case sensitivity and lookup semantics
 
 | Status | Test name | Description | Expected |
 |---|---|---|---|
 | Existing | `VariableNames_CaseSensitive` | `{Var}` with `Var="upper"` and `var="lower"` in default dict | `upper` |
-| Gap | `CaseInsensitiveDictionaryDoesNotChangeTemplateSemantics` | `{Var}` with case-insensitive dict containing only `var="lower"` | *(empty string)* |
+| Existing | `CaseInsensitiveDictionaryDoesNotChangeTemplateSemantics` | `{Var}` with case-insensitive dict containing only `var="lower"` | *(empty string)* |
 | Existing | `OrdinalDuplicateNamesRemainDistinct` | `{var,Var}` with both values | `lower,upper` |
 
 ## 6. Level 4 Deferred Compliance Matrix
@@ -511,11 +511,11 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 
 | Area | Existing | Planned | Gap | Deferred |
 |---|---:|---:|---:|---:|
-| Level 1 simple string | 37 | 0 | 5 | 0 |
-| Level 2 reserved and fragment | 28 | 0 | 6 | 0 |
-| Level 3 operators | 63 | 0 | 2 | 0 |
+| Level 1 simple string | 42 | 0 | 0 | 0 |
+| Level 2 reserved and fragment | 32 | 0 | 0 | 0 |
+| Level 3 operators | 65 | 0 | 0 | 0 |
 | Variable discovery | 11 | 0 | 0 | 1 |
-| Parser and edge cases | 21 | 0 | 28 | 0 |
+| Parser and edge cases | 45 | 0 | 0 | 0 |
 | Level 4 matrix | 0 | 0 | 0 | 45 |
 | Official compliance harness | 0 | 2 | 1 | 2 |
 | HAL `LinkObject` integration | 0 | 7 | 0 | 0 |
