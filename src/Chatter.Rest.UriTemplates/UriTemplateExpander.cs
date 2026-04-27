@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 
 namespace Chatter.Rest.UriTemplates;
@@ -72,7 +71,7 @@ internal static class UriTemplateExpander
         // Apply prefix truncation if specified
         if (varSpec.PrefixLength.HasValue)
         {
-            value = TruncateByTextElements(value, varSpec.PrefixLength.Value);
+            value = TruncateByCodePoints(value, varSpec.PrefixLength.Value);
         }
 
         if (value.Length == 0)
@@ -312,20 +311,34 @@ internal static class UriTemplateExpander
     }
 
     /// <summary>
-    /// Truncates a string to the specified number of Unicode text elements.
-    /// Uses StringInfo to correctly handle surrogate pairs and combining sequences.
+    /// Truncates a string to the specified number of Unicode code points.
+    /// RFC 6570 §2.4.1 specifies prefix length in characters (Unicode code points),
+    /// not grapheme clusters (text elements).
+    /// Walks the UTF-16 string treating a valid high+low surrogate pair as one code point.
+    /// An unpaired surrogate (high without matching low, or lone low) counts as one code point,
+    /// which is consistent with Rune.DecodeFromUtf16 fallback semantics.
+    /// Works on both net8.0 and netstandard2.0 (no System.Text.Rune dependency).
     /// </summary>
-    private static string TruncateByTextElements(string value, int maxElements)
+    private static string TruncateByCodePoints(string value, int maxCodePoints)
     {
-        var si = new StringInfo(value);
-        var textElementCount = si.LengthInTextElements;
+        if (maxCodePoints <= 0) return string.Empty;
+        if (string.IsNullOrEmpty(value)) return value;
 
-        if (textElementCount <= maxElements)
+        var i = 0;
+        var count = 0;
+        while (i < value.Length && count < maxCodePoints)
         {
-            return value;
+            if (char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+            {
+                i += 2;
+            }
+            else
+            {
+                i += 1;
+            }
+            count++;
         }
-
-        return si.SubstringByTextElements(0, maxElements);
+        return value.Substring(0, i);
     }
 
     private static bool IsNamedOperator(UriTemplateOperator op)

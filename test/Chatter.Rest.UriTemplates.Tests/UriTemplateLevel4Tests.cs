@@ -138,6 +138,25 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(vars).Should().Be("%F0%9F%98%80");
 		}
 
+		// §6.1 Prefix with combining marks: truncation counts Unicode code points, not grapheme clusters.
+		// Input "éfg" is 4 code points (e, combining acute, f, g) but 3 grapheme clusters.
+		[Fact]
+		public void Prefix_CombiningMark_TruncatesByCodePoint()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				// e + combining acute accent + f + g = 4 code points, 3 graphemes
+				["var"] = "éfg",
+			};
+
+			// {var:1} -> first code point only -> "e"
+			new UriTemplate("{var:1}").Expand(vars).Should().Be("e");
+
+			// {var:2} -> first 2 code points -> "e" + combining acute U+0301
+			// U+0301 in UTF-8 is 0xCC 0x81; both bytes are non-unreserved -> percent-encoded
+			new UriTemplate("{var:2}").Expand(vars).Should().Be("e%CC%81");
+		}
+
 		// §6.1 Prefix_DoesNotSplitPctTriplet: {var:2} with var="%7Ex"
 		// The prefix truncation operates on the raw string value before encoding,
 		// so 2 text elements of "%7Ex" is "%7" which encodes to "%257".

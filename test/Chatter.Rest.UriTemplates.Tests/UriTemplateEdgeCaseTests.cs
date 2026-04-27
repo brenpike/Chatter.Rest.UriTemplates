@@ -297,6 +297,19 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<FormatException>();
 		}
 
+		[Theory]
+		[InlineData("{var:01}")]
+		[InlineData("{var:001}")]
+		[InlineData("{var:0001}")]
+		[InlineData("{var:0123}")]
+		[InlineData("{var:00}")]
+		public void PrefixModifierLeadingZero_ThrowsFormat(string template)
+		{
+			Action act = () => new UriTemplate(template);
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("leading zeros");
+		}
+
 		[Fact]
 		public void PrefixModifierTooLarge_ThrowsFormat()
 		{

@@ -115,6 +115,14 @@ internal static class UriTemplateParser
                         }
                     }
 
+                    // RFC 6570 §2.4.1 ABNF: max-length = %x31-39 0*3DIGIT
+                    // The first digit must be 1-9; leading zeros are not permitted.
+                    if (suffix[0] == '0')
+                    {
+                        throw new FormatException(
+                            $"Prefix modifier length must not have leading zeros, got ':{suffix}'.");
+                    }
+
                     // Parse the numeric value and validate range 1-9999
                     if (!int.TryParse(suffix, out var prefixLen) || prefixLen < 1 || prefixLen > 9999)
                     {
