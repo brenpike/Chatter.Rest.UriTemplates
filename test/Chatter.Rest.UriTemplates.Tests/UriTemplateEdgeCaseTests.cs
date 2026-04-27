@@ -140,7 +140,142 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<FormatException>();
 		}
 
-		// 5.4 Level 4 detection (not supported)
+		[Fact]
+		public void OperatorOnlyQuery_Throws()
+		{
+			Action act = () => new UriTemplate("{?}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void TrailingComma_Throws()
+		{
+			Action act = () => new UriTemplate("{x,}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void LeadingComma_Throws()
+		{
+			Action act = () => new UriTemplate("{,x}");
+			act.Should().Throw<NotSupportedException>();
+		}
+
+		[Fact]
+		public void DoubleComma_Throws()
+		{
+			Action act = () => new UriTemplate("{x,,y}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void WhitespaceInExpression_Throws()
+		{
+			Action act = () => new UriTemplate("{ x }");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void WhitespaceAfterComma_Throws()
+		{
+			Action act = () => new UriTemplate("{x, y}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void InvalidVarNameHyphen_Throws()
+		{
+			Action act = () => new UriTemplate("{bad-name}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void InvalidVarNameDollar_Throws()
+		{
+			Action act = () => new UriTemplate("{bad$name}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void InvalidVarNameSlash_Throws()
+		{
+			Action act = () => new UriTemplate("{bad/name}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void InvalidVarNameConsecutiveDots_Throws()
+		{
+			Action act = () => new UriTemplate("{a..b}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void InvalidVarNameTrailingDot_Throws()
+		{
+			Action act = () => new UriTemplate("{a.}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void InvalidVarNameLeadingDotNoOperator_Throws()
+		{
+			Action act = () => new UriTemplate("{.}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void InvalidPctEncodedVarName_Throws()
+		{
+			Action act = () => new UriTemplate("{%zz}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void DoubleOperator_Throws()
+		{
+			Action act = () => new UriTemplate("{??x}");
+			act.Should().Throw<FormatException>();
+		}
+
+		// 5.4 Reserved future operators
+
+		[Fact]
+		public void ReservedEqualsOperator_Throws()
+		{
+			Action act = () => new UriTemplate("{=var}");
+			act.Should().Throw<NotSupportedException>();
+		}
+
+		[Fact]
+		public void ReservedCommaOperator_Throws()
+		{
+			Action act = () => new UriTemplate("{,var}");
+			act.Should().Throw<NotSupportedException>();
+		}
+
+		[Fact]
+		public void ReservedBangOperator_Throws()
+		{
+			Action act = () => new UriTemplate("{!var}");
+			act.Should().Throw<NotSupportedException>();
+		}
+
+		[Fact]
+		public void ReservedAtOperator_Throws()
+		{
+			Action act = () => new UriTemplate("{@var}");
+			act.Should().Throw<NotSupportedException>();
+		}
+
+		[Fact]
+		public void ReservedPipeOperator_Throws()
+		{
+			Action act = () => new UriTemplate("{|var}");
+			act.Should().Throw<NotSupportedException>();
+		}
+
+		// 5.5 Level 4 detection and malformed modifiers (not supported)
 
 		[Fact]
 		public void PrefixModifier_Throws()
@@ -170,7 +305,42 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<NotSupportedException>();
 		}
 
-		// 5.5 Case sensitivity
+		[Fact]
+		public void PrefixModifierZero_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:0}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void PrefixModifierTooLarge_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:10000}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void PrefixModifierNonNumeric_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:abc}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void ModifierInMiddle_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{va*r}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void ColonWithoutLength_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:}");
+			act.Should().Throw<FormatException>();
+		}
+
+		// 5.6 Case sensitivity
 
 		[Fact]
 		public void VariableNames_CaseSensitive()
@@ -182,6 +352,17 @@ namespace Chatter.Rest.UriTemplates.Tests
 			};
 			var template = new UriTemplate("{Var}");
 			template.Expand(vars).Should().Be("upper");
+		}
+
+		[Fact]
+		public void CaseInsensitiveDictionaryDoesNotChangeTemplateSemantics()
+		{
+			var vars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+			{
+				["var"] = "lower",
+			};
+			var template = new UriTemplate("{Var}");
+			template.Expand(vars).Should().Be("");
 		}
 
 		[Fact]

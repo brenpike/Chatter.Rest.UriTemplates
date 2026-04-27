@@ -88,6 +88,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(Variables).Should().Be("/foo/bar,1024/here");
 		}
 
+		[Fact]
+		public void Plus_PercentMultiVar()
+		{
+			var template = new UriTemplate("{+half,who}");
+			template.Expand(Variables).Should().Be("50%25,fred");
+		}
+
 		// 3.3 Fragment multi-variable {#x,y}
 
 		[Fact]
@@ -95,6 +102,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{#x,hello,y}");
 			template.Expand(Variables).Should().Be("#1024,Hello%20World!,768");
+		}
+
+		[Fact]
+		public void Hash_PercentMultiVar()
+		{
+			var template = new UriTemplate("{#half,who}");
+			template.Expand(Variables).Should().Be("#50%25,fred");
 		}
 
 		// 3.4 Label expansion {.var}

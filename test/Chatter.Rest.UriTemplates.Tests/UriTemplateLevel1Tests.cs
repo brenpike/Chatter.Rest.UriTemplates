@@ -158,6 +158,34 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(Variables).Should().Be("/already/%7Eencoded");
 		}
 
+		[Fact]
+		public void Literal_NonAsciiEncoded()
+		{
+			var template = new UriTemplate("/café/{var}");
+			template.Expand(Variables).Should().Be("/caf%C3%A9/value");
+		}
+
+		[Fact]
+		public void Literal_SpaceRejected()
+		{
+			Action act = () => new UriTemplate("/bad literal/{var}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void Literal_InvalidPercentTripletRejected()
+		{
+			Action act = () => new UriTemplate("/bad/%zz/{var}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void Literal_LoneClosingBraceRejected()
+		{
+			Action act = () => new UriTemplate("/orders/}x");
+			act.Should().Throw<FormatException>();
+		}
+
 		// 1.3 Multiple expressions
 
 		[Fact]
@@ -307,6 +335,14 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var template = new UriTemplate("{var}");
 			Action act = () => template.Expand(((string Key, string Value)[])null!);
 			act.Should().Throw<ArgumentNullException>();
+		}
+
+		[Fact]
+		public void NullDictionaryValue_TreatedAsUndefined()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = null! };
+			var template = new UriTemplate("{var}");
+			template.Expand(vars).Should().Be("");
 		}
 
 		[Fact]

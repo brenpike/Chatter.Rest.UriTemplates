@@ -11,9 +11,9 @@ internal static class UriTemplateExpander
 
         foreach (var varName in expression.Variables)
         {
-            if (!variables.TryGetValue(varName, out var value))
+            if (!variables.TryGetValue(varName, out var value) || value is null)
             {
-                // Undefined: omit
+                // Undefined or null: omit per RFC 6570 §2.3
                 continue;
             }
 
@@ -218,7 +218,8 @@ internal static class UriTemplateExpander
     {
         // gen-delims: : / ? # [ ] @
         // sub-delims: ! $ & ' ( ) * + , ; =
-        // Also % for pct-encoded passthrough
+        // Note: '%' is NOT included here. Valid pct-encoded triplets (%XX)
+        // are handled earlier in EncodeReserved; bare '%' must be encoded as %25.
         switch (c)
         {
             case ':':
@@ -239,7 +240,6 @@ internal static class UriTemplateExpander
             case ',':
             case ';':
             case '=':
-            case '%':
                 return true;
             default:
                 return false;

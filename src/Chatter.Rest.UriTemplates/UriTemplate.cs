@@ -21,6 +21,16 @@ public sealed class UriTemplate
             throw new ArgumentNullException(nameof(variables));
         }
 
+        // RFC 6570 §2.3: variable names are case-sensitive.  Copy into an
+        // ordinal dictionary so lookup is always case-sensitive regardless of
+        // the comparer the caller's dictionary was created with.
+        var ordinal = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var kvp in variables)
+        {
+            ordinal[kvp.Key] = kvp.Value;
+        }
+
         var sb = new System.Text.StringBuilder();
 
         foreach (var token in _tokens)
@@ -31,7 +41,7 @@ public sealed class UriTemplate
             }
             else if (token is UriTemplateExpression expression)
             {
-                sb.Append(UriTemplateExpander.Expand(expression, variables));
+                sb.Append(UriTemplateExpander.Expand(expression, ordinal));
             }
         }
 
