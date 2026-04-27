@@ -153,6 +153,29 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(vars).Should().Be("x%2Fy");
 		}
 
+		[Fact]
+		public void Plus_PercentEncoded()
+		{
+			var template = new UriTemplate("{+half}");
+			template.Expand(Variables).Should().Be("50%25");
+		}
+
+		[Fact]
+		public void Plus_BarePercentEncoded()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "x%y" };
+			var template = new UriTemplate("{+var}");
+			template.Expand(vars).Should().Be("x%25y");
+		}
+
+		[Fact]
+		public void Plus_InvalidPctTripletEncoded()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "x%zz" };
+			var template = new UriTemplate("{+var}");
+			template.Expand(vars).Should().Be("x%25zz");
+		}
+
 		// 2.2 Fragment expansion {#var}
 
 		[Fact]
@@ -224,6 +247,21 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var vars = new Dictionary<string, string> { ["var"] = "x%2Fy" };
 			var template = new UriTemplate("{#var}");
 			template.Expand(vars).Should().Be("#x%2Fy");
+		}
+
+		[Fact]
+		public void Hash_PercentEncoded()
+		{
+			var template = new UriTemplate("{#half}");
+			template.Expand(Variables).Should().Be("#50%25");
+		}
+
+		[Fact]
+		public void Hash_BarePercentEncoded()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "x%y" };
+			var template = new UriTemplate("{#var}");
+			template.Expand(vars).Should().Be("#x%25y");
 		}
 	}
 }
