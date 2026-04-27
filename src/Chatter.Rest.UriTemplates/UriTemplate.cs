@@ -81,6 +81,45 @@ public sealed class UriTemplate
     }
 
     /// <summary>
+    /// Expands the URI template using the provided dictionary of
+    /// <see cref="UriTemplateValue"/> instances, supporting all RFC 6570
+    /// Level 1–4 value types through a strongly-typed API.
+    /// </summary>
+    /// <param name="variables">A dictionary mapping variable names to <see cref="UriTemplateValue"/> instances.</param>
+    /// <returns>The expanded URI string.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    public string Expand(IDictionary<string, UriTemplateValue> variables)
+    {
+        if (variables is null)
+        {
+            throw new ArgumentNullException(nameof(variables));
+        }
+
+        var ordinal = new Dictionary<string, UriTemplateValue>(StringComparer.Ordinal);
+
+        foreach (var kvp in variables)
+        {
+            ordinal[kvp.Key] = kvp.Value;
+        }
+
+        var sb = new System.Text.StringBuilder();
+
+        foreach (var token in _tokens)
+        {
+            if (token is string literal)
+            {
+                sb.Append(literal);
+            }
+            else if (token is UriTemplateExpression expression)
+            {
+                sb.Append(UriTemplateExpander.Expand(expression, ordinal));
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Canonical expansion path. Accepts a pre-built ordinal dictionary and
     /// iterates tokens, delegating expression expansion to
     /// <see cref="UriTemplateExpander"/>.

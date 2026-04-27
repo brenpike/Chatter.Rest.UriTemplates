@@ -4,6 +4,44 @@ namespace Chatter.Rest.UriTemplates;
 
 internal static class UriTemplateExpander
 {
+    internal static string Expand(UriTemplateExpression expression, IDictionary<string, UriTemplateValue> variables)
+    {
+        var mapped = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        foreach (var kvp in variables)
+        {
+            mapped[kvp.Key] = MapValue(kvp.Value);
+        }
+
+        return Expand(expression, mapped);
+    }
+
+    private static object? MapValue(UriTemplateValue value)
+    {
+        switch (value.Kind)
+        {
+            case UriTemplateValueKind.String:
+                return value.StringValue;
+            case UriTemplateValueKind.List:
+                return value.ListValue is null
+                    ? new List<string>()
+                    : new List<string>(value.ListValue);
+            case UriTemplateValueKind.Dictionary:
+                if (value.DictionaryValue is null)
+                {
+                    return new Dictionary<string, string>();
+                }
+                var dict = new Dictionary<string, string>();
+                foreach (var kvp in value.DictionaryValue)
+                {
+                    dict[kvp.Key] = kvp.Value;
+                }
+                return dict;
+            default:
+                return null;
+        }
+    }
+
     internal static string Expand(UriTemplateExpression expression, IDictionary<string, object?> variables)
     {
         var op = expression.Operator;
