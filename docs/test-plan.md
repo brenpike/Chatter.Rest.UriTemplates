@@ -79,11 +79,13 @@ Operator: none. Encoding: unreserved. Separator: `,`. Prefix: none.
 | Planned | `SingleVar_EmptyValueWrappedByLiterals` | `O{empty}X` | `OX` |
 | Planned | `SingleVar_UndefinedWrappedByLiterals` | `O{undef}X` | `OX` |
 | Existing | `SingleVar_WithSlashes` | `{path}` | `%2Ffoo%2Fbar` |
-| Existing | `MultipleVars_TwoValues` | `{x,y}` | `1024,768` |
-| Existing | `MultipleVars_ThreeValues` | `{x,hello,y}` | `1024,Hello%20World%21,768` |
+| Existing | `NoOp_TwoVars` | `{x,y}` | `1024,768` |
+| Existing | `NoOp_ThreeVars` | `{x,hello,y}` | `1024,Hello%20World%21,768` |
 | Planned | `MultipleVars_WithEmpty` | `?{x,empty}` | `?1024,` |
 | Planned | `MultipleVars_WithUndefinedTail` | `?{x,undef}` | `?1024` |
 | Planned | `MultipleVars_WithUndefinedHead` | `?{undef,y}` | `?768` |
+
+Note: the multi-variable simple expansion rows are currently covered by `UriTemplateLevel3Tests`, where this suite groups Level 3 multi-variable behavior.
 
 ### 1.2 Literal text preservation and literal encoding
 
@@ -155,8 +157,10 @@ Operator: `+`. Encoding: reserved. Separator: `,`. Prefix: none.
 | Existing | `Plus_TrailingLiteral` | `{+path}/here` | `/foo/bar/here` |
 | Existing | `Plus_InQueryContext` | `here?ref={+path}` | `here?ref=/foo/bar` |
 | Planned | `Plus_AdjacentSimpleExpression` | `up{+path}{var}/here` | `up/foo/barvalue/here` |
-| Existing | `Plus_EmptyValue` | `O{+empty}X` | `OX` |
-| Existing | `Plus_Undefined` | `O{+undef}X` | `OX` |
+| Existing | `Plus_EmptyValue` | `{+empty}` | *(empty string)* |
+| Existing | `Plus_Undefined` | `{+undef}` | *(empty string)* |
+| Planned | `Plus_EmptyValueWrappedByLiterals` | `O{+empty}X` | `OX` |
+| Planned | `Plus_UndefinedWrappedByLiterals` | `O{+undef}X` | `OX` |
 | Existing | `Plus_MultipleVars` | `{+x,hello,y}` | `1024,Hello%20World!,768` |
 | Existing | `Plus_MultipleVarsWithPath` | `{+path,x}/here` | `/foo/bar,1024/here` |
 | Existing | `Plus_AmpersandPreserved` | `{+var}`, `var="a&b"` | `a&b` |
@@ -177,8 +181,10 @@ Operator: `#`. Encoding: reserved. Separator: `,`. Prefix: `#` when at least one
 | Existing | `Hash_WithSlashes` | `{#path}` | `#/foo/bar` |
 | Existing | `Hash_TrailingLiteral` | `{#path,x}/here` | `#/foo/bar,1024/here` |
 | Existing | `Hash_MultipleVars` | `{#x,hello,y}` | `#1024,Hello%20World!,768` |
-| Existing | `Hash_EmptyValue` | `foo{#empty}` | `foo#` |
-| Existing | `Hash_Undefined_NoHash` | `foo{#undef}` | `foo` |
+| Existing | `Hash_EmptyValue` | `{#empty}` | `#` |
+| Existing | `Hash_Undefined_NoHash` | `{#undef}` | *(empty string)* |
+| Planned | `Hash_EmptyValueWrappedByLiteral` | `foo{#empty}` | `foo#` |
+| Planned | `Hash_UndefinedWrappedByLiteral` | `foo{#undef}` | `foo` |
 | Planned | `Hash_ExistingPctTripletPreserved` | `{#var}`, `var="x%2Fy"` | `#x%2Fy` |
 | Gap | `Hash_BarePercentEncoded` | `{#var}`, `var="x%y"` | `#x%25y` |
 
@@ -217,10 +223,14 @@ Class: `UriTemplateLevel3Tests`
 
 | Status | Test name | Template | Expected |
 |---|---|---|---|
-| Existing | `Dot_SingleVar` | `X{.var}` | `X.value` |
-| Existing | `Dot_TwoVars` | `X{.x,y}` | `X.1024.768` |
-| Existing | `Dot_Undefined` | `X{.undef}` | `X` |
-| Existing | `Dot_EmptyValue` | `X{.empty}` | `X.` |
+| Existing | `Dot_SingleVar` | `{.var}` | `.value` |
+| Existing | `Dot_TwoVars` | `{.x,y}` | `.1024.768` |
+| Existing | `Dot_Undefined` | `{.undef}` | *(empty string)* |
+| Existing | `Dot_EmptyValue` | `{.empty}` | `.` |
+| Planned | `Dot_SingleVarWrappedByLiteral` | `X{.var}` | `X.value` |
+| Planned | `Dot_TwoVarsWrappedByLiteral` | `X{.x,y}` | `X.1024.768` |
+| Planned | `Dot_UndefinedWrappedByLiteral` | `X{.undef}` | `X` |
+| Planned | `Dot_EmptyValueWrappedByLiteral` | `X{.empty}` | `X.` |
 | Existing | `Dot_InPath` | `/api{.format}` | `/api.value` |
 | Existing | `Dot_MixedDefinedUndefined` | `{.x,undef,y}` | `.1024.768` |
 | Planned | `Dot_PercentValue` | `{.half,who}` | `.50%25.fred` |
@@ -502,8 +512,8 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 | Area | Existing | Planned | Gap | Deferred |
 |---|---:|---:|---:|---:|
 | Level 1 simple string | 22 | 11 | 5 | 0 |
-| Level 2 reserved and fragment | 19 | 6 | 6 | 0 |
-| Level 3 operators | 39 | 20 | 2 | 0 |
+| Level 2 reserved and fragment | 19 | 10 | 6 | 0 |
+| Level 3 operators | 39 | 24 | 2 | 0 |
 | Variable discovery | 9 | 2 | 0 | 1 |
 | Parser and edge cases | 18 | 2 | 28 | 0 |
 | Level 4 matrix | 0 | 0 | 0 | 45 |
