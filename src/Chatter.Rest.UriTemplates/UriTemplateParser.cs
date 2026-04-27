@@ -5,6 +5,7 @@ namespace Chatter.Rest.UriTemplates;
 internal static class UriTemplateParser
 {
     private static readonly char[] OperatorChars = { '+', '#', '.', '/', ';', '?', '&' };
+    private static readonly char[] ReservedOperatorChars = { '=', ',', '!', '@', '|' };
 
     internal static IReadOnlyList<object> Parse(string template)
     {
@@ -50,14 +51,29 @@ internal static class UriTemplateParser
                 throw new FormatException("Empty expression '{}' is not valid in a URI template.");
             }
 
+            // Check for reserved future operators (=, ,, !, @, |) per RFC 6570 §2.2
+            if (Array.IndexOf(ReservedOperatorChars, content[0]) >= 0)
+            {
+                throw new NotSupportedException(
+                    $"Operator '{content[0]}' is reserved for future use and is not supported.");
+            }
+
             // Determine operator
             var op = UriTemplateOperator.None;
             var varsPart = content;
 
-            if (content.Length > 0 && Array.IndexOf(OperatorChars, content[0]) >= 0)
+            if (Array.IndexOf(OperatorChars, content[0]) >= 0)
             {
                 op = MapOperator(content[0]);
                 varsPart = content.Substring(1);
+
+                // Detect double operator (e.g., {??x})
+                if (varsPart.Length > 0 &&
+                    (Array.IndexOf(OperatorChars, varsPart[0]) >= 0 ||
+                     Array.IndexOf(ReservedOperatorChars, varsPart[0]) >= 0))
+                {
+                    throw new FormatException("Double operator in expression is not valid.");
+                }
             }
 
             // Split variable names on ','
@@ -66,14 +82,21 @@ internal static class UriTemplateParser
 
             for (var i = 0; i < rawNames.Length; i++)
             {
-                var name = rawNames[i].Trim();
+                var name = rawNames[i];
 
-                // Detect Level 4 modifiers
+                // Detect Level 4 modifiers before varname validation
                 if (name.IndexOf(':') >= 0 || name.IndexOf('*') >= 0)
                 {
                     throw new NotSupportedException(
                         "RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status.");
                 }
+
+                if (name.Length == 0)
+                {
+                    throw new FormatException("Empty variable name in expression.");
+                }
+
+                ValidateVarName(name);
 
                 variables.Add(name);
             }
@@ -84,6 +107,64 @@ internal static class UriTemplateParser
         }
 
         return tokens;
+    }
+
+    /// <summary>
+    /// Validates a variable name per RFC 6570 §2.3.
+    /// varname = varchar *( ["."] varchar )
+    /// varchar = ALPHA / DIGIT / "_" / pct-encoded
+    /// </summary>
+    private static void ValidateVarName(string name)
+    {
+        var i = 0;
+
+        while (i < name.Length)
+        {
+            var c = name[i];
+
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+            {
+                throw new FormatException($"Whitespace is not allowed in variable name '{name}'.");
+            }
+
+            if (c == '.')
+            {
+                // Consecutive dots
+                if (i + 1 < name.Length && name[i + 1] == '.')
+                {
+                    throw new FormatException($"Consecutive dots are not allowed in variable name '{name}'.");
+                }
+
+                // Trailing dot
+                if (i == name.Length - 1)
+                {
+                    throw new FormatException($"Trailing dot is not allowed in variable name '{name}'.");
+                }
+
+                i++;
+                continue;
+            }
+
+            if (c == '%')
+            {
+                // Must be followed by exactly two hex digits
+                if (i + 2 < name.Length && IsHexDigit(name[i + 1]) && IsHexDigit(name[i + 2]))
+                {
+                    i += 3;
+                    continue;
+                }
+
+                throw new FormatException($"Invalid percent-encoded triplet in variable name '{name}'.");
+            }
+
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')
+            {
+                i++;
+                continue;
+            }
+
+            throw new FormatException($"Invalid character '{c}' in variable name '{name}'.");
+        }
     }
 
     /// <summary>

@@ -360,7 +360,7 @@ The library currently chooses exceptions for malformed templates. Preserve that 
 | Existing | `EmptyExpression_Throws` | `/orders/{}` | `FormatException` |
 | Gap | `OperatorOnlyQuery_Throws` | `{?}` | `FormatException` |
 | Gap | `TrailingComma_Throws` | `{x,}` | `FormatException` |
-| Gap | `LeadingComma_Throws` | `{,x}` | `FormatException` |
+| Gap | `LeadingComma_Throws` | `{,x}` | `NotSupportedException` |
 | Gap | `DoubleComma_Throws` | `{x,,y}` | `FormatException` |
 | Gap | `WhitespaceInExpression_Throws` | `{ x }` | `FormatException` |
 | Gap | `WhitespaceAfterComma_Throws` | `{x, y}` | `FormatException` |
