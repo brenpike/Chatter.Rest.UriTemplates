@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Chatter.Rest.UriTemplates;
 
 internal static class UriTemplateParser
@@ -16,14 +18,14 @@ internal static class UriTemplateParser
             if (openIndex < 0)
             {
                 // No more expressions; rest is literal
-                tokens.Add(template.Substring(pos));
+                tokens.Add(ProcessLiteral(template.Substring(pos)));
                 break;
             }
 
             // Emit literal text before the '{'
             if (openIndex > pos)
             {
-                tokens.Add(template.Substring(pos, openIndex - pos));
+                tokens.Add(ProcessLiteral(template.Substring(pos, openIndex - pos)));
             }
 
             // Find matching '}'
@@ -82,6 +84,74 @@ internal static class UriTemplateParser
         }
 
         return tokens;
+    }
+
+    /// <summary>
+    /// Validates and encodes a literal segment per RFC 6570 §2.1/§3.1.
+    /// Non-ASCII chars are UTF-8 pct-encoded. Spaces, lone '}', and
+    /// invalid percent triplets are rejected with FormatException.
+    /// Valid pct-encoded triplets and RFC 3986 unreserved/reserved chars pass through.
+    /// </summary>
+    private static string ProcessLiteral(string raw)
+    {
+        var sb = new StringBuilder(raw.Length);
+        var i = 0;
+
+        while (i < raw.Length)
+        {
+            var c = raw[i];
+
+            if (c == '}')
+            {
+                throw new FormatException("Invalid literal character '}' in URI template.");
+            }
+
+            if (c == ' ')
+            {
+                throw new FormatException("Invalid literal character ' ' in URI template.");
+            }
+
+            if (c == '%')
+            {
+                // Must be followed by exactly two hex digits
+                if (i + 2 < raw.Length && IsHexDigit(raw[i + 1]) && IsHexDigit(raw[i + 2]))
+                {
+                    sb.Append(raw[i]);
+                    sb.Append(raw[i + 1]);
+                    sb.Append(raw[i + 2]);
+                    i += 3;
+                    continue;
+                }
+
+                throw new FormatException("Invalid percent-encoded triplet in literal.");
+            }
+
+            if (c > 127)
+            {
+                // Non-ASCII: encode as UTF-8 pct-encoded bytes
+                var charCount = char.IsHighSurrogate(c) && i + 1 < raw.Length ? 2 : 1;
+                var chars = raw.ToCharArray(i, charCount);
+                var bytes = Encoding.UTF8.GetBytes(chars, 0, charCount);
+                foreach (var b in bytes)
+                {
+                    sb.Append('%');
+                    sb.Append(b.ToString("X2"));
+                }
+                i += charCount;
+                continue;
+            }
+
+            // All other ASCII chars that are valid URI literals: pass through unchanged
+            sb.Append(c);
+            i++;
+        }
+
+        return sb.ToString();
+    }
+
+    private static bool IsHexDigit(char c)
+    {
+        return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
     }
 
     private static UriTemplateOperator MapOperator(char c)
