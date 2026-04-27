@@ -9,6 +9,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			["var"] = "value",
 			["hello"] = "Hello World!",
+			["half"] = "50%",
+			["who"] = "fred",
+			["base"] = "http://example.com/home/",
+			["dub"] = "me/too",
+			["v"] = "6",
 			["empty"] = "",
 			["path"] = "/foo/bar",
 			["x"] = "1024",
@@ -51,6 +56,20 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{x,empty,y}");
 			template.Expand(Variables).Should().Be("1024,,768");
+		}
+
+		[Fact]
+		public void NoOp_PercentValue()
+		{
+			var template = new UriTemplate("{half,who}");
+			template.Expand(Variables).Should().Be("50%25,fred");
+		}
+
+		[Fact]
+		public void NoOp_SlashValueEncoded()
+		{
+			var template = new UriTemplate("{who,dub}");
+			template.Expand(Variables).Should().Be("fred,me%2Ftoo");
 		}
 
 		// 3.2 Reserved multi-variable {+x,y}
@@ -109,6 +128,34 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
+		public void Dot_SingleVarWrappedByLiteral()
+		{
+			var template = new UriTemplate("X{.var}");
+			template.Expand(Variables).Should().Be("X.value");
+		}
+
+		[Fact]
+		public void Dot_TwoVarsWrappedByLiteral()
+		{
+			var template = new UriTemplate("X{.x,y}");
+			template.Expand(Variables).Should().Be("X.1024.768");
+		}
+
+		[Fact]
+		public void Dot_UndefinedWrappedByLiteral()
+		{
+			var template = new UriTemplate("X{.undef}");
+			template.Expand(Variables).Should().Be("X");
+		}
+
+		[Fact]
+		public void Dot_EmptyValueWrappedByLiteral()
+		{
+			var template = new UriTemplate("X{.empty}");
+			template.Expand(Variables).Should().Be("X.");
+		}
+
+		[Fact]
 		public void Dot_InPath()
 		{
 			var vars = new Dictionary<string, string>(Variables)
@@ -124,6 +171,21 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{.x,undef,y}");
 			template.Expand(Variables).Should().Be(".1024.768");
+		}
+
+		[Fact]
+		public void Dot_PercentValue()
+		{
+			var template = new UriTemplate("{.half,who}");
+			template.Expand(Variables).Should().Be(".50%25.fred");
+		}
+
+		[Fact]
+		public void Dot_ValueContainingDotAddsLabels()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "a.b" };
+			var template = new UriTemplate("{.var}");
+			template.Expand(vars).Should().Be(".a.b");
 		}
 
 		// 3.5 Path segment expansion {/var}
@@ -170,6 +232,27 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(Variables).Should().Be("/1024/768");
 		}
 
+		[Fact]
+		public void Slash_PercentValue()
+		{
+			var template = new UriTemplate("{/half,who}");
+			template.Expand(Variables).Should().Be("/50%25/fred");
+		}
+
+		[Fact]
+		public void Slash_ValueContainingSlashEncoded()
+		{
+			var template = new UriTemplate("{/who,dub}");
+			template.Expand(Variables).Should().Be("/fred/me%2Ftoo");
+		}
+
+		[Fact]
+		public void Slash_VarEmptyAndUndefined()
+		{
+			var template = new UriTemplate("{/var,empty,undef}");
+			template.Expand(Variables).Should().Be("/value/");
+		}
+
 		// 3.6 Path-style parameter expansion {;var}
 
 		[Fact]
@@ -205,6 +288,43 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{;x,undef,y}");
 			template.Expand(Variables).Should().Be(";x=1024;y=768");
+		}
+
+		[Fact]
+		public void Semicolon_RfcNames()
+		{
+			var template = new UriTemplate("{;v,empty,who}");
+			template.Expand(Variables).Should().Be(";v=6;empty;who=fred");
+		}
+
+		[Fact]
+		public void Semicolon_UndefinedMiddle()
+		{
+			var template = new UriTemplate("{;v,bar,who}");
+			template.Expand(Variables).Should().Be(";v=6;who=fred");
+		}
+
+		[Fact]
+		public void Semicolon_PercentValue()
+		{
+			var template = new UriTemplate("{;half}");
+			template.Expand(Variables).Should().Be(";half=50%25");
+		}
+
+		[Fact]
+		public void Semicolon_DottedVarName()
+		{
+			var vars = new Dictionary<string, string> { ["a.b"] = "1" };
+			var template = new UriTemplate("{;a.b}");
+			template.Expand(vars).Should().Be(";a.b=1");
+		}
+
+		[Fact]
+		public void Semicolon_PctEncodedVarName()
+		{
+			var vars = new Dictionary<string, string> { ["%78"] = "1" };
+			var template = new UriTemplate("{;%78}");
+			template.Expand(vars).Should().Be(";%78=1");
 		}
 
 		// 3.7 Query string expansion {?var}
@@ -265,6 +385,36 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(Variables).Should().Be("/orders?x=1024&y=768");
 		}
 
+		[Fact]
+		public void Query_RfcWho()
+		{
+			var template = new UriTemplate("{?who}");
+			template.Expand(Variables).Should().Be("?who=fred");
+		}
+
+		[Fact]
+		public void Query_PercentValue()
+		{
+			var template = new UriTemplate("{?half}");
+			template.Expand(Variables).Should().Be("?half=50%25");
+		}
+
+		[Fact]
+		public void Query_DottedVarName()
+		{
+			var vars = new Dictionary<string, string> { ["a.b"] = "1" };
+			var template = new UriTemplate("{?a.b}");
+			template.Expand(vars).Should().Be("?a.b=1");
+		}
+
+		[Fact]
+		public void Query_PctEncodedVarName()
+		{
+			var vars = new Dictionary<string, string> { ["%78"] = "1" };
+			var template = new UriTemplate("{?%78}");
+			template.Expand(vars).Should().Be("?%78=1");
+		}
+
 		// 3.8 Query continuation expansion {&var}
 
 		[Fact]
@@ -307,6 +457,36 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("/orders?sort=date{&x,y}");
 			template.Expand(Variables).Should().Be("/orders?sort=date&x=1024&y=768");
+		}
+
+		[Fact]
+		public void Ampersand_RfcFixedQuery()
+		{
+			var template = new UriTemplate("?fixed=yes{&x}");
+			template.Expand(Variables).Should().Be("?fixed=yes&x=1024");
+		}
+
+		[Fact]
+		public void Ampersand_PercentValue()
+		{
+			var template = new UriTemplate("{&half}");
+			template.Expand(Variables).Should().Be("&half=50%25");
+		}
+
+		[Fact]
+		public void Ampersand_DottedVarName()
+		{
+			var vars = new Dictionary<string, string> { ["a.b"] = "1" };
+			var template = new UriTemplate("{&a.b}");
+			template.Expand(vars).Should().Be("&a.b=1");
+		}
+
+		[Fact]
+		public void Ampersand_PctEncodedVarName()
+		{
+			var vars = new Dictionary<string, string> { ["%78"] = "1" };
+			var template = new UriTemplate("{&%78}");
+			template.Expand(vars).Should().Be("&%78=1");
 		}
 	}
 }

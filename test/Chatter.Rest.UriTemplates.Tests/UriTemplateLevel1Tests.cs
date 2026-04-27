@@ -9,6 +9,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			["var"] = "value",
 			["hello"] = "Hello World!",
+			["half"] = "50%",
+			["who"] = "fred",
+			["base"] = "http://example.com/home/",
+			["dub"] = "me/too",
+			["v"] = "6",
 			["empty"] = "",
 			["path"] = "/foo/bar",
 			["x"] = "1024",
@@ -33,6 +38,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
+		public void SingleVar_PercentEncoded()
+		{
+			var template = new UriTemplate("{half}");
+			template.Expand(Variables).Should().Be("50%25");
+		}
+
+		[Fact]
 		public void SingleVar_EmptyValue()
 		{
 			var template = new UriTemplate("{empty}");
@@ -47,10 +59,59 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
+		public void SingleVar_EmptyValueWrappedByLiterals()
+		{
+			var template = new UriTemplate("O{empty}X");
+			template.Expand(Variables).Should().Be("OX");
+		}
+
+		[Fact]
+		public void SingleVar_UndefinedWrappedByLiterals()
+		{
+			var template = new UriTemplate("O{undef}X");
+			template.Expand(Variables).Should().Be("OX");
+		}
+
+		[Fact]
 		public void SingleVar_WithSlashes()
 		{
 			var template = new UriTemplate("{path}");
 			template.Expand(Variables).Should().Be("%2Ffoo%2Fbar");
+		}
+
+		[Fact]
+		public void NoOp_TwoVars()
+		{
+			var template = new UriTemplate("{x,y}");
+			template.Expand(Variables).Should().Be("1024,768");
+		}
+
+		[Fact]
+		public void NoOp_ThreeVars()
+		{
+			var template = new UriTemplate("{x,hello,y}");
+			template.Expand(Variables).Should().Be("1024,Hello%20World%21,768");
+		}
+
+		[Fact]
+		public void MultipleVars_WithEmpty()
+		{
+			var template = new UriTemplate("?{x,empty}");
+			template.Expand(Variables).Should().Be("?1024,");
+		}
+
+		[Fact]
+		public void MultipleVars_WithUndefinedTail()
+		{
+			var template = new UriTemplate("?{x,undef}");
+			template.Expand(Variables).Should().Be("?1024");
+		}
+
+		[Fact]
+		public void MultipleVars_WithUndefinedHead()
+		{
+			var template = new UriTemplate("?{undef,y}");
+			template.Expand(Variables).Should().Be("?768");
 		}
 
 		// 1.2 Literal text preservation
@@ -90,6 +151,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(Variables).Should().Be("");
 		}
 
+		[Fact]
+		public void Literal_PctTripletPreserved()
+		{
+			var template = new UriTemplate("/already/%7Eencoded");
+			template.Expand(Variables).Should().Be("/already/%7Eencoded");
+		}
+
 		// 1.3 Multiple expressions
 
 		[Fact]
@@ -104,6 +172,20 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{x}{y}");
 			template.Expand(Variables).Should().Be("1024768");
+		}
+
+		[Fact]
+		public void RepeatedVariable_StaticValue()
+		{
+			var template = new UriTemplate("{var}/{var}");
+			template.Expand(Variables).Should().Be("value/value");
+		}
+
+		[Fact]
+		public void SameVariableDifferentOperators()
+		{
+			var template = new UriTemplate("{path}{+path}{/path}");
+			template.Expand(Variables).Should().Be("%2Ffoo%2Fbar/foo/bar/%2Ffoo%2Fbar");
 		}
 
 		// 1.4 Encoding edge cases
@@ -170,6 +252,38 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(vars).Should().Be("a%26b");
 		}
 
+		[Fact]
+		public void Encoding_PercentEncoded()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "50%" };
+			var template = new UriTemplate("{var}");
+			template.Expand(vars).Should().Be("50%25");
+		}
+
+		[Fact]
+		public void Encoding_UnicodeUtf8Encoded()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "café" };
+			var template = new UriTemplate("{var}");
+			template.Expand(vars).Should().Be("caf%C3%A9");
+		}
+
+		[Fact]
+		public void Encoding_EmojiUtf8Encoded()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "\U0001F600" };
+			var template = new UriTemplate("{var}");
+			template.Expand(vars).Should().Be("%F0%9F%98%80");
+		}
+
+		[Fact]
+		public void Encoding_ExistingPctTripletEncodedForSimple()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "%7E" };
+			var template = new UriTemplate("{var}");
+			template.Expand(vars).Should().Be("%257E");
+		}
+
 		// 1.5 Guard conditions
 
 		[Fact]
@@ -185,6 +299,21 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{var}");
 			template.Expand(new Dictionary<string, string>()).Should().Be("");
+		}
+
+		[Fact]
+		public void TupleOverload_NullArrayThrows()
+		{
+			var template = new UriTemplate("{var}");
+			Action act = () => template.Expand(((string Key, string Value)[])null!);
+			act.Should().Throw<ArgumentNullException>();
+		}
+
+		[Fact]
+		public void TupleOverload_DuplicateKeys_FirstWins()
+		{
+			var template = new UriTemplate("{var}");
+			template.Expand(("var", "first"), ("var", "second")).Should().Be("first");
 		}
 	}
 }

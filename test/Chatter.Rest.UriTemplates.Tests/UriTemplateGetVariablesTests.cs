@@ -67,5 +67,19 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var template = new UriTemplate("{a}{+b}{#c}{.d}{/e}{;f}{?g}{&h}");
 			template.GetVariables().Should().Equal("a", "b", "c", "d", "e", "f", "g", "h");
 		}
+
+		[Fact]
+		public void CaseSensitiveDistinctNames()
+		{
+			var template = new UriTemplate("{var,Var}");
+			template.GetVariables().Should().Equal("var", "Var");
+		}
+
+		[Fact]
+		public void DottedAndPctEncodedNames()
+		{
+			var template = new UriTemplate("{a.b,%78}");
+			template.GetVariables().Should().Equal("a.b", "%78");
+		}
 	}
 }
