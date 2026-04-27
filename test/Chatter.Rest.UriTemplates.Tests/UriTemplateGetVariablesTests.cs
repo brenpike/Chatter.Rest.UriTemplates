@@ -81,5 +81,21 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var template = new UriTemplate("{a.b,%78}");
 			template.GetVariables().Should().Equal("a.b", "%78");
 		}
+
+		// §4 Level4ModifiersReturnBaseName: modifiers are stripped from variable names
+
+		[Fact]
+		public void Level4ModifiersReturnBaseName_PrefixAndExplode()
+		{
+			var template = new UriTemplate("{var:3}{list*}");
+			template.GetVariables().Should().Equal("var", "list");
+		}
+
+		[Fact]
+		public void Level4ModifiersReturnBaseName_MixedExpression()
+		{
+			var template = new UriTemplate("{/path,list*,var:3}");
+			template.GetVariables().Should().Equal("path", "list", "var");
+		}
 	}
 }
