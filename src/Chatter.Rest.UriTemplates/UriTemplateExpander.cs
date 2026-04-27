@@ -11,9 +11,9 @@ internal static class UriTemplateExpander
 
         foreach (var varName in expression.Variables)
         {
-            if (!variables.TryGetValue(varName, out var value))
+            if (!variables.TryGetValue(varName, out var value) || value is null)
             {
-                // Undefined: omit
+                // Undefined or null: omit per RFC 6570 §2.3
                 continue;
             }
 

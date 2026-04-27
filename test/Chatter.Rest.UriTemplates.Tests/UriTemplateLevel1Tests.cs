@@ -310,6 +310,14 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
+		public void NullDictionaryValue_TreatedAsUndefined()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = null! };
+			var template = new UriTemplate("{var}");
+			template.Expand(vars).Should().Be("");
+		}
+
+		[Fact]
 		public void TupleOverload_DuplicateKeys_FirstWins()
 		{
 			var template = new UriTemplate("{var}");
