@@ -9,6 +9,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			["var"] = "value",
 			["hello"] = "Hello World!",
+			["half"] = "50%",
+			["who"] = "fred",
+			["base"] = "http://example.com/home/",
+			["dub"] = "me/too",
+			["v"] = "6",
 			["empty"] = "",
 			["path"] = "/foo/bar",
 			["x"] = "1024",
@@ -54,6 +59,27 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
+		public void Plus_BaseReservedCharsPreserved()
+		{
+			var template = new UriTemplate("{+base}index");
+			template.Expand(Variables).Should().Be("http://example.com/home/index");
+		}
+
+		[Fact]
+		public void Simple_BaseReservedCharsEncoded()
+		{
+			var template = new UriTemplate("{base}index");
+			template.Expand(Variables).Should().Be("http%3A%2F%2Fexample.com%2Fhome%2Findex");
+		}
+
+		[Fact]
+		public void Plus_AdjacentSimpleExpression()
+		{
+			var template = new UriTemplate("up{+path}{var}/here");
+			template.Expand(Variables).Should().Be("up/foo/barvalue/here");
+		}
+
+		[Fact]
 		public void Plus_EmptyValue()
 		{
 			var template = new UriTemplate("{+empty}");
@@ -65,6 +91,20 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{+undef}");
 			template.Expand(Variables).Should().Be("");
+		}
+
+		[Fact]
+		public void Plus_EmptyValueWrappedByLiterals()
+		{
+			var template = new UriTemplate("O{+empty}X");
+			template.Expand(Variables).Should().Be("OX");
+		}
+
+		[Fact]
+		public void Plus_UndefinedWrappedByLiterals()
+		{
+			var template = new UriTemplate("O{+undef}X");
+			template.Expand(Variables).Should().Be("OX");
 		}
 
 		[Fact]
@@ -103,6 +143,14 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var vars = new Dictionary<string, string> { ["var"] = "a:b" };
 			var template = new UriTemplate("{+var}");
 			template.Expand(vars).Should().Be("a:b");
+		}
+
+		[Fact]
+		public void Plus_ExistingPctTripletPreserved()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "x%2Fy" };
+			var template = new UriTemplate("{+var}");
+			template.Expand(vars).Should().Be("x%2Fy");
 		}
 
 		// 2.2 Fragment expansion {#var}
@@ -154,6 +202,28 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var template = new UriTemplate("{#undef}");
 			template.Expand(Variables).Should().Be("");
+		}
+
+		[Fact]
+		public void Hash_EmptyValueWrappedByLiteral()
+		{
+			var template = new UriTemplate("foo{#empty}");
+			template.Expand(Variables).Should().Be("foo#");
+		}
+
+		[Fact]
+		public void Hash_UndefinedWrappedByLiteral()
+		{
+			var template = new UriTemplate("foo{#undef}");
+			template.Expand(Variables).Should().Be("foo");
+		}
+
+		[Fact]
+		public void Hash_ExistingPctTripletPreserved()
+		{
+			var vars = new Dictionary<string, string> { ["var"] = "x%2Fy" };
+			var template = new UriTemplate("{#var}");
+			template.Expand(vars).Should().Be("#x%2Fy");
 		}
 	}
 }

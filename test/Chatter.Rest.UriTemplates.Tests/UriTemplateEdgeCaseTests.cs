@@ -9,6 +9,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			["var"] = "value",
 			["hello"] = "Hello World!",
+			["half"] = "50%",
+			["who"] = "fred",
+			["base"] = "http://example.com/home/",
+			["dub"] = "me/too",
+			["v"] = "6",
 			["empty"] = "",
 			["path"] = "/foo/bar",
 			["x"] = "1024",
@@ -105,6 +110,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(vars).Should().Be("/root/value");
 		}
 
+		[Fact]
+		public void MixedReservedAndSimpleEncoding()
+		{
+			var template = new UriTemplate("{+base}{var}{?half}");
+			template.Expand(Variables).Should().Be("http://example.com/home/value?half=50%25");
+		}
+
 		// 5.3 Malformed template handling
 
 		[Fact]
@@ -151,6 +163,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<NotSupportedException>();
 		}
 
+		[Fact]
+		public void PrefixModifierMaxLengthFourDigits_Throws()
+		{
+			Action act = () => new UriTemplate("{var:9999}");
+			act.Should().Throw<NotSupportedException>();
+		}
+
 		// 5.5 Case sensitivity
 
 		[Fact]
@@ -163,6 +182,18 @@ namespace Chatter.Rest.UriTemplates.Tests
 			};
 			var template = new UriTemplate("{Var}");
 			template.Expand(vars).Should().Be("upper");
+		}
+
+		[Fact]
+		public void OrdinalDuplicateNamesRemainDistinct()
+		{
+			var vars = new Dictionary<string, string>
+			{
+				["var"] = "lower",
+				["Var"] = "upper",
+			};
+			var template = new UriTemplate("{var,Var}");
+			template.Expand(vars).Should().Be("lower,upper");
 		}
 	}
 }
