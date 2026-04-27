@@ -6,9 +6,7 @@ Practical usage guide for `Chatter.Rest.UriTemplates`.
 
 ## 1. Overview
 
-`Chatter.Rest.UriTemplates` is a standalone RFC 6570 URI Template expansion library for .NET. It supports **Levels 1 through 3** of the RFC 6570 specification, covering simple string expansion, reserved/fragment expansion, and all Level 3 operators (label, path segment, path-style parameter, form-style query, and form-style query continuation).
-
-**Level 4** (prefix modifiers `:N` and explode `*`) is **not supported**. See [Level 4 Not Supported](#9-level-4-not-supported) for details.
+`Chatter.Rest.UriTemplates` is a standalone RFC 6570 URI Template expansion library for .NET. It supports **Levels 1 through 4** of the RFC 6570 specification, covering simple string expansion, reserved/fragment expansion, all Level 3 operators (label, path segment, path-style parameter, form-style query, and form-style query continuation), and Level 4 value modifiers (prefix `:N` and explode `*`) with composite value types (lists and associative arrays).
 
 **Spec:** [RFC 6570 — URI Template](https://datatracker.ietf.org/doc/html/rfc6570)
 
@@ -54,8 +52,7 @@ var uri = template.Expand(new Dictionary<string, string>
 Constructor. Parses the template string eagerly on construction.
 
 - Throws `ArgumentNullException` if `template` is null.
-- Throws `FormatException` for malformed templates (unclosed `{`, nested `{`).
-- Throws `NotSupportedException` for Level 4 modifier syntax (`:N` prefix, `*` explode).
+- Throws `FormatException` for malformed templates (unclosed `{`, nested `{`, invalid modifier syntax, mutually exclusive prefix and explode modifiers).
 
 ```csharp
 var template = new UriTemplate("/search{?q,lang}");
@@ -76,6 +73,32 @@ var uri = template.Expand(new Dictionary<string, string>
 });
 // Result: "/search?q=dotnet&lang=en"
 ```
+
+### `string Expand(IDictionary<string, object?> variables)`
+
+Expands the URI template using a dictionary that supports composite value types for RFC 6570 Level 4 expansion.
+
+- **Parameter:** `variables` — a dictionary mapping variable names to values.
+- **Returns:** the expanded URI string.
+- **Throws `ArgumentNullException`** if `variables` is null.
+- **Throws `FormatException`** if a variable value is not a supported type, if a prefix modifier is applied to a composite value (list or associative array), or if a composite value contains null elements.
+
+Supported value types:
+- `null` — treated as undefined (variable is omitted).
+- `string` — simple string value. Works with all operators and Level 4 prefix modifiers.
+- `IEnumerable<string>` (e.g., `string[]`, `List<string>`) — list value. An empty list is treated as undefined.
+- `IDictionary<string, string>` (e.g., `Dictionary<string, string>`) — associative array value. An empty dictionary is treated as undefined.
+- `IEnumerable<KeyValuePair<string, string>>` (e.g., `List<KeyValuePair<string, string>>`) — associative array value with deterministic insertion order. An empty sequence is treated as undefined.
+
+```csharp
+var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
+{
+    ["list"] = new[] { "red", "green", "blue" }
+});
+// Result: "?list=red&list=green&list=blue"
+```
+
+The existing `Expand(IDictionary<string, string>)` overload still works for callers who only need string values (Level 1–3 inputs and string-only Level 4 like `{var:3}`).
 
 ### `string Expand(params (string Key, string Value)[] variables)`
 
@@ -269,23 +292,102 @@ This applies consistently across all operator types. Operator prefixes (`?`, `#`
 
 ---
 
-## 9. Level 4 Not Supported
+## 9. Level 4 Examples
 
-RFC 6570 Level 4 defines two value modifiers:
+RFC 6570 Level 4 adds two value modifiers and composite value types:
 
-- **Prefix** (`{var:3}`) — truncate the value to a maximum length before expansion
-- **Explode** (`{var*}`) — expand list or associative array values into separate key=value pairs
+- **Prefix** (`{var:3}`) — truncate a string value to a maximum number of Unicode text elements before expansion.
+- **Explode** (`{var*}`) — expand list or associative array values into separate segments per the operator's rules.
 
-This library does **not** support Level 4. Attempting to parse a template containing these modifiers throws `NotSupportedException`:
+Level 4 expansion requires the `Expand(IDictionary<string, object?>)` overload so that list and associative-array values can be supplied alongside string values.
+
+### Prefix modifier on a string
 
 ```csharp
-// Throws NotSupportedException:
-var t = new UriTemplate("/search{?query:10}");
-
-// Throws NotSupportedException:
-var t = new UriTemplate("/items{?list*}");
+var uri = new UriTemplate("{var:3}").Expand(new Dictionary<string, object?>
+{
+    ["var"] = "value"
+});
+// Result: "val"
 ```
 
-The exception message is: `"RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status."`
+### List value
 
-Level 4 is deferred because it requires list and dictionary value types, which are beyond the `IDictionary<string, string>` API surface. See [architecture.md](architecture.md) for the Level 4 TODO and future implementation requirements.
+Pass a list as any `IEnumerable<string>` (e.g., `string[]` or `List<string>`):
+
+```csharp
+var uri = new UriTemplate("{?list}").Expand(new Dictionary<string, object?>
+{
+    ["list"] = new[] { "red", "green", "blue" }
+});
+// Result: "?list=red,green,blue"
+```
+
+### Associative array via `List<KeyValuePair<string, string>>`
+
+Use `List<KeyValuePair<string, string>>` for deterministic enumeration order:
+
+```csharp
+var keys = new List<KeyValuePair<string, string>>
+{
+    new("semi", ";"),
+    new("dot", "."),
+    new("comma", ","),
+};
+
+var uri = new UriTemplate("{keys}").Expand(new Dictionary<string, object?>
+{
+    ["keys"] = keys
+});
+// Result: "semi,%3B,dot,.,comma,%2C"
+```
+
+### Associative array via `Dictionary<string, string>`
+
+A `Dictionary<string, string>` also works but note that enumeration order may vary:
+
+```csharp
+var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, object?>
+{
+    ["keys"] = new Dictionary<string, string>
+    {
+        ["semi"] = ";",
+        ["dot"] = ".",
+    }
+});
+// Result order may vary, e.g.: "?semi=%3B&dot=." or "?dot=.&semi=%3B"
+```
+
+### Explode for path-style (`;`), query (`?`), and ampersand (`&`)
+
+```csharp
+var vars = new Dictionary<string, object?>
+{
+    ["list"] = new[] { "red", "green", "blue" }
+};
+
+// Semicolon explode: each member becomes ;varname=value
+new UriTemplate("{;list*}").Expand(vars);
+// Result: ";list=red;list=green;list=blue"
+
+// Query explode: each member becomes varname=value, joined by &
+new UriTemplate("{?list*}").Expand(vars);
+// Result: "?list=red&list=green&list=blue"
+
+// Ampersand explode: same as query but with & prefix
+new UriTemplate("{&list*}").Expand(vars);
+// Result: "&list=red&list=green&list=blue"
+```
+
+### Mixed-level template
+
+Level 1–3 expressions and Level 4 expressions can coexist in a single template:
+
+```csharp
+var uri = new UriTemplate("/users/{id}{?filter*}").Expand(new Dictionary<string, object?>
+{
+    ["id"] = "42",
+    ["filter"] = new[] { "active", "premium" }
+});
+// Result: "/users/42?filter=active&filter=premium"
+```
