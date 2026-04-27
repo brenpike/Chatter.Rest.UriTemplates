@@ -305,6 +305,41 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<NotSupportedException>();
 		}
 
+		[Fact]
+		public void PrefixModifierZero_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:0}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void PrefixModifierTooLarge_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:10000}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void PrefixModifierNonNumeric_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:abc}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void ModifierInMiddle_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{va*r}");
+			act.Should().Throw<FormatException>();
+		}
+
+		[Fact]
+		public void ColonWithoutLength_ThrowsFormat()
+		{
+			Action act = () => new UriTemplate("{var:}");
+			act.Should().Throw<FormatException>();
+		}
+
 		// 5.6 Case sensitivity
 
 		[Fact]

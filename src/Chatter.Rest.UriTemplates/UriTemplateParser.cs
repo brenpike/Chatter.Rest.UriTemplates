@@ -85,8 +85,49 @@ internal static class UriTemplateParser
                 var name = rawNames[i];
 
                 // Detect Level 4 modifiers before varname validation
-                if (name.IndexOf(':') >= 0 || name.IndexOf('*') >= 0)
+                var colonIdx = name.IndexOf(':');
+                var starIdx = name.IndexOf('*');
+
+                if (colonIdx >= 0)
                 {
+                    var suffix = name.Substring(colonIdx + 1);
+
+                    if (suffix.Length == 0)
+                    {
+                        throw new FormatException(
+                            "Prefix modifier ':' must be followed by a length (1-9999).");
+                    }
+
+                    // Check that all characters after ':' are digits
+                    for (var ci = 0; ci < suffix.Length; ci++)
+                    {
+                        if (suffix[ci] < '0' || suffix[ci] > '9')
+                        {
+                            throw new FormatException(
+                                $"Prefix modifier length must be numeric, got ':{suffix}'.");
+                        }
+                    }
+
+                    // Parse the numeric value and validate range 1-9999
+                    if (!int.TryParse(suffix, out var prefixLen) || prefixLen < 1 || prefixLen > 9999)
+                    {
+                        throw new FormatException(
+                            $"Prefix modifier length must be between 1 and 9999, got ':{suffix}'.");
+                    }
+
+                    throw new NotSupportedException(
+                        "RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status.");
+                }
+
+                if (starIdx >= 0)
+                {
+                    // '*' is only valid at the very end of the varspec
+                    if (starIdx != name.Length - 1)
+                    {
+                        throw new FormatException(
+                            $"Explode modifier '*' must appear at the end of the variable name, not at position {starIdx} in '{name}'.");
+                    }
+
                     throw new NotSupportedException(
                         "RFC 6570 Level 4 modifiers (':N' and '*') are not supported. See the backlog for Level 4 implementation status.");
                 }
