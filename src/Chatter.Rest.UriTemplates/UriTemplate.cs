@@ -95,28 +95,17 @@ public sealed class UriTemplate
             throw new ArgumentNullException(nameof(variables));
         }
 
-        var ordinal = new Dictionary<string, UriTemplateValue>(StringComparer.Ordinal);
+        // Convert UriTemplateValue entries to the canonical object? representation
+        // once upfront, then delegate to ExpandCore — O(variables) total instead of
+        // O(expressions × variables).
+        var mapped = new Dictionary<string, object?>(StringComparer.Ordinal);
 
         foreach (var kvp in variables)
         {
-            ordinal[kvp.Key] = kvp.Value;
+            mapped[kvp.Key] = UriTemplateExpander.MapValue(kvp.Key, kvp.Value);
         }
 
-        var sb = new System.Text.StringBuilder();
-
-        foreach (var token in _tokens)
-        {
-            if (token is string literal)
-            {
-                sb.Append(literal);
-            }
-            else if (token is UriTemplateExpression expression)
-            {
-                sb.Append(UriTemplateExpander.Expand(expression, ordinal));
-            }
-        }
-
-        return sb.ToString();
+        return ExpandCore(mapped);
     }
 
     /// <summary>
