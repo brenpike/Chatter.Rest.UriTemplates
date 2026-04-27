@@ -79,11 +79,13 @@ Operator: none. Encoding: unreserved. Separator: `,`. Prefix: none.
 | Planned | `SingleVar_EmptyValueWrappedByLiterals` | `O{empty}X` | `OX` |
 | Planned | `SingleVar_UndefinedWrappedByLiterals` | `O{undef}X` | `OX` |
 | Existing | `SingleVar_WithSlashes` | `{path}` | `%2Ffoo%2Fbar` |
-| Planned | `MultipleVars_TwoValues` | `{x,y}` | `1024,768` |
-| Planned | `MultipleVars_ThreeValues` | `{x,hello,y}` | `1024,Hello%20World%21,768` |
+| Existing | `NoOp_TwoVars` | `{x,y}` | `1024,768` |
+| Existing | `NoOp_ThreeVars` | `{x,hello,y}` | `1024,Hello%20World%21,768` |
 | Planned | `MultipleVars_WithEmpty` | `?{x,empty}` | `?1024,` |
 | Planned | `MultipleVars_WithUndefinedTail` | `?{x,undef}` | `?1024` |
 | Planned | `MultipleVars_WithUndefinedHead` | `?{undef,y}` | `?768` |
+
+Note: the multi-variable simple expansion rows are currently covered by `UriTemplateLevel3Tests`, where this suite groups Level 3 multi-variable behavior.
 
 ### 1.2 Literal text preservation and literal encoding
 
@@ -509,7 +511,7 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 
 | Area | Existing | Planned | Gap | Deferred |
 |---|---:|---:|---:|---:|
-| Level 1 simple string | 20 | 13 | 5 | 0 |
+| Level 1 simple string | 22 | 11 | 5 | 0 |
 | Level 2 reserved and fragment | 19 | 10 | 6 | 0 |
 | Level 3 operators | 39 | 24 | 2 | 0 |
 | Variable discovery | 9 | 2 | 0 | 1 |
