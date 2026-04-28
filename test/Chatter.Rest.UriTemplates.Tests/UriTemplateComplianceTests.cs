@@ -64,7 +64,10 @@ namespace Chatter.Rest.UriTemplates.Tests
             };
 
             act.Should().Throw<Exception>(
-                because: "template '{0}' in section '{1}' should be rejected", template, section);
+                because: "template '{0}' in section '{1}' should be rejected", template, section)
+                .Which.Should().Match<Exception>(
+                    e => e is FormatException || e is NotSupportedException,
+                    because: "only FormatException or NotSupportedException are expected for invalid templates");
         }
 
         public static IEnumerable<object[]> NegativeTestsData()
@@ -148,7 +151,8 @@ namespace Chatter.Rest.UriTemplates.Tests
                     }
                     else
                     {
-                        continue; // skip unexpected value kinds
+                        throw new InvalidOperationException(
+                            $"Unexpected expected value kind '{expectedEl.ValueKind}' for template '{template}' in section '{sectionProp.Name}'.");
                     }
 
                     yield return new object[] { sectionName, template, expected };
