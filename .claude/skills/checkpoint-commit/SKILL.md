@@ -1,6 +1,6 @@
 ---
 name: checkpoint-commit
-description: Create a checkpoint commit for the current approved plan after a completed phase or milestone. Use only when the orchestrator has verified the phase output and wants a safe recovery point.
+description: Create a checkpoint commit for the current approved plan after a completed phase, milestone, version bump, or review remediation item.
 disable-model-invocation: true
 allowed-tools:
   - Bash(git status *)
@@ -17,7 +17,7 @@ Create a checkpoint commit for the current approved plan.
 Requirements:
 1. Confirm the current branch name.
 2. Review the staged and unstaged diff.
-3. Stage only the files that belong to the completed phase or explicitly approved milestone.
+3. Stage only the files that belong to the completed phase, approved milestone, version bump, or review remediation item.
 4. Create a clear commit message using conventional-style format.
 5. Return:
    - branch name

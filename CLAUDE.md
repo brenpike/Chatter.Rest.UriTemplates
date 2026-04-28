@@ -18,7 +18,10 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | [docs/test-plan.md](docs/test-plan.md) | RFC 6570 test coverage map, test scenarios by level and operator |
 | [docs/development.md](docs/development.md) | Build commands, test commands, NuGet packaging, CI/CD parity, code style, test conventions |
 | [docs/backlog.md](docs/backlog.md) | Deferred work and follow-ups |
-| [docs/branching-pr-workflow.md](docs/branching-pr-workflow.md) | Mandatory branching and PR workflow |
+| [branching-pr-workflow.md](branching-pr-workflow.md) | Mandatory branching, commit, PR, merge, and validation workflow |
+| [versioning.md](versioning.md) | SemVer, version bump, release metadata, changelog, and tag policy |
+| [pr-review-remediation-loop.md](pr-review-remediation-loop.md) | External PR review feedback loop |
+| [AGENTS.md](AGENTS.md) | External AI reviewer (Codex) guidance |
 
 ## Solution Structure
 
@@ -33,15 +36,18 @@ This repository uses a constrained multi-agent workflow.
 
 Canonical governance files:
 - `agent-system-policy.md` - shared agent roles, authority, tool policy, escalation, and reporting
-- `docs/branching-pr-workflow.md` - MANDATORY branching, commit, PR, merge, and validation workflow
+- `branching-pr-workflow.md` - MANDATORY branching, commit, PR, merge, and validation workflow
+- `versioning.md` - MANDATORY SemVer and version bump policy
+- `pr-review-remediation-loop.md` - MANDATORY external PR review remediation loop
+- `AGENTS.md` - external AI reviewer (Codex) guidance
 
 These files must ALWAYS be respected unless the user says otherwise.
 
 Role-specific behavior is defined in:
-- `orchestrator.md`
-- `planner.md`
-- `coder.md`
-- `designer.md`
+- `.claude/agents/orchestrator.md`
+- `.claude/agents/planner.md`
+- `.claude/agents/coder.md`
+- `.claude/agents/designer.md`
 
 ## Build and Test Commands
 
@@ -76,9 +82,44 @@ Additional conventions observed in the codebase:
 
 See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
-## Package Versions
+## Versioning
 
-- `Chatter.Rest.UriTemplates` - v0.2.0
+### Artifact
+
+| Artifact | NuGet Package ID | Current Version |
+|---|---|---|
+| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.2.0` |
+
+### Canonical Version Source
+
+`src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element is the single source of truth.
+
+### Files to Update Atomically on Version Bump
+
+All of the following must be updated together in the same commit when bumping `Chatter.Rest.UriTemplates`:
+
+1. `src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element (canonical)
+2. `CLAUDE.md` — version in this table
+3. `docs/development.md` — line that reads `Package ID: \`Chatter.Rest.UriTemplates\` vX.Y.Z`
+
+### Bump-Triggering Paths
+
+A version bump is required when a PR modifies any file under:
+- `src/Chatter.Rest.UriTemplates/**`
+
+No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root), agent framework files.
+
+### Changelog
+
+No `CHANGELOG.md` exists. Release notes are not currently maintained. A changelog file may be added in a future chore.
+
+### Git Tags
+
+Tags are not created by CI and no tag format has been established. A tagging policy may be defined in a future chore.
+
+### NuGet Publish
+
+CI publishes to NuGet.org automatically on merge to `main` (via `uritemplate-cicd.yml` deploy job, using `NUGET_API_KEY_CHATTER_URITEMPLATE` secret).
 
 ## Memory Usage
 
