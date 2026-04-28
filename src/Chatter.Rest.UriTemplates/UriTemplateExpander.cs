@@ -13,21 +13,15 @@ internal static class UriTemplateExpander
                 nameof(value));
         }
 
-        switch (value.Kind)
+        switch (value)
         {
-            case UriTemplateValueKind.String:
-                return value.StringValue;
-            case UriTemplateValueKind.List:
-                return value.ListValue is null
-                    ? new List<string>()
-                    : new List<string>(value.ListValue);
-            case UriTemplateValueKind.Dictionary:
-                if (value.DictionaryValue is null)
-                {
-                    return new Dictionary<string, string>();
-                }
+            case UriTemplateValue.StringValue s:
+                return s.Value;
+            case UriTemplateValue.ListValue l:
+                return new List<string>(l.Values);
+            case UriTemplateValue.DictionaryValue d:
                 var dict = new Dictionary<string, string>();
-                foreach (var kvp in value.DictionaryValue)
+                foreach (var kvp in d.Pairs)
                 {
                     dict[kvp.Key] = kvp.Value;
                 }

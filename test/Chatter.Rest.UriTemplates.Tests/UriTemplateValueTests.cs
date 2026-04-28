@@ -21,11 +21,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void FromString_ValidValue_ReturnsStringKind()
+		public void FromString_ValidValue_ReturnsStringValueSubtype()
 		{
 			var value = UriTemplateValue.FromString("hello");
-			value.Kind.Should().Be(UriTemplateValueKind.String);
-			value.StringValue.Should().Be("hello");
+			value.Should().BeOfType<UriTemplateValue.StringValue>();
+			((UriTemplateValue.StringValue)value).Value.Should().Be("hello");
 		}
 
 		// ----------------------------------------------------------------
@@ -47,21 +47,19 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void FromList_EmptyList_ReturnsListKind()
+		public void FromList_EmptyList_ReturnsListValueSubtype()
 		{
 			var value = UriTemplateValue.FromList(Array.Empty<string>());
-			value.Kind.Should().Be(UriTemplateValueKind.List);
-			value.ListValue.Should().NotBeNull();
-			value.ListValue.Should().BeEmpty();
+			value.Should().BeOfType<UriTemplateValue.ListValue>();
+			((UriTemplateValue.ListValue)value).Values.Should().BeEmpty();
 		}
 
 		[Fact]
-		public void FromList_ValidValues_ReturnsListKind()
+		public void FromList_ValidValues_ReturnsListValueSubtype()
 		{
 			var value = UriTemplateValue.FromList(new[] { "red", "green", "blue" });
-			value.Kind.Should().Be(UriTemplateValueKind.List);
-			value.ListValue.Should().NotBeNull();
-			value.ListValue.Should().Equal("red", "green", "blue");
+			value.Should().BeOfType<UriTemplateValue.ListValue>();
+			((UriTemplateValue.ListValue)value).Values.Should().Equal("red", "green", "blue");
 		}
 
 		// ----------------------------------------------------------------
@@ -102,16 +100,15 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void FromDictionary_EmptyDictionary_ReturnsDictionaryKind()
+		public void FromDictionary_EmptyDictionary_ReturnsDictionaryValueSubtype()
 		{
 			var value = UriTemplateValue.FromDictionary(new Dictionary<string, string>());
-			value.Kind.Should().Be(UriTemplateValueKind.Dictionary);
-			value.DictionaryValue.Should().NotBeNull();
-			value.DictionaryValue.Should().BeEmpty();
+			value.Should().BeOfType<UriTemplateValue.DictionaryValue>();
+			((UriTemplateValue.DictionaryValue)value).Pairs.Should().BeEmpty();
 		}
 
 		[Fact]
-		public void FromDictionary_ValidPairs_ReturnsDictionaryKind()
+		public void FromDictionary_ValidPairs_ReturnsDictionaryValueSubtype()
 		{
 			var pairs = new Dictionary<string, string>
 			{
@@ -119,10 +116,9 @@ namespace Chatter.Rest.UriTemplates.Tests
 				["dot"] = ".",
 			};
 			var value = UriTemplateValue.FromDictionary(pairs);
-			value.Kind.Should().Be(UriTemplateValueKind.Dictionary);
-			value.DictionaryValue.Should().NotBeNull();
-			value.DictionaryValue.Should().ContainKey("semi").WhoseValue.Should().Be(";");
-			value.DictionaryValue.Should().ContainKey("dot").WhoseValue.Should().Be(".");
+			value.Should().BeOfType<UriTemplateValue.DictionaryValue>();
+			((UriTemplateValue.DictionaryValue)value).Pairs.Should().ContainKey("semi").WhoseValue.Should().Be(";");
+			((UriTemplateValue.DictionaryValue)value).Pairs.Should().ContainKey("dot").WhoseValue.Should().Be(".");
 		}
 
 		// ----------------------------------------------------------------

@@ -44,7 +44,7 @@ src/
   Chatter.Rest.UriTemplates/
     Chatter.Rest.UriTemplates.csproj
     UriTemplate.cs               ← public entry point
-    UriTemplateValue.cs          ← public strongly-typed value union
+    UriTemplateValue.cs          ← public strongly-typed value hierarchy
     UriTemplateOperator.cs       ← operator enum
     UriTemplateExpression.cs     ← one parsed {expression}
     UriTemplateParser.cs         ← tokenises template into literals + expressions
@@ -166,32 +166,31 @@ Per-operator expansion algorithm:
 
 ### `UriTemplateValue` (public)
 
-A strongly-typed union representing a single URI template variable value. This is the second public type in the library alongside `UriTemplate`. It replaces the need for runtime type dispatch when callers supply composite values.
-
-**Discriminator (internal):**
+A polymorphic hierarchy representing a single URI template variable value. This is the second public type in the library alongside `UriTemplate`. It replaces the need for runtime type dispatch when callers supply composite values.
 
 ```csharp
-internal enum UriTemplateValueKind
+public abstract class UriTemplateValue
 {
-    String,
-    List,
-    Dictionary
-}
-```
-
-**Class:**
-
-```csharp
-public sealed class UriTemplateValue
-{
-    internal UriTemplateValueKind Kind { get; }
-    internal string? StringValue { get; }
-    internal IReadOnlyList<string>? ListValue { get; }
-    internal IReadOnlyDictionary<string, string>? DictionaryValue { get; }
+    private protected UriTemplateValue() { }
 
     public static UriTemplateValue FromString(string value);
     public static UriTemplateValue FromList(IEnumerable<string> values);
     public static UriTemplateValue FromDictionary(IDictionary<string, string> pairs);
+
+    public sealed class StringValue : UriTemplateValue
+    {
+        internal string Value { get; }
+    }
+
+    public sealed class ListValue : UriTemplateValue
+    {
+        internal IReadOnlyList<string> Values { get; }
+    }
+
+    public sealed class DictionaryValue : UriTemplateValue
+    {
+        internal IReadOnlyDictionary<string, string> Pairs { get; }
+    }
 }
 ```
 
@@ -199,7 +198,7 @@ public sealed class UriTemplateValue
 - **`FromList`** — wraps a list of strings (defensively copied to a read-only list). Throws `ArgumentNullException` if `values` is null, `ArgumentException` if any element is null.
 - **`FromDictionary`** — wraps an associative array (defensively copied to a read-only dictionary). Throws `ArgumentNullException` if `pairs` is null, `ArgumentException` if any key or value is null.
 
-The constructor is private; instances are created exclusively through the factory methods. All internal properties are immutable snapshots — the caller's original collection is copied on creation.
+The `private protected` constructor prevents external subclassing while allowing the nested sealed subtypes (`StringValue`, `ListValue`, `DictionaryValue`) to inherit from the base. Instances are created exclusively through the factory methods. All internal properties are immutable snapshots -- the caller's original collection is copied on creation. The nested types are public, enabling caller-side pattern matching (e.g., C# `switch` expressions) if needed.
 
 **Relationship to `Expand(IDictionary<string, object?>)`:** The existing `object?` overload is preserved for backward compatibility. The new `Expand(IDictionary<string, UriTemplateValue>)` overload provides compile-time safety by eliminating runtime type dispatch on the caller side.
 

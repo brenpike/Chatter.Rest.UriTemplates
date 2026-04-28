@@ -401,11 +401,17 @@ var uri = new UriTemplate("/users/{id}{?filter*}").Expand(new Dictionary<string,
 ### API Reference
 
 ```csharp
-public sealed class UriTemplateValue
+public abstract class UriTemplateValue
 {
+    private protected UriTemplateValue() { }
+
     public static UriTemplateValue FromString(string value);
     public static UriTemplateValue FromList(IEnumerable<string> values);
     public static UriTemplateValue FromDictionary(IDictionary<string, string> pairs);
+
+    public sealed class StringValue : UriTemplateValue { internal string Value { get; } }
+    public sealed class ListValue : UriTemplateValue { internal IReadOnlyList<string> Values { get; } }
+    public sealed class DictionaryValue : UriTemplateValue { internal IReadOnlyDictionary<string, string> Pairs { get; } }
 }
 ```
 
