@@ -12,7 +12,7 @@ gh api graphql `
   -f repo="REPO" `
   -F pr=123 `
   -f query='
-query($owner: String!, $repo: String!, $pr: Int!, $threadCursor: String, $commentCursor: String) {
+query($owner: String!, $repo: String!, $pr: Int!, $threadCursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
       number
@@ -25,13 +25,11 @@ query($owner: String!, $repo: String!, $pr: Int!, $threadCursor: String, $commen
           isOutdated
           path
           line
-          comments(first: 20, after: $commentCursor) {
+          comments(first: 20) {
             pageInfo { hasNextPage endCursor }
             nodes {
               id
-              author {
-                login
-              }
+              author { login }
               body
               createdAt
               url
@@ -40,6 +38,36 @@ query($owner: String!, $repo: String!, $pr: Int!, $threadCursor: String, $commen
               diffHunk
             }
           }
+        }
+      }
+    }
+  }
+}'
+```
+
+## Fetch comments for a review thread
+
+Use this query to paginate comments for a single thread when `comments.pageInfo.hasNextPage` is `true` after the initial thread fetch.
+
+```powershell
+gh api graphql `
+  -f threadId="THREAD_NODE_ID" `
+  -f cursor="END_CURSOR" `
+  -f query='
+query($threadId: ID!, $cursor: String) {
+  node(id: $threadId) {
+    ... on PullRequestReviewThread {
+      comments(first: 20, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          author { login }
+          body
+          createdAt
+          url
+          path
+          line
+          diffHunk
         }
       }
     }
@@ -117,13 +145,19 @@ query($owner: String!, $repo: String!, $pr: Int!, $commentCursor: String) {
 
 ## Pagination
 
-All paginated connections (`reviewThreads`, thread `comments`, and top-level `comments`) must be iterated until `pageInfo.hasNextPage` is `false` before processing results.
+### Review threads
 
-Pattern:
-1. Issue the query with no cursor (or `after: null`) to get the first page.
-2. If `pageInfo.hasNextPage` is `true`, re-issue with `after: pageInfo.endCursor` to get the next page.
-3. Accumulate results across all pages.
-4. Stop when `hasNextPage` is `false`.
+Paginate `reviewThreads` using `$threadCursor` until `pageInfo.hasNextPage` is `false`. Accumulate all thread nodes before classifying.
+
+### Thread comments
+
+The initial thread fetch retrieves up to 20 comments per thread inline. If a thread's `comments.pageInfo.hasNextPage` is `true`, use **Fetch comments for a review thread** with that thread's node ID and `comments.pageInfo.endCursor` to retrieve subsequent pages. Each thread requires its own cursor — do not reuse cursors across threads.
+
+### Top-level PR comments
+
+Paginate `comments` using `$commentCursor` until `pageInfo.hasNextPage` is `false`. Accumulate all comment nodes before classifying.
+
+### General rule
 
 Do not classify or route feedback from a partial (first-page-only) result set.
 
