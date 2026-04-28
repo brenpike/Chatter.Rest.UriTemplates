@@ -4,6 +4,33 @@ namespace Chatter.Rest.UriTemplates;
 
 internal static class UriTemplateExpander
 {
+    internal static object? MapValue(string key, UriTemplateValue value)
+    {
+        if (value is null)
+        {
+            throw new ArgumentException(
+                $"Variable '{key}' has a null UriTemplateValue. Use UriTemplateValue.From(value) or omit the key for undefined variables.",
+                nameof(value));
+        }
+
+        switch (value)
+        {
+            case StringValue s:
+                return s.Value;
+            case ListValue l:
+                return new List<string>(l.Values);
+            case DictionaryValue d:
+                var dict = new Dictionary<string, string>();
+                foreach (var kvp in d.Pairs)
+                {
+                    dict[kvp.Key] = kvp.Value;
+                }
+                return dict;
+            default:
+                return null;
+        }
+    }
+
     internal static string Expand(UriTemplateExpression expression, IDictionary<string, object?> variables)
     {
         var op = expression.Operator;

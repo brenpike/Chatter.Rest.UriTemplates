@@ -391,3 +391,88 @@ var uri = new UriTemplate("/users/{id}{?filter*}").Expand(new Dictionary<string,
 });
 // Result: "/users/42?filter=active&filter=premium"
 ```
+
+---
+
+## 10. Strongly-Typed Values with `UriTemplateValue`
+
+`UriTemplateValue` is a strongly-typed alternative to the `IDictionary<string, object?>` overload. Instead of relying on runtime type dispatch, callers create values through overloaded `From` factory methods and get compile-time safety.
+
+### API Reference
+
+```csharp
+public abstract class UriTemplateValue
+{
+    private protected UriTemplateValue() { }
+
+    public static StringValue     From(string value);
+    public static ListValue       From(IEnumerable<string> values);
+    public static DictionaryValue From(IDictionary<string, string> pairs);
+}
+
+public sealed class StringValue : UriTemplateValue { internal string Value { get; } }
+public sealed class ListValue : UriTemplateValue { internal IReadOnlyList<string> Values { get; } }
+public sealed class DictionaryValue : UriTemplateValue { internal IReadOnlyDictionary<string, string> Pairs { get; } }
+```
+
+The corresponding `Expand` overload:
+
+```csharp
+public string Expand(IDictionary<string, UriTemplateValue> variables);
+```
+
+### String value
+
+```csharp
+var uri = new UriTemplate("/users/{id}").Expand(new Dictionary<string, UriTemplateValue>
+{
+    ["id"] = UriTemplateValue.From("42")
+});
+// Result: "/users/42"
+```
+
+### List value
+
+```csharp
+var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, UriTemplateValue>
+{
+    ["color"] = UriTemplateValue.From(new[] { "red", "green", "blue" })
+});
+// Result: "?color=red&color=green&color=blue"
+```
+
+### Dictionary value
+
+```csharp
+var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, UriTemplateValue>
+{
+    ["keys"] = UriTemplateValue.From(new Dictionary<string, string>
+    {
+        ["semi"] = ";",
+        ["dot"] = ".",
+    })
+});
+// Result order may vary, e.g.: "?semi=%3B&dot=." or "?dot=.&semi=%3B"
+```
+
+### Mixed value kinds in one call
+
+```csharp
+var uri = new UriTemplate("/users/{id}{?tag*}").Expand(new Dictionary<string, UriTemplateValue>
+{
+    ["id"] = UriTemplateValue.From("42"),
+    ["tag"] = UriTemplateValue.From(new[] { "active", "premium" })
+});
+// Result: "/users/42?tag=active&tag=premium"
+```
+
+### When to use each overload
+
+| Overload | Best for |
+|---|---|
+| `Expand(IDictionary<string, string>)` | Simple string-only values (Levels 1-3 and string-only Level 4). |
+| `Expand(IDictionary<string, object?>)` | Mixed value types when working with loosely-typed data. |
+| `Expand(IDictionary<string, UriTemplateValue>)` | Mixed value types with compile-time safety. |
+| `Expand(params (string, string)[])` | Quick inline calls with string-only values. |
+
+The `object?` and `UriTemplateValue` overloads produce identical expansion results. Choose `UriTemplateValue` when you want the compiler to catch invalid value types instead of getting a `FormatException` at runtime.
