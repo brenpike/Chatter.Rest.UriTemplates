@@ -12,19 +12,21 @@ gh api graphql `
   -f repo="REPO" `
   -F pr=123 `
   -f query='
-query($owner: String!, $repo: String!, $pr: Int!) {
+query($owner: String!, $repo: String!, $pr: Int!, $threadCursor: String, $commentCursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
       number
       url
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $threadCursor) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id
           isResolved
           isOutdated
           path
           line
-          comments(first: 20) {
+          comments(first: 20, after: $commentCursor) {
+            pageInfo { hasNextPage endCursor }
             nodes {
               id
               author {
@@ -93,10 +95,11 @@ gh api graphql `
   -f repo="REPO" `
   -F pr=123 `
   -f query='
-query($owner: String!, $repo: String!, $pr: Int!) {
+query($owner: String!, $repo: String!, $pr: Int!, $commentCursor: String) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $pr) {
-      comments(first: 100) {
+      comments(first: 100, after: $commentCursor) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id
           author {
@@ -111,6 +114,18 @@ query($owner: String!, $repo: String!, $pr: Int!) {
   }
 }'
 ```
+
+## Pagination
+
+All paginated connections (`reviewThreads`, thread `comments`, and top-level `comments`) must be iterated until `pageInfo.hasNextPage` is `false` before processing results.
+
+Pattern:
+1. Issue the query with no cursor (or `after: null`) to get the first page.
+2. If `pageInfo.hasNextPage` is `true`, re-issue with `after: pageInfo.endCursor` to get the next page.
+3. Accumulate results across all pages.
+4. Stop when `hasNextPage` is `false`.
+
+Do not classify or route feedback from a partial (first-page-only) result set.
 
 ## Author Filtering
 
