@@ -396,7 +396,7 @@ var uri = new UriTemplate("/users/{id}{?filter*}").Expand(new Dictionary<string,
 
 ## 10. Strongly-Typed Values with `UriTemplateValue`
 
-`UriTemplateValue` is a strongly-typed alternative to the `IDictionary<string, object?>` overload. Instead of relying on runtime type dispatch, callers create values through static factory methods and get compile-time safety.
+`UriTemplateValue` is a strongly-typed alternative to the `IDictionary<string, object?>` overload. Instead of relying on runtime type dispatch, callers create values through overloaded `From` factory methods and get compile-time safety.
 
 ### API Reference
 
@@ -405,14 +405,14 @@ public abstract class UriTemplateValue
 {
     private protected UriTemplateValue() { }
 
-    public static UriTemplateValue FromString(string value);
-    public static UriTemplateValue FromList(IEnumerable<string> values);
-    public static UriTemplateValue FromDictionary(IDictionary<string, string> pairs);
-
-    public sealed class StringValue : UriTemplateValue { internal string Value { get; } }
-    public sealed class ListValue : UriTemplateValue { internal IReadOnlyList<string> Values { get; } }
-    public sealed class DictionaryValue : UriTemplateValue { internal IReadOnlyDictionary<string, string> Pairs { get; } }
+    public static StringValue     From(string value);
+    public static ListValue       From(IEnumerable<string> values);
+    public static DictionaryValue From(IDictionary<string, string> pairs);
 }
+
+public sealed class StringValue : UriTemplateValue { internal string Value { get; } }
+public sealed class ListValue : UriTemplateValue { internal IReadOnlyList<string> Values { get; } }
+public sealed class DictionaryValue : UriTemplateValue { internal IReadOnlyDictionary<string, string> Pairs { get; } }
 ```
 
 The corresponding `Expand` overload:
@@ -426,7 +426,7 @@ public string Expand(IDictionary<string, UriTemplateValue> variables);
 ```csharp
 var uri = new UriTemplate("/users/{id}").Expand(new Dictionary<string, UriTemplateValue>
 {
-    ["id"] = UriTemplateValue.FromString("42")
+    ["id"] = UriTemplateValue.From("42")
 });
 // Result: "/users/42"
 ```
@@ -436,7 +436,7 @@ var uri = new UriTemplate("/users/{id}").Expand(new Dictionary<string, UriTempla
 ```csharp
 var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, UriTemplateValue>
 {
-    ["color"] = UriTemplateValue.FromList(new[] { "red", "green", "blue" })
+    ["color"] = UriTemplateValue.From(new[] { "red", "green", "blue" })
 });
 // Result: "?color=red&color=green&color=blue"
 ```
@@ -446,7 +446,7 @@ var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, UriTemplate
 ```csharp
 var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, UriTemplateValue>
 {
-    ["keys"] = UriTemplateValue.FromDictionary(new Dictionary<string, string>
+    ["keys"] = UriTemplateValue.From(new Dictionary<string, string>
     {
         ["semi"] = ";",
         ["dot"] = ".",
@@ -460,8 +460,8 @@ var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, UriTemplateV
 ```csharp
 var uri = new UriTemplate("/users/{id}{?tag*}").Expand(new Dictionary<string, UriTemplateValue>
 {
-    ["id"] = UriTemplateValue.FromString("42"),
-    ["tag"] = UriTemplateValue.FromList(new[] { "active", "premium" })
+    ["id"] = UriTemplateValue.From("42"),
+    ["tag"] = UriTemplateValue.From(new[] { "active", "premium" })
 });
 // Result: "/users/42?tag=active&tag=premium"
 ```

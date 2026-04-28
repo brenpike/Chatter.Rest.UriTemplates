@@ -9,17 +9,17 @@ internal static class UriTemplateExpander
         if (value is null)
         {
             throw new ArgumentException(
-                $"Variable '{key}' has a null UriTemplateValue. Use UriTemplateValue.FromString(value) or omit the key for undefined variables.",
+                $"Variable '{key}' has a null UriTemplateValue. Use UriTemplateValue.From(value) or omit the key for undefined variables.",
                 nameof(value));
         }
 
         switch (value)
         {
-            case UriTemplateValue.StringValue s:
+            case StringValue s:
                 return s.Value;
-            case UriTemplateValue.ListValue l:
+            case ListValue l:
                 return new List<string>(l.Values);
-            case UriTemplateValue.DictionaryValue d:
+            case DictionaryValue d:
                 var dict = new Dictionary<string, string>();
                 foreach (var kvp in d.Pairs)
                 {

@@ -10,74 +10,74 @@ namespace Chatter.Rest.UriTemplates.Tests
 	public class UriTemplateValueTests
 	{
 		// ----------------------------------------------------------------
-		// 1. Factory method validation — FromString
+		// 1. Factory method validation — From (string)
 		// ----------------------------------------------------------------
 
 		[Fact]
-		public void FromString_NullValue_ThrowsArgumentNullException()
+		public void From_String_NullValue_ThrowsArgumentNullException()
 		{
-			Action act = () => UriTemplateValue.FromString(null!);
+			Action act = () => UriTemplateValue.From((string)null!);
 			act.Should().Throw<ArgumentNullException>();
 		}
 
 		[Fact]
-		public void FromString_ValidValue_ReturnsStringValueSubtype()
+		public void From_String_ValidValue_ReturnsStringValueSubtype()
 		{
-			var value = UriTemplateValue.FromString("hello");
-			value.Should().BeOfType<UriTemplateValue.StringValue>();
-			((UriTemplateValue.StringValue)value).Value.Should().Be("hello");
+			var value = UriTemplateValue.From("hello");
+			value.Should().BeOfType<StringValue>();
+			((StringValue)value).Value.Should().Be("hello");
 		}
 
 		// ----------------------------------------------------------------
-		// 2. Factory method validation — FromList
+		// 2. Factory method validation — From (list)
 		// ----------------------------------------------------------------
 
 		[Fact]
-		public void FromList_NullValues_ThrowsArgumentNullException()
+		public void From_List_NullValues_ThrowsArgumentNullException()
 		{
-			Action act = () => UriTemplateValue.FromList(null!);
+			Action act = () => UriTemplateValue.From((IEnumerable<string>)null!);
 			act.Should().Throw<ArgumentNullException>();
 		}
 
 		[Fact]
-		public void FromList_ContainsNullElement_ThrowsArgumentException()
+		public void From_List_ContainsNullElement_ThrowsArgumentException()
 		{
-			Action act = () => UriTemplateValue.FromList(new[] { "a", null!, "b" });
+			Action act = () => UriTemplateValue.From(new[] { "a", null!, "b" });
 			act.Should().Throw<ArgumentException>();
 		}
 
 		[Fact]
-		public void FromList_EmptyList_ReturnsListValueSubtype()
+		public void From_List_EmptyList_ReturnsListValueSubtype()
 		{
-			var value = UriTemplateValue.FromList(Array.Empty<string>());
-			value.Should().BeOfType<UriTemplateValue.ListValue>();
-			((UriTemplateValue.ListValue)value).Values.Should().BeEmpty();
+			var value = UriTemplateValue.From(Array.Empty<string>());
+			value.Should().BeOfType<ListValue>();
+			((ListValue)value).Values.Should().BeEmpty();
 		}
 
 		[Fact]
-		public void FromList_ValidValues_ReturnsListValueSubtype()
+		public void From_List_ValidValues_ReturnsListValueSubtype()
 		{
-			var value = UriTemplateValue.FromList(new[] { "red", "green", "blue" });
-			value.Should().BeOfType<UriTemplateValue.ListValue>();
-			((UriTemplateValue.ListValue)value).Values.Should().Equal("red", "green", "blue");
+			var value = UriTemplateValue.From(new[] { "red", "green", "blue" });
+			value.Should().BeOfType<ListValue>();
+			((ListValue)value).Values.Should().Equal("red", "green", "blue");
 		}
 
 		// ----------------------------------------------------------------
-		// 3. Factory method validation — FromDictionary
+		// 3. Factory method validation — From (dictionary)
 		// ----------------------------------------------------------------
 
 		[Fact]
-		public void FromDictionary_NullPairs_ThrowsArgumentNullException()
+		public void From_Dictionary_NullPairs_ThrowsArgumentNullException()
 		{
-			Action act = () => UriTemplateValue.FromDictionary(null!);
+			Action act = () => UriTemplateValue.From((IDictionary<string, string>)null!);
 			act.Should().Throw<ArgumentNullException>();
 		}
 
 		// Dictionary<string, string> does not allow null keys (throws at insertion),
-		// so a null-key scenario cannot reach FromDictionary's own guard. Instead,
+		// so a null-key scenario cannot reach From's own guard. Instead,
 		// verify that Dictionary itself rejects the null key.
 		[Fact]
-		public void FromDictionary_ContainsNullKey_ThrowsDueToDictionary()
+		public void From_Dictionary_ContainsNullKey_ThrowsDueToDictionary()
 		{
 			// Dictionary<string, string> constructor or Add throws
 			// ArgumentNullException for a null key before our code runs.
@@ -90,35 +90,35 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void FromDictionary_ContainsNullValue_ThrowsArgumentException()
+		public void From_Dictionary_ContainsNullValue_ThrowsArgumentException()
 		{
 			// Use a type that can actually hold a null value in its collection
-			// to reach FromDictionary's own null-value guard.
+			// to reach From's own null-value guard.
 			var dict = new Dictionary<string, string?> { ["key"] = null };
-			Action act = () => UriTemplateValue.FromDictionary(dict!);
+			Action act = () => UriTemplateValue.From(dict!);
 			act.Should().Throw<ArgumentException>();
 		}
 
 		[Fact]
-		public void FromDictionary_EmptyDictionary_ReturnsDictionaryValueSubtype()
+		public void From_Dictionary_EmptyDictionary_ReturnsDictionaryValueSubtype()
 		{
-			var value = UriTemplateValue.FromDictionary(new Dictionary<string, string>());
-			value.Should().BeOfType<UriTemplateValue.DictionaryValue>();
-			((UriTemplateValue.DictionaryValue)value).Pairs.Should().BeEmpty();
+			var value = UriTemplateValue.From(new Dictionary<string, string>());
+			value.Should().BeOfType<DictionaryValue>();
+			((DictionaryValue)value).Pairs.Should().BeEmpty();
 		}
 
 		[Fact]
-		public void FromDictionary_ValidPairs_ReturnsDictionaryValueSubtype()
+		public void From_Dictionary_ValidPairs_ReturnsDictionaryValueSubtype()
 		{
 			var pairs = new Dictionary<string, string>
 			{
 				["semi"] = ";",
 				["dot"] = ".",
 			};
-			var value = UriTemplateValue.FromDictionary(pairs);
-			value.Should().BeOfType<UriTemplateValue.DictionaryValue>();
-			((UriTemplateValue.DictionaryValue)value).Pairs.Should().ContainKey("semi").WhoseValue.Should().Be(";");
-			((UriTemplateValue.DictionaryValue)value).Pairs.Should().ContainKey("dot").WhoseValue.Should().Be(".");
+			var value = UriTemplateValue.From(pairs);
+			value.Should().BeOfType<DictionaryValue>();
+			((DictionaryValue)value).Pairs.Should().ContainKey("semi").WhoseValue.Should().Be(";");
+			((DictionaryValue)value).Pairs.Should().ContainKey("dot").WhoseValue.Should().Be(".");
 		}
 
 		// ----------------------------------------------------------------
@@ -130,7 +130,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["var"] = UriTemplateValue.FromString("hello"),
+				["var"] = UriTemplateValue.From("hello"),
 			};
 			var template = new UriTemplate("{var}");
 			template.Expand(vars).Should().Be("hello");
@@ -141,7 +141,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["var"] = UriTemplateValue.FromString("hello world"),
+				["var"] = UriTemplateValue.From("hello world"),
 			};
 			var template = new UriTemplate("{+var}");
 			template.Expand(vars).Should().Be("hello%20world");
@@ -152,7 +152,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["var"] = UriTemplateValue.FromString("hello"),
+				["var"] = UriTemplateValue.From("hello"),
 			};
 			var template = new UriTemplate("{var:3}");
 			template.Expand(vars).Should().Be("hel");
@@ -167,7 +167,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["list"] = UriTemplateValue.FromList(new[] { "a", "b", "c" }),
+				["list"] = UriTemplateValue.From(new[] { "a", "b", "c" }),
 			};
 			var template = new UriTemplate("{list}");
 			template.Expand(vars).Should().Be("a,b,c");
@@ -178,7 +178,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["list"] = UriTemplateValue.FromList(new[] { "a", "b", "c" }),
+				["list"] = UriTemplateValue.From(new[] { "a", "b", "c" }),
 			};
 			var template = new UriTemplate("{list*}");
 			template.Expand(vars).Should().Be("a,b,c");
@@ -189,7 +189,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["list"] = UriTemplateValue.FromList(new[] { "a", "b", "c" }),
+				["list"] = UriTemplateValue.From(new[] { "a", "b", "c" }),
 			};
 			var template = new UriTemplate("{/list*}");
 			template.Expand(vars).Should().Be("/a/b/c");
@@ -205,7 +205,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["keys"] = UriTemplateValue.FromDictionary(new Dictionary<string, string>
+				["keys"] = UriTemplateValue.From(new Dictionary<string, string>
 				{
 					["semi"] = ";",
 				}),
@@ -220,7 +220,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["keys"] = UriTemplateValue.FromDictionary(new Dictionary<string, string>
+				["keys"] = UriTemplateValue.From(new Dictionary<string, string>
 				{
 					["semi"] = ";",
 				}),
@@ -247,7 +247,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["list"] = UriTemplateValue.FromList(Array.Empty<string>()),
+				["list"] = UriTemplateValue.From(Array.Empty<string>()),
 			};
 			var template = new UriTemplate("{list}");
 			template.Expand(vars).Should().Be("");
@@ -259,7 +259,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["keys"] = UriTemplateValue.FromDictionary(new Dictionary<string, string>()),
+				["keys"] = UriTemplateValue.From(new Dictionary<string, string>()),
 			};
 			var template = new UriTemplate("{keys}");
 			template.Expand(vars).Should().Be("");
@@ -274,9 +274,9 @@ namespace Chatter.Rest.UriTemplates.Tests
 		{
 			var vars = new Dictionary<string, UriTemplateValue>
 			{
-				["id"] = UriTemplateValue.FromString("42"),
-				["tags"] = UriTemplateValue.FromList(new[] { "red", "blue" }),
-				["meta"] = UriTemplateValue.FromDictionary(new Dictionary<string, string>
+				["id"] = UriTemplateValue.From("42"),
+				["tags"] = UriTemplateValue.From(new[] { "red", "blue" }),
+				["meta"] = UriTemplateValue.From(new Dictionary<string, string>
 				{
 					["color"] = "green",
 				}),

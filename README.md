@@ -230,14 +230,15 @@ static factory methods on `UriTemplateValue`:
 ```csharp
 var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, UriTemplateValue>
 {
-    ["color"] = UriTemplateValue.FromList(new[] { "red", "green", "blue" })
+    ["color"] = UriTemplateValue.From(new[] { "red", "green", "blue" })
 });
 
 // "?color=red&color=green&color=blue"
 ```
 
-Factory methods: `FromString(string)`, `FromList(IEnumerable<string>)`,
-`FromDictionary(IDictionary<string, string>)`.
+Factory methods: `From(string)` returning `StringValue`,
+`From(IEnumerable<string>)` returning `ListValue`,
+`From(IDictionary<string, string>)` returning `DictionaryValue`.
 
 ### `Expand(params (string Key, string Value)[] variables)`
 

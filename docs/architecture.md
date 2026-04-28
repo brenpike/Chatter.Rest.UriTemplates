@@ -168,37 +168,39 @@ Per-operator expansion algorithm:
 
 A polymorphic hierarchy representing a single URI template variable value. This is the second public type in the library alongside `UriTemplate`. It replaces the need for runtime type dispatch when callers supply composite values.
 
+The hierarchy consists of an abstract base class (`UriTemplateValue`) and three top-level sealed subtypes (`StringValue`, `ListValue`, `DictionaryValue`). Overloaded `From` factory methods on the base class return the specific subtype.
+
 ```csharp
 public abstract class UriTemplateValue
 {
     private protected UriTemplateValue() { }
 
-    public static UriTemplateValue FromString(string value);
-    public static UriTemplateValue FromList(IEnumerable<string> values);
-    public static UriTemplateValue FromDictionary(IDictionary<string, string> pairs);
+    public static StringValue     From(string value);
+    public static ListValue       From(IEnumerable<string> values);
+    public static DictionaryValue From(IDictionary<string, string> pairs);
+}
 
-    public sealed class StringValue : UriTemplateValue
-    {
-        internal string Value { get; }
-    }
+public sealed class StringValue : UriTemplateValue
+{
+    internal string Value { get; }
+}
 
-    public sealed class ListValue : UriTemplateValue
-    {
-        internal IReadOnlyList<string> Values { get; }
-    }
+public sealed class ListValue : UriTemplateValue
+{
+    internal IReadOnlyList<string> Values { get; }
+}
 
-    public sealed class DictionaryValue : UriTemplateValue
-    {
-        internal IReadOnlyDictionary<string, string> Pairs { get; }
-    }
+public sealed class DictionaryValue : UriTemplateValue
+{
+    internal IReadOnlyDictionary<string, string> Pairs { get; }
 }
 ```
 
-- **`FromString`** — wraps a simple string value. Throws `ArgumentNullException` if `value` is null.
-- **`FromList`** — wraps a list of strings (defensively copied to a read-only list). Throws `ArgumentNullException` if `values` is null, `ArgumentException` if any element is null.
-- **`FromDictionary`** — wraps an associative array (defensively copied to a read-only dictionary). Throws `ArgumentNullException` if `pairs` is null, `ArgumentException` if any key or value is null.
+- **`From(string)`** — wraps a simple string value. Throws `ArgumentNullException` if `value` is null.
+- **`From(IEnumerable<string>)`** — wraps a list of strings (defensively copied to a read-only list). Throws `ArgumentNullException` if `values` is null, `ArgumentException` if any element is null.
+- **`From(IDictionary<string, string>)`** — wraps an associative array (defensively copied to a read-only dictionary). Throws `ArgumentNullException` if `pairs` is null, `ArgumentException` if any key or value is null.
 
-The `private protected` constructor prevents external subclassing while allowing the nested sealed subtypes (`StringValue`, `ListValue`, `DictionaryValue`) to inherit from the base. Instances are created exclusively through the factory methods. All internal properties are immutable snapshots -- the caller's original collection is copied on creation. The nested types are public, enabling caller-side pattern matching (e.g., C# `switch` expressions) if needed.
+The `private protected` constructor prevents external subclassing while allowing the sealed subtypes (`StringValue`, `ListValue`, `DictionaryValue`) to inherit from the base. Instances are created exclusively through the `From` factory methods. All internal properties are immutable snapshots -- the caller's original collection is copied on creation. The subtypes are public, enabling caller-side pattern matching (e.g., C# `switch` expressions) if needed.
 
 **Relationship to `Expand(IDictionary<string, object?>)`:** The existing `object?` overload is preserved for backward compatibility. The new `Expand(IDictionary<string, UriTemplateValue>)` overload provides compile-time safety by eliminating runtime type dispatch on the caller side.
 
