@@ -503,15 +503,15 @@ Class: `UriTemplateLevel4Tests` (edge case methods) and `UriTemplateEdgeCaseTest
 
 ## 7. Official URI Template Test Suite
 
-Class: future `UriTemplateComplianceTests`
+Class: `UriTemplateComplianceTests`
 
-Add a data-driven harness around https://github.com/uri-templates/uritemplate-test.
+Data-driven harness around https://github.com/uri-templates/uritemplate-test.
 
 | Status | Test group | Expected handling |
 |---|---|---|
-| Planned | `spec-examples.json` Level 1-4 string/list/dictionary cases | Must pass. |
-| Planned | `extended-tests.json` valid Level 1-4 cases | Must pass after parser/encoding gaps are closed. |
-| Gap | Invalid grammar cases | Must assert `FormatException` or the chosen diagnostic API behavior. |
+| Existing | `spec-examples.json` Level 1-4 string/list/dictionary cases | Must pass. |
+| Existing | `extended-tests.json` valid Level 1-4 cases | Must pass after parser/encoding gaps are closed. |
+| Existing | Invalid grammar cases | Must assert `FormatException` or the chosen diagnostic API behavior. |
 
 ## 8. LinkObject Integration Tests
 
@@ -540,11 +540,10 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 | Parser and edge cases | 42 | 0 | 0 |
 | Level 4 compliance (prefix, list, assoc-array) | 47 | 0 | 0 |
 | Level 4 edge cases | 24 | 0 | 0 |
-| Official compliance harness | 0 | 2 | 1 |
+| Official compliance harness | 130 | 0 | 0 |
 | HAL `LinkObject` integration | 0 | 7 | 0 |
 
 The highest-priority remaining implementation fixes are:
 
 1. Correct reserved expansion handling for bare `%`.
 2. Decide and implement literal validation/encoding behavior.
-3. Add a data-driven compliance test harness against the official URI Templates test suite.
