@@ -179,7 +179,7 @@ namespace Chatter.Rest.UriTemplates.Tests
                     {
                         double d = el.GetDouble();
                         string s = d % 1 == 0
-                            ? ((long)d).ToString()
+                            ? ((long)d).ToString(CultureInfo.InvariantCulture)
                             : d.ToString(CultureInfo.InvariantCulture);
                         dict[name] = UriTemplateValue.From(s);
                         break;
