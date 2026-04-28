@@ -252,6 +252,35 @@ var uri = new UriTemplate("/search{?q}")
 // "/search?q=first"
 ```
 
+### `Expand(params (string Key, object? Value)[] variables)`
+
+Tuple overload for composite values. Accepts string, list, dictionary, and null
+values via `object?`. First-wins for duplicate keys.
+
+```csharp
+var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
+    ("id", (object?)"42"),
+    ("tag", (object?)new[] { "active", "premium" })
+);
+
+// "/users/42?tag=active&tag=premium"
+```
+
+> Passing a `UriTemplateValue` instance through this overload throws
+> `FormatException`. Use `Expand(IDictionary<string, UriTemplateValue>)` for
+> strongly-typed values.
+
+### `Expand()`
+
+Expands the template with all variables undefined. Every expression is omitted
+per RFC 6570 rules.
+
+```csharp
+var uri = new UriTemplate("/orders{?status,page}").Expand();
+
+// "/orders"
+```
+
 ### `GetVariables()`
 
 Returns variable names in first-seen order with duplicates removed. Variable

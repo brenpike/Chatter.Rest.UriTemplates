@@ -153,6 +153,53 @@ public sealed class UriTemplate
         return Expand(dict);
     }
 
+    /// <summary>
+    /// Expands the URI template using the provided variable tuples, supporting composite
+    /// value types for RFC 6570 Level 4 expansion.
+    /// <para>
+    /// Supported value types for <paramref name="variables"/> entries:
+    /// <list type="bullet">
+    ///   <item><description><see langword="null"/> — treated as undefined per RFC 6570 §2.3.</description></item>
+    ///   <item><description><see cref="string"/> — simple string value.</description></item>
+    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="string"/> — list value.</description></item>
+    ///   <item><description><see cref="IDictionary{TKey,TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array.</description></item>
+    /// </list>
+    /// </para>
+    /// <para>When duplicate keys are present, the first occurrence wins.</para>
+    /// <para>
+    /// Note: passing a <see cref="UriTemplateValue"/> instance through this overload will throw
+    /// <see cref="FormatException"/>. Use <see cref="Expand(IDictionary{string,UriTemplateValue})"/> instead.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="FormatException">Thrown when a value is not a supported type.</exception>
+    public string Expand(params (string Key, object? Value)[] variables)
+    {
+        if (variables is null)
+        {
+            throw new ArgumentNullException(nameof(variables));
+        }
+
+        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        foreach (var (key, value) in variables)
+        {
+            // First-wins for duplicates
+            if (!dict.ContainsKey(key))
+            {
+                dict[key] = value;
+            }
+        }
+
+        return ExpandCore(dict);
+    }
+
+    /// <summary>
+    /// Expands the URI template with no variables. All variable references are treated as undefined.
+    /// </summary>
+    /// <returns>The expanded URI string with all variables omitted.</returns>
+    public string Expand() => ExpandCore(new Dictionary<string, object?>(StringComparer.Ordinal));
+
     public IReadOnlyList<string> GetVariables()
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);

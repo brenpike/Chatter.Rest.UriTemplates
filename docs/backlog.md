@@ -10,17 +10,6 @@ Implemented. See `UriTemplateValue` in `src/Chatter.Rest.UriTemplates/UriTemplat
 
 ---
 
-## Tuple overload for composite values
+## ~~Tuple overload for composite values~~ (complete)
 
-**Summary:** Add a `params (string Key, object? Value)[]` overload on `UriTemplate` so callers who currently use `params (string, string)[]` can pass list and dictionary values without manually building an `IDictionary<string, object?>`.
-
-**Rationale:** The existing string-tuple overload (`params (string Key, string Value)[]`) is the most ergonomic API for simple cases. Callers who want to mix string and composite values currently must switch to the dictionary overload, losing the tuple convenience. A composite-tuple overload restores ergonomic parity.
-
-**Deferred because:** The dictionary overload provides full Level 4 functionality. The tuple overload is a convenience improvement and can be added without breaking changes.
-
-**Acceptance criteria:**
-- New `Expand(params (string Key, object? Value)[] variables)` overload on `UriTemplate`.
-- Delegates to the canonical `ExpandCore` path via `IDictionary<string, object?>`.
-- First-wins duplicate handling consistent with the existing string-tuple overload.
-- Tests cover string, list, and dictionary value passing through the new overload.
-- Documentation updated (`docs/usage.md`, `docs/architecture.md`, `README.md`).
+Implemented. `Expand(params (string Key, object? Value)[])` was added to `UriTemplate`. It delegates to its dictionary counterpart with first-wins duplicate handling. A `UriTemplateValue` tuple overload was originally added as well but was removed due to overload resolution ambiguity; callers who need typed values use `Expand(IDictionary<string, UriTemplateValue>)` instead.
