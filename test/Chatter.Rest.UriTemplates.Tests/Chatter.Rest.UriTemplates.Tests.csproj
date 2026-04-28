@@ -28,8 +28,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="TestData\*.json">
+		<None Include="uritemplate-test\*.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<Link>TestData\%(Filename)%(Extension)</Link>
 		</None>
 	</ItemGroup>
 
