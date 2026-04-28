@@ -248,6 +248,24 @@ public sealed class UriTemplate
     public string Expand(params (string Key, string Value)[] variables);
 
     /// <summary>
+    /// Expands the URI template using the provided variable tuples, supporting composite
+    /// value types for RFC 6570 Level 4 expansion.
+    /// Delegates to <see cref="Expand(IDictionary{string, object?})"/>.
+    /// When duplicate keys are present, the first occurrence wins.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="FormatException">Thrown when a value is not a supported type.</exception>
+    public string Expand(params (string Key, object? Value)[] variables);
+
+    /// <summary>
+    /// Expands the URI template using the provided strongly-typed variable tuples.
+    /// Delegates to <see cref="Expand(IDictionary{string, UriTemplateValue})"/>.
+    /// When duplicate keys are present, the first occurrence wins.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    public string Expand(params (string Key, UriTemplateValue Value)[] variables);
+
+    /// <summary>
     /// Returns all variable names referenced in the template, in order of appearance, deduplicated.
     /// For Level 4 varspecs, returns the base name (without :N or * modifiers).
     /// </summary>

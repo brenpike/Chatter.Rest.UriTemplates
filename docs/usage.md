@@ -124,6 +124,76 @@ var uri = template.Expand(
 // Result: "/search?q=first"
 ```
 
+### `string Expand(params (string Key, object? Value)[] variables)`
+
+Tuple convenience overload for composite values. Accepts string, list, dictionary, and null values via `object?`. First-wins for duplicate keys. Delegates to the canonical `IDictionary<string, object?>` expansion path.
+
+- Throws `ArgumentNullException` if `variables` is null.
+- Throws `FormatException` if a value is not a supported type (including `UriTemplateValue` -- use the dedicated overload instead), if a prefix modifier is applied to a composite value, or if a composite value contains null elements.
+
+```csharp
+var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
+    ("id", (object?)"42"),
+    ("tag", (object?)new[] { "active", "premium" })
+);
+// Result: "/users/42?tag=active&tag=premium"
+```
+
+Mixed-type usage with string, list, and dictionary values in one call:
+
+```csharp
+var uri = new UriTemplate("{/path}{?color*}{;keys*}").Expand(
+    ("path", (object?)"files"),
+    ("color", (object?)new[] { "red", "green" }),
+    ("keys", (object?)new List<KeyValuePair<string, string>>
+    {
+        new("semi", ";"),
+        new("dot", "."),
+    })
+);
+// Result: "/files?color=red&color=green;semi=%3B;dot=."
+```
+
+Duplicate handling:
+
+```csharp
+var uri = new UriTemplate("/users/{id}").Expand(
+    ("id", (object?)"first"),
+    ("id", (object?)"second")    // ignored -- "first" wins
+);
+// Result: "/users/first"
+```
+
+> **Note:** Passing a `UriTemplateValue` instance through this overload throws `FormatException`. Use `Expand(params (string Key, UriTemplateValue Value)[])` for strongly-typed values.
+
+### `string Expand(params (string Key, UriTemplateValue Value)[] variables)`
+
+Tuple convenience overload for strongly-typed composite values. First-wins for duplicate keys. Delegates to the canonical `IDictionary<string, UriTemplateValue>` expansion path.
+
+- Throws `ArgumentNullException` if `variables` is null.
+
+```csharp
+var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
+    ("id", UriTemplateValue.From("42")),
+    ("tag", UriTemplateValue.From(new[] { "active", "premium" }))
+);
+// Result: "/users/42?tag=active&tag=premium"
+```
+
+Mixed value kinds:
+
+```csharp
+var uri = new UriTemplate("{/path}{?keys*}").Expand(
+    ("path", UriTemplateValue.From("files")),
+    ("keys", UriTemplateValue.From(new Dictionary<string, string>
+    {
+        ["semi"] = ";",
+        ["dot"] = ".",
+    }))
+);
+// Result order may vary, e.g.: "/files?semi=%3B&dot=." or "/files?dot=.&semi=%3B"
+```
+
 ### `IReadOnlyList<string> GetVariables()`
 
 Returns all variable names referenced in the template, deduplicated, in order of first appearance.
@@ -471,8 +541,10 @@ var uri = new UriTemplate("/users/{id}{?tag*}").Expand(new Dictionary<string, Ur
 | Overload | Best for |
 |---|---|
 | `Expand(IDictionary<string, string>)` | Simple string-only values (Levels 1-3 and string-only Level 4). |
-| `Expand(IDictionary<string, object?>)` | Mixed value types when working with loosely-typed data. |
-| `Expand(IDictionary<string, UriTemplateValue>)` | Mixed value types with compile-time safety. |
+| `Expand(IDictionary<string, object?>)` | Mixed value types when working with loosely-typed data via dictionary. |
+| `Expand(IDictionary<string, UriTemplateValue>)` | Mixed value types with compile-time safety via dictionary. |
 | `Expand(params (string, string)[])` | Quick inline calls with string-only values. |
+| `Expand(params (string, object?)[])` | Quick inline calls with mixed value types (string, list, dict). |
+| `Expand(params (string, UriTemplateValue)[])` | Quick inline calls with mixed value types and compile-time safety. |
 
-The `object?` and `UriTemplateValue` overloads produce identical expansion results. Choose `UriTemplateValue` when you want the compiler to catch invalid value types instead of getting a `FormatException` at runtime.
+The `object?` and `UriTemplateValue` overloads (both dictionary and tuple forms) produce identical expansion results. Choose `UriTemplateValue` when you want the compiler to catch invalid value types instead of getting a `FormatException` at runtime. The tuple overloads delegate to their dictionary counterparts, adding only first-wins duplicate handling.
