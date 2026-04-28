@@ -27,4 +27,10 @@
 		<ProjectReference Include="..\..\src\Chatter.Rest.UriTemplates\Chatter.Rest.UriTemplates.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<None Include="TestData\*.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
 </Project>
