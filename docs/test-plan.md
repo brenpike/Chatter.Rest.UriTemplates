@@ -513,23 +513,7 @@ Data-driven harness around https://github.com/uri-templates/uritemplate-test.
 | Existing | `extended-tests.json` valid Level 1-4 cases | Must pass after parser/encoding gaps are closed. |
 | Existing | Invalid grammar cases | Must assert `FormatException` or the chosen diagnostic API behavior. |
 
-## 8. LinkObject Integration Tests
-
-Class: `LinkObjectUriTemplateIntegrationTests` in the HAL repository, not this standalone package.
-
-After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API behaves correctly with Level 2 and 3 templates.
-
-| Status | Test name | Template | `Templated` | Call | Expected |
-|---|---|---|---|---|---|
-| Planned | `Level2_Plus_ExpandsReservedChars` | `/proxy/{+path}` | true | `Expand(("path", "/foo/bar"))` | `/proxy/foo/bar` |
-| Planned | `Level2_Hash_ExpandsFragment` | `/page{#section}` | true | `Expand(("section", "intro"))` | `/page#intro` |
-| Planned | `Level3_Query_BuildsQueryString` | `/orders{?status,page}` | true | `Expand(("status","open"),("page","2"))` | `/orders?status=open&page=2` |
-| Planned | `Level3_Slash_BuildsPathSegment` | `/base{/segment}` | true | `Expand(("segment","value"))` | `/base/value` |
-| Planned | `GetTemplateVariables_Level2_ReturnsVars` | `{+path}` | true | `GetTemplateVariables()` | `["path"]` |
-| Planned | `GetTemplateVariables_Level3Query_ReturnsVars` | `{?status,page}` | true | `GetTemplateVariables()` | `["status", "page"]` |
-| Planned | `NotTemplated_Level2Syntax_Unchanged` | `{+path}` | false | `Expand(("path","/foo"))` | `{+path}` |
-
-## 9. Coverage Summary
+## 8. Coverage Summary
 
 | Area | Existing | Planned | Gap |
 |---|---:|---:|---:|
@@ -541,7 +525,6 @@ After `LinkObject` delegates to `UriTemplate`, verify that the public HAL API be
 | Level 4 compliance (prefix, list, assoc-array) | 47 | 0 | 0 |
 | Level 4 edge cases | 24 | 0 | 0 |
 | Official compliance harness | 130 | 0 | 0 |
-| HAL `LinkObject` integration | 0 | 7 | 0 |
 
 The highest-priority remaining implementation fixes are:
 
