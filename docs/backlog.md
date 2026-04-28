@@ -12,4 +12,4 @@ Implemented. See `UriTemplateValue` in `src/Chatter.Rest.UriTemplates/UriTemplat
 
 ## ~~Tuple overload for composite values~~ (complete)
 
-Implemented. Both `Expand(params (string Key, object? Value)[])` and `Expand(params (string Key, UriTemplateValue Value)[])` overloads were added to `UriTemplate`. Each delegates to its dictionary counterpart with first-wins duplicate handling.
+Implemented. `Expand(params (string Key, object? Value)[])` was added to `UriTemplate`. It delegates to its dictionary counterpart with first-wins duplicate handling. A `UriTemplateValue` tuple overload was originally added as well but was removed due to overload resolution ambiguity; callers who need typed values use `Expand(IDictionary<string, UriTemplateValue>)` instead.

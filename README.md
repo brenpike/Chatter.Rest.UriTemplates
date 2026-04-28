@@ -267,20 +267,18 @@ var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
 ```
 
 > Passing a `UriTemplateValue` instance through this overload throws
-> `FormatException`. Use the `UriTemplateValue` tuple overload instead.
+> `FormatException`. Use `Expand(IDictionary<string, UriTemplateValue>)` for
+> strongly-typed values.
 
-### `Expand(params (string Key, UriTemplateValue Value)[] variables)`
+### `Expand()`
 
-Strongly-typed tuple overload. Provides compile-time safety for composite values.
-First-wins for duplicate keys.
+Expands the template with all variables undefined. Every expression is omitted
+per RFC 6570 rules.
 
 ```csharp
-var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
-    ("id", UriTemplateValue.From("42")),
-    ("tag", UriTemplateValue.From(new[] { "active", "premium" }))
-);
+var uri = new UriTemplate("/orders{?status,page}").Expand();
 
-// "/users/42?tag=active&tag=premium"
+// "/orders"
 ```
 
 ### `GetVariables()`

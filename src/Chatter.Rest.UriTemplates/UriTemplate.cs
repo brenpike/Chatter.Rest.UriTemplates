@@ -168,7 +168,7 @@ public sealed class UriTemplate
     /// <para>When duplicate keys are present, the first occurrence wins.</para>
     /// <para>
     /// Note: passing a <see cref="UriTemplateValue"/> instance through this overload will throw
-    /// <see cref="FormatException"/>. Use <see cref="Expand(ValueTuple{string,UriTemplateValue}[])"/> instead.
+    /// <see cref="FormatException"/>. Use <see cref="Expand(IDictionary{string,UriTemplateValue})"/> instead.
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
@@ -195,30 +195,10 @@ public sealed class UriTemplate
     }
 
     /// <summary>
-    /// Expands the URI template using the provided strongly-typed variable tuples.
-    /// <para>When duplicate keys are present, the first occurrence wins.</para>
+    /// Expands the URI template with no variables. All variable references are treated as undefined.
     /// </summary>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
-    public string Expand(params (string Key, UriTemplateValue Value)[] variables)
-    {
-        if (variables is null)
-        {
-            throw new ArgumentNullException(nameof(variables));
-        }
-
-        var dict = new Dictionary<string, UriTemplateValue>();
-
-        foreach (var (key, value) in variables)
-        {
-            // First-wins for duplicates
-            if (!dict.ContainsKey(key))
-            {
-                dict[key] = value;
-            }
-        }
-
-        return Expand(dict);
-    }
+    /// <returns>The expanded URI string with all variables omitted.</returns>
+    public string Expand() => ExpandCore(new Dictionary<string, object?>(StringComparer.Ordinal));
 
     public IReadOnlyList<string> GetVariables()
     {

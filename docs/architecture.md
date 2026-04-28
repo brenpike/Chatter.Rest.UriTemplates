@@ -214,6 +214,12 @@ public sealed class UriTemplate
     public UriTemplate(string template);
 
     /// <summary>
+    /// Expands the URI template with all variables undefined.
+    /// Every expression is omitted per RFC 6570 rules.
+    /// </summary>
+    public string Expand();
+
+    /// <summary>
     /// Expands the URI template using the provided variable dictionary.
     /// All values are treated as simple strings (Levels 1–3 inputs and
     /// string-only Level 4 like {var:3}).
@@ -256,14 +262,6 @@ public sealed class UriTemplate
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="FormatException">Thrown when a value is not a supported type.</exception>
     public string Expand(params (string Key, object? Value)[] variables);
-
-    /// <summary>
-    /// Expands the URI template using the provided strongly-typed variable tuples.
-    /// Delegates to <see cref="Expand(IDictionary{string, UriTemplateValue})"/>.
-    /// When duplicate keys are present, the first occurrence wins.
-    /// </summary>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
-    public string Expand(params (string Key, UriTemplateValue Value)[] variables);
 
     /// <summary>
     /// Returns all variable names referenced in the template, in order of appearance, deduplicated.

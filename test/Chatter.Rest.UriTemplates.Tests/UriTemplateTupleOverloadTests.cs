@@ -89,66 +89,14 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// Expand(params (string Key, UriTemplateValue Value)[])
+		// Expand() — no-arg overload
 		// ----------------------------------------------------------------
 
 		[Fact]
-		public void Expand_UriTemplateValueTuple_NullVariables_ThrowsArgumentNullException()
+		public void Expand_NoArgs_AllVariablesUndefined()
 		{
 			var template = new UriTemplate("{var}");
-			var act = () => template.Expand((ValueTuple<string, UriTemplateValue>[])null!);
-			act.Should().Throw<ArgumentNullException>();
-		}
-
-		[Fact]
-		public void Expand_UriTemplateValueTuple_EmptyVariables_AllUndefined()
-		{
-			var template = new UriTemplate("{var}");
-			template.Expand(Array.Empty<(string, UriTemplateValue)>()).Should().Be("");
-		}
-
-		[Fact]
-		public void Expand_UriTemplateValueTuple_StringValue()
-		{
-			var template = new UriTemplate("{var}");
-			template.Expand(("var", UriTemplateValue.From("hello"))).Should().Be("hello");
-		}
-
-		[Fact]
-		public void Expand_UriTemplateValueTuple_ListValue()
-		{
-			var template = new UriTemplate("{list}");
-			template.Expand(("list", UriTemplateValue.From(new[] { "a", "b", "c" }))).Should().Be("a,b,c");
-		}
-
-		[Fact]
-		public void Expand_UriTemplateValueTuple_DictionaryValue()
-		{
-			var template = new UriTemplate("{keys*}");
-			var dict = new Dictionary<string, string> { ["k"] = "v" };
-			template.Expand(("keys", UriTemplateValue.From(dict))).Should().Be("k=v");
-		}
-
-		[Fact]
-		public void Expand_UriTemplateValueTuple_MixedKinds()
-		{
-			var template = new UriTemplate("{name}/{list*}/{keys*}");
-			var dict = new Dictionary<string, string> { ["a"] = "1" };
-			template.Expand(
-				("name", (UriTemplateValue)UriTemplateValue.From("alice")),
-				("list", (UriTemplateValue)UriTemplateValue.From(new[] { "x", "y" })),
-				("keys", (UriTemplateValue)UriTemplateValue.From(dict))
-			).Should().Be("alice/x,y/a=1");
-		}
-
-		[Fact]
-		public void Expand_UriTemplateValueTuple_DuplicateKey_FirstWins()
-		{
-			var template = new UriTemplate("{var}");
-			template.Expand(
-				("var", UriTemplateValue.From("first")),
-				("var", UriTemplateValue.From("second"))
-			).Should().Be("first");
+			template.Expand().Should().Be("");
 		}
 	}
 }
