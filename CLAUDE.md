@@ -2,137 +2,145 @@
 
 ## Project Overview
 
-Chatter.Rest.Hal is a .NET/C# implementation of the HAL (Hypertext Application Language) specification for building and consuming RESTful APIs. It provides a fluent builder API, System.Text.Json serialization/deserialization, and a Roslyn source generator package.
+Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-4. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with prefix modifier, explode modifier, list value, and associative-array value support. No external NuGet dependencies.
 
-**Repository:** https://github.com/brenpike/Chatter.Rest.Hal  
-**HAL Specification:** https://datatracker.ietf.org/doc/html/draft-kelly-json-hal  
-**License:** MIT  
+**Repository:** https://github.com/brenpike/Chatter.Rest.UriTemplates
+**RFC 6570 Specification:** https://datatracker.ietf.org/doc/html/rfc6570
+**License:** MIT
 **Author:** Brennan Pike
 
 ## Documentation Index
 
 | Doc | Contents |
 |---|---|
-| `docs/architecture.md` | Domain model, builder internals, converters, source generator pipeline |
-| `docs/api.md` | Fluent builder API reference and extension method signatures |
-| `docs/serialization.md` | Converter wiring, HalJsonOptions, force-array, deserialization internals |
-| `docs/usage.md` | Copy-paste examples for building, serializing, deserializing |
-| `docs/development.md` | Build/test/pack commands, code style, test conventions, CI/CD |
-| `docs/HAL_TEST_PLAN.md` | HAL spec-to-test mapping; consult for spec compliance and tests |
-| `docs/aspnetcore/requirements.md` | Package requirements for `Chatter.Rest.Hal.AspNetCore` |
-| `docs/aspnetcore/architecture.md` | Architecture, pseudocode, and test strategy for `Chatter.Rest.Hal.AspNetCore` |
-| `versioning.md` | SemVer rules, bump triggers, changelog, tag policy |
+| [docs/architecture.md](docs/architecture.md) | URI template engine design, operator reference, encoding rules, type design |
+| [docs/usage.md](docs/usage.md) | Practical usage guide with API reference and operator examples |
+| [docs/test-plan.md](docs/test-plan.md) | RFC 6570 test coverage map, test scenarios by level and operator |
+| [docs/development.md](docs/development.md) | Build commands, test commands, NuGet packaging, CI/CD parity, code style, test conventions |
+| [docs/backlog.md](docs/backlog.md) | Deferred work and follow-ups |
+| [branching-pr-workflow.md](branching-pr-workflow.md) | Mandatory branching, commit, PR, merge, and validation workflow |
+| [versioning.md](versioning.md) | SemVer, version bump, release metadata, changelog, and tag policy |
+| [pr-review-remediation-loop.md](pr-review-remediation-loop.md) | External PR review feedback loop |
+| [AGENTS.md](AGENTS.md) | External AI reviewer (Codex) guidance |
 
 ## Solution Structure
 
 | Project | NuGet Package |
 |---|---|
-| `src/Chatter.Rest.Hal/` | `Chatter.Rest.Hal` |
-| `src/Chatter.Rest.Hal.CodeGenerators/` | `Chatter.Rest.Hal.CodeGenerators` |
-| `src/Chatter.Rest.Hal.Core/` | Shared types; no standalone package |
-| `test/Chatter.Rest.Hal.Tests/` | — |
-| `test/Chatter.Rest.Hal.CodeGenerators.Tests/` | — |
-
-`Chatter.Rest.UriTemplates` is an external NuGet package dependency, not an in-repo project.
+| `src/Chatter.Rest.UriTemplates/` | `Chatter.Rest.UriTemplates` |
+| `test/Chatter.Rest.UriTemplates.Tests/` | - |
 
 ## Multi-Agent Governance
 
-This repository uses the constrained Claude Code framework defined by:
+This repository uses a constrained multi-agent workflow.
 
-- `agent-system-policy.md`
-- `branching-pr-workflow.md`
-- `versioning.md`
-- `pr-review-remediation-loop.md`
+Canonical governance files:
+- `agent-system-policy.md` - shared agent roles, authority, tool policy, escalation, and reporting
+- `branching-pr-workflow.md` - MANDATORY branching, commit, PR, merge, and validation workflow
+- `versioning.md` - MANDATORY SemVer and version bump policy
+- `pr-review-remediation-loop.md` - MANDATORY external PR review remediation loop
+- `AGENTS.md` - external AI reviewer (Codex) guidance
 
-Role-specific agents live in `.claude/agents/`.
-Reusable workflows live in `.claude/skills/`.
-External reviewer guidance lives in `AGENTS.md`.
+These files must ALWAYS be respected unless the user says otherwise.
 
-These files must be respected unless the user explicitly overrides them for a specific task.
+Role-specific behavior is defined in:
+- `.claude/agents/orchestrator.md`
+- `.claude/agents/planner.md`
+- `.claude/agents/coder.md`
+- `.claude/agents/designer.md`
 
 ## Build and Test Commands
 
-See `docs/development.md` for canonical build, test, pack, and CI/CD commands.
+See [docs/development.md](docs/development.md) for all build, test, and pack commands.
 
-Use project documentation rather than inventing commands.
+## Architecture
 
-## Architecture and Code Style
+See [docs/architecture.md](docs/architecture.md) for engine design, operator reference, encoding rules, and type design.
 
-See:
+## Testing Conventions
 
-- `docs/architecture.md` for domain model, builders, converters, and source generator pipeline
-- `docs/development.md` for editorconfig rules, style, tests, and fixtures
-- `docs/HAL_TEST_PLAN.md` when adding tests or evaluating HAL spec compliance
+See [docs/development.md](docs/development.md) for test framework, assertions, naming conventions, and coverage setup.
 
-Observed conventions:
+## Code Style and Conventions
 
-- collection types are `sealed record` implementing `ICollection<T>` and `IHalPart`
-- domain types use namespace `Chatter.Rest.Hal`
-- converters use namespace `Chatter.Rest.Hal.Converters`
-- builders use namespace `Chatter.Rest.Hal.Builders` with stages in sub-namespaces
-- internal members are exposed to test assemblies via `InternalsVisibleTo`
+See [docs/development.md](docs/development.md) for editorconfig rules (line endings, indentation, braces).
 
-## Package Versions
+Additional conventions observed in the codebase:
 
-| Package | Version |
-|---|---|
-| `Chatter.Rest.Hal` | `1.1.0` |
-| `Chatter.Rest.Hal.CodeGenerators` | `0.3.0` |
+- `UriTemplate` is the only public type; all other types (`UriTemplateParser`, `UriTemplateExpander`, `UriTemplateExpression`, `UriTemplateOperator`) are internal
+- All types use the `Chatter.Rest.UriTemplates` namespace
+- Internal members are exposed to test assembly via `InternalsVisibleTo` in the csproj
 
-External dependency: `Chatter.Rest.UriTemplates` v0.1.0.
+## Test Plan
 
-## Versioning Configuration
+`docs/test-plan.md` maps every RFC 6570 normative and behavioral requirement to testable scenarios, organized by level and operator. Consult it when:
+- Answering questions about expected behavior
+- Adding new tests for spec compliance
+- Evaluating whether a bug is a spec violation or implementation choice
 
-### Packages
+## CI/CD
 
-| Package | Bump trigger path | Canonical version source | CHANGELOG | Tag prefix |
-|---|---|---|---|---|
-| `Chatter.Rest.Hal` | `src/Chatter.Rest.Hal/**` excluding `.md` | `src/Chatter.Rest.Hal/Chatter.Rest.Hal.csproj` | `CHANGELOG.md` | `hal` |
-| `Chatter.Rest.Hal.CodeGenerators` | `src/Chatter.Rest.Hal.CodeGenerators/**` excluding `.md` | `src/Chatter.Rest.Hal.CodeGenerators/Chatter.Rest.Hal.CodeGenerators.csproj` | `CHANGELOG-CodeGenerators.md` | `codegen` |
+See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
-`src/Chatter.Rest.Hal.Core/**` is a shared internal component. Changes there may trigger a bump in dependent packages if the change propagates through public API, runtime behavior, generated output, package contents, or compatibility contracts.
+## Versioning
 
-### Atomic Version Bump Files
+### Artifact
 
-When bumping version `X.Y.Z` for a package, update these atomically:
+| Artifact | NuGet Package ID | Current Version |
+|---|---|---|
+| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.2.0` |
 
-1. `src/<package>/<package>.csproj` — canonical `<Version>X.Y.Z</Version>`
-2. `CLAUDE.md` — package version table row
-3. package CHANGELOG — dated release section above `[Unreleased]` and comparison link update
+### Canonical Version Source
+
+`src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element is the single source of truth.
+
+### Files to Update Atomically on Version Bump
+
+All of the following must be updated together in the same commit when bumping `Chatter.Rest.UriTemplates`:
+
+1. `src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element (canonical)
+2. `CLAUDE.md` — version in this table
+3. `docs/development.md` — line that reads `Package ID: \`Chatter.Rest.UriTemplates\` vX.Y.Z`
+
+### Bump-Triggering Paths
+
+A version bump is required when a PR modifies any file under:
+- `src/Chatter.Rest.UriTemplates/**`
+
+No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root), agent framework files.
+
+### Changelog
+
+No `CHANGELOG.md` exists. Release notes are not currently maintained. A changelog file may be added in a future chore.
 
 ### Git Tags
 
-CI creates annotated tags after successful deploy to NuGet, post-`main` merge.
+Tags are not created by CI and no tag format has been established. A tagging policy may be defined in a future chore.
 
-| Package | Tag format | Example |
-|---|---|---|
-| `Chatter.Rest.Hal` | `hal/vX.Y.Z` | `hal/v1.2.0` |
-| `Chatter.Rest.Hal.CodeGenerators` | `codegen/vX.Y.Z` | `codegen/v0.4.0` |
+### NuGet Publish
 
-Tags serve as version anchors for CI `version-check` validation on future PRs.
+CI publishes to NuGet.org automatically on merge to `main` (via `uritemplate-cicd.yml` deploy job, using `NUGET_API_KEY_CHATTER_URITEMPLATE` secret).
 
 ## Memory Usage
 
-Use `claude-mem` when prior context, decisions, constraints, risks, or continuity may materially improve accuracy, efficiency, or consistency.
-
-Memory is a continuity/token-efficiency aid, not a substitute for current repo inspection, validation, or required verification.
-
-If memory fails, retry at most once when transient, then continue with normal tools and available context. Memory failure alone must not block execution.
+- Use `claude-mem` first when prior context, earlier decisions, constraints, risks, or continuity may materially improve accuracy, efficiency, or consistency.
+- Treat memory as a continuity and token-efficiency aid, not as a substitute for current repo inspection, validation, or other required verification.
+- Reuse still-valid prior context when helpful, but continue normally if no relevant memory is found.
+- If `mem-search` or another memory tool fails, retry at most once if the failure appears transient, then fall back to normal tools and available context.
+- Memory-tool failure alone must not block execution.
 
 ## Codebase Exploration Guidance
 
-Use local repo inspection first.
+Use local repo inspection first for codebase exploration and change understanding.
 
 Preferred tools:
-
-- `Read` for targeted inspection
+- `Read` for targeted file inspection
 - `Grep` and `Glob` for discovery
-- read-only shell commands for structure/search
-- `Context7` when external framework/library/platform/API docs are needed
-- `claude-mem` when prior context reduces rediscovery
+- read-only shell commands for repository structure and search
+- `Context7` only when external framework, library, platform, or API documentation is needed
+- `claude-mem` when prior project or session context can reduce rediscovery
 
 For code review, debugging, and refactoring:
-
 1. start with the smallest local inspection that can answer the question
 2. widen scope only when necessary
 3. validate conclusions with the actual files being changed
