@@ -18,9 +18,6 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | [docs/test-plan.md](docs/test-plan.md) | RFC 6570 test coverage map, test scenarios by level and operator |
 | [docs/development.md](docs/development.md) | Build commands, test commands, NuGet packaging, CI/CD parity, code style, test conventions |
 | [docs/backlog.md](docs/backlog.md) | Deferred work and follow-ups |
-| [branching-pr-workflow.md](branching-pr-workflow.md) | Mandatory branching, commit, PR, merge, and validation workflow |
-| [versioning.md](versioning.md) | SemVer, version bump, release metadata, changelog, and tag policy |
-| [pr-review-remediation-loop.md](pr-review-remediation-loop.md) | External PR review feedback loop |
 | [AGENTS.md](AGENTS.md) | External AI reviewer (Codex) guidance |
 
 ## Solution Structure
@@ -32,22 +29,11 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 
 ## Multi-Agent Governance
 
-This repository uses a constrained multi-agent workflow.
+This repository uses a constrained multi-agent workflow powered by the `agent-framework@brenpike` plugin (configured in `.claude/settings.json`).
 
-Canonical governance files:
-- `agent-system-policy.md` - shared agent roles, authority, tool policy, escalation, and reporting
-- `branching-pr-workflow.md` - MANDATORY branching, commit, PR, merge, and validation workflow
-- `versioning.md` - MANDATORY SemVer and version bump policy
-- `pr-review-remediation-loop.md` - MANDATORY external PR review remediation loop
-- `AGENTS.md` - external AI reviewer (Codex) guidance
+Governance, agent roles, branching/commit/PR workflow, versioning policy, and PR review remediation are defined in the plugin. Canonical governance files are installed under `<claude-plugins-cache>/brenpike/agent-framework/<version>/governance/` by the Claude Code plugin system.
 
-These files must ALWAYS be respected unless the user says otherwise.
-
-Role-specific behavior is defined in:
-- `.claude/agents/orchestrator.md`
-- `.claude/agents/planner.md`
-- `.claude/agents/coder.md`
-- `.claude/agents/designer.md`
+External AI reviewer (Codex) guidance: `AGENTS.md`
 
 ## Build and Test Commands
 
