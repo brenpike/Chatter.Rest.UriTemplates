@@ -31,7 +31,7 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 
 This repository uses a constrained multi-agent workflow powered by the `agent-framework@brenpike` plugin (configured in `.claude/settings.json`).
 
-Governance, agent roles, branching/commit/PR workflow, versioning policy, and PR review remediation are defined in the plugin. See `C:/Users/brenp/.claude/plugins/cache/brenpike/agent-framework/0.3.1/governance/` for canonical governance files.
+Governance, agent roles, branching/commit/PR workflow, versioning policy, and PR review remediation are defined in the plugin. Canonical governance files are installed under `<claude-plugins-cache>/brenpike/agent-framework/<version>/governance/` by the Claude Code plugin system.
 
 External AI reviewer (Codex) guidance: `AGENTS.md`
 
