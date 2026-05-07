@@ -10,5 +10,5 @@ internal sealed class DotOperatorStrategy : IOperatorStrategy
 
     public string FormatValue(string varName, string encodedValue) => encodedValue;
 
-    public string Encode(string value) => UriTemplateExpander.EncodeUnreserved(value);
+    public string Encode(string value) => UriTemplateEncoder.EncodeUnreserved(value);
 }

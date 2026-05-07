@@ -10,5 +10,5 @@ internal sealed class PlusOperatorStrategy : IOperatorStrategy
 
     public string FormatValue(string varName, string encodedValue) => encodedValue;
 
-    public string Encode(string value) => UriTemplateExpander.EncodeReserved(value);
+    public string Encode(string value) => UriTemplateEncoder.EncodeReserved(value);
 }

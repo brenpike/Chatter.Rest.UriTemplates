@@ -10,5 +10,5 @@ internal sealed class SemicolonOperatorStrategy : IOperatorStrategy
 
     public string FormatValue(string varName, string encodedValue) => varName + "=" + encodedValue;
 
-    public string Encode(string value) => UriTemplateExpander.EncodeUnreserved(value);
+    public string Encode(string value) => UriTemplateEncoder.EncodeUnreserved(value);
 }
