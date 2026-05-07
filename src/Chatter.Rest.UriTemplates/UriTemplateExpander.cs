@@ -33,7 +33,7 @@ internal static class UriTemplateExpander
 
     internal static string Expand(UriTemplateExpression expression, IDictionary<string, object?> variables)
     {
-        var op = expression.Operator;
+        var strategy = OperatorStrategyFactory.For(expression.Operator);
         var parts = new List<string>();
 
         foreach (var varSpec in expression.Variables)
@@ -49,19 +49,19 @@ internal static class UriTemplateExpander
             // Type dispatch: string first (string is IEnumerable<char>), then dict, then list, then fail.
             if (rawValue is string stringValue)
             {
-                ExpandString(op, varSpec, varName, stringValue, parts);
+                ExpandString(strategy, varSpec, varName, stringValue, parts);
             }
             else if (rawValue is IDictionary<string, string> dictValue)
             {
-                ExpandAssociativeArray(op, varSpec, varName, dictValue, parts);
+                ExpandAssociativeArray(strategy, varSpec, varName, dictValue, parts);
             }
             else if (rawValue is IEnumerable<KeyValuePair<string, string>> kvpEnumerable)
             {
-                ExpandAssociativeArray(op, varSpec, varName, kvpEnumerable, parts);
+                ExpandAssociativeArray(strategy, varSpec, varName, kvpEnumerable, parts);
             }
             else if (rawValue is IEnumerable<string> listValue)
             {
-                ExpandList(op, varSpec, varName, listValue, parts);
+                ExpandList(strategy, varSpec, varName, listValue, parts);
             }
             else
             {
@@ -76,9 +76,8 @@ internal static class UriTemplateExpander
             return "";
         }
 
-        var separator = GetSeparator(op);
-        var joined = JoinParts(parts, separator);
-        var prefix = GetPrefix(op);
+        var joined = JoinParts(parts, strategy.Separator);
+        var prefix = strategy.Prefix;
 
         if (prefix.Length > 0)
         {
@@ -89,7 +88,7 @@ internal static class UriTemplateExpander
     }
 
     private static void ExpandString(
-        UriTemplateOperator op,
+        IOperatorStrategy strategy,
         UriTemplateVarSpec varSpec,
         string varName,
         string value,
@@ -104,18 +103,18 @@ internal static class UriTemplateExpander
         if (value.Length == 0)
         {
             // Empty value: apply operator-specific empty-value rule
-            parts.Add(FormatEmpty(op, varName));
+            parts.Add(strategy.FormatEmpty(varName));
         }
         else
         {
             // Non-empty value: encode and format
-            var encoded = Encode(op, value);
-            parts.Add(FormatValue(op, varName, encoded));
+            var encoded = strategy.Encode(value);
+            parts.Add(strategy.FormatValue(varName, encoded));
         }
     }
 
     private static void ExpandList(
-        UriTemplateOperator op,
+        IOperatorStrategy strategy,
         UriTemplateVarSpec varSpec,
         string varName,
         IEnumerable<string> list,
@@ -148,16 +147,16 @@ internal static class UriTemplateExpander
 
         if (varSpec.Explode)
         {
-            ExpandListExplode(op, varName, items, parts);
+            ExpandListExplode(strategy, varName, items, parts);
         }
         else
         {
-            ExpandListNoExplode(op, varName, items, parts);
+            ExpandListNoExplode(strategy, varName, items, parts);
         }
     }
 
     private static void ExpandListNoExplode(
-        UriTemplateOperator op,
+        IOperatorStrategy strategy,
         string varName,
         List<string> items,
         List<string> parts)
@@ -170,13 +169,13 @@ internal static class UriTemplateExpander
             {
                 sb.Append(',');
             }
-            sb.Append(Encode(op, items[i]));
+            sb.Append(strategy.Encode(items[i]));
         }
 
         var compositeValue = sb.ToString();
 
         // Format with operator prefix and (for named operators) the variable name
-        if (IsNamedOperator(op))
+        if (strategy.IsNamed)
         {
             parts.Add(varName + "=" + compositeValue);
         }
@@ -187,50 +186,36 @@ internal static class UriTemplateExpander
     }
 
     private static void ExpandListExplode(
-        UriTemplateOperator op,
+        IOperatorStrategy strategy,
         string varName,
         List<string> items,
         List<string> parts)
     {
-        if (IsNamedOperator(op))
+        if (strategy.IsNamed)
         {
-            // Each member becomes varname=encodedMember, joined by operator separator.
-            // ifEmp rules apply per member.
             for (var i = 0; i < items.Count; i++)
             {
                 if (items[i].Length == 0)
                 {
-                    // Empty member: apply ifEmp rule per operator.
-                    // Semicolon: varname (no =)
-                    // Query/Ampersand: varname=
-                    if (op == UriTemplateOperator.Semicolon)
-                    {
-                        parts.Add(varName);
-                    }
-                    else
-                    {
-                        parts.Add(varName + "=");
-                    }
+                    parts.Add(strategy.FormatEmpty(varName));
                 }
                 else
                 {
-                    var encodedMember = Encode(op, items[i]);
-                    parts.Add(varName + "=" + encodedMember);
+                    parts.Add(strategy.FormatValue(varName, strategy.Encode(items[i])));
                 }
             }
         }
         else
         {
-            // Each member becomes a value-only segment
             for (var i = 0; i < items.Count; i++)
             {
-                parts.Add(Encode(op, items[i]));
+                parts.Add(strategy.Encode(items[i]));
             }
         }
     }
 
     private static void ExpandAssociativeArray(
-        UriTemplateOperator op,
+        IOperatorStrategy strategy,
         UriTemplateVarSpec varSpec,
         string varName,
         IEnumerable<KeyValuePair<string, string>> pairs,
@@ -270,16 +255,16 @@ internal static class UriTemplateExpander
 
         if (varSpec.Explode)
         {
-            ExpandAssocExplode(op, varName, pairList, parts);
+            ExpandAssocExplode(strategy, varName, pairList, parts);
         }
         else
         {
-            ExpandAssocNoExplode(op, varName, pairList, parts);
+            ExpandAssocNoExplode(strategy, varName, pairList, parts);
         }
     }
 
     private static void ExpandAssocNoExplode(
-        UriTemplateOperator op,
+        IOperatorStrategy strategy,
         string varName,
         List<KeyValuePair<string, string>> pairs,
         List<string> parts)
@@ -293,15 +278,15 @@ internal static class UriTemplateExpander
             {
                 sb.Append(',');
             }
-            sb.Append(Encode(op, pairs[i].Key));
+            sb.Append(strategy.Encode(pairs[i].Key));
             sb.Append(',');
-            sb.Append(Encode(op, pairs[i].Value));
+            sb.Append(strategy.Encode(pairs[i].Value));
         }
 
         var compositeValue = sb.ToString();
 
         // Format with operator prefix and (for named operators) the variable name
-        if (IsNamedOperator(op))
+        if (strategy.IsNamed)
         {
             parts.Add(varName + "=" + compositeValue);
         }
@@ -312,32 +297,22 @@ internal static class UriTemplateExpander
     }
 
     private static void ExpandAssocExplode(
-        UriTemplateOperator op,
+        IOperatorStrategy strategy,
         string varName,
         List<KeyValuePair<string, string>> pairs,
         List<string> parts)
     {
-        // Each pair becomes key=value, joined by operator separator.
-        // For named operators with empty value: ; produces key only (no =); ?/& produce key=.
         for (var i = 0; i < pairs.Count; i++)
         {
-            var encodedKey = Encode(op, pairs[i].Key);
+            var encodedKey = strategy.Encode(pairs[i].Key);
 
-            if (IsNamedOperator(op) && pairs[i].Value.Length == 0)
+            if (strategy.IsNamed && pairs[i].Value.Length == 0)
             {
-                // ifEmp rules per operator
-                if (op == UriTemplateOperator.Semicolon)
-                {
-                    parts.Add(encodedKey);
-                }
-                else
-                {
-                    parts.Add(encodedKey + "=");
-                }
+                parts.Add(strategy.FormatEmpty(encodedKey));
             }
             else
             {
-                var encodedValue = Encode(op, pairs[i].Value);
+                var encodedValue = strategy.Encode(pairs[i].Value);
                 parts.Add(encodedKey + "=" + encodedValue);
             }
         }
@@ -374,103 +349,6 @@ internal static class UriTemplateExpander
         return value.Substring(0, i);
     }
 
-    private static bool IsNamedOperator(UriTemplateOperator op)
-    {
-        return op == UriTemplateOperator.Semicolon ||
-               op == UriTemplateOperator.Query ||
-               op == UriTemplateOperator.Ampersand;
-    }
-
-    private static string FormatEmpty(UriTemplateOperator op, string varName)
-    {
-        switch (op)
-        {
-            case UriTemplateOperator.None:
-            case UriTemplateOperator.Plus:
-                return "";
-            case UriTemplateOperator.Hash:
-                return "";
-            case UriTemplateOperator.Dot:
-                return "";
-            case UriTemplateOperator.Slash:
-                return "";
-            case UriTemplateOperator.Semicolon:
-                return varName;
-            case UriTemplateOperator.Query:
-            case UriTemplateOperator.Ampersand:
-                return varName + "=";
-            default:
-                return "";
-        }
-    }
-
-    private static string FormatValue(UriTemplateOperator op, string varName, string encodedValue)
-    {
-        switch (op)
-        {
-            case UriTemplateOperator.None:
-            case UriTemplateOperator.Plus:
-            case UriTemplateOperator.Hash:
-            case UriTemplateOperator.Dot:
-            case UriTemplateOperator.Slash:
-                return encodedValue;
-            case UriTemplateOperator.Semicolon:
-            case UriTemplateOperator.Query:
-            case UriTemplateOperator.Ampersand:
-                return varName + "=" + encodedValue;
-            default:
-                return encodedValue;
-        }
-    }
-
-    private static string Encode(UriTemplateOperator op, string value)
-    {
-        switch (op)
-        {
-            case UriTemplateOperator.Plus:
-            case UriTemplateOperator.Hash:
-                return EncodeReserved(value);
-            default:
-                return EncodeUnreserved(value);
-        }
-    }
-
-    private static string GetPrefix(UriTemplateOperator op)
-    {
-        switch (op)
-        {
-            case UriTemplateOperator.Hash: return "#";
-            case UriTemplateOperator.Dot: return ".";
-            case UriTemplateOperator.Slash: return "/";
-            case UriTemplateOperator.Semicolon: return ";";
-            case UriTemplateOperator.Query: return "?";
-            case UriTemplateOperator.Ampersand: return "&";
-            default: return "";
-        }
-    }
-
-    private static string GetSeparator(UriTemplateOperator op)
-    {
-        switch (op)
-        {
-            case UriTemplateOperator.None:
-            case UriTemplateOperator.Plus:
-            case UriTemplateOperator.Hash:
-                return ",";
-            case UriTemplateOperator.Dot:
-                return ".";
-            case UriTemplateOperator.Slash:
-                return "/";
-            case UriTemplateOperator.Semicolon:
-                return ";";
-            case UriTemplateOperator.Query:
-            case UriTemplateOperator.Ampersand:
-                return "&";
-            default:
-                return ",";
-        }
-    }
-
     private static string JoinParts(List<string> parts, string separator)
     {
         var sb = new StringBuilder();
@@ -485,7 +363,7 @@ internal static class UriTemplateExpander
         return sb.ToString();
     }
 
-    private static string EncodeUnreserved(string value)
+    internal static string EncodeUnreserved(string value)
     {
         var sb = new StringBuilder();
         var bytes = Encoding.UTF8.GetBytes(value);
@@ -506,7 +384,7 @@ internal static class UriTemplateExpander
         return sb.ToString();
     }
 
-    private static string EncodeReserved(string value)
+    internal static string EncodeReserved(string value)
     {
         var sb = new StringBuilder();
         var bytes = Encoding.UTF8.GetBytes(value);
@@ -540,7 +418,7 @@ internal static class UriTemplateExpander
         return sb.ToString();
     }
 
-    private static bool IsUnreservedChar(char c)
+    internal static bool IsUnreservedChar(char c)
     {
         return (c >= 'A' && c <= 'Z') ||
                (c >= 'a' && c <= 'z') ||
@@ -548,7 +426,7 @@ internal static class UriTemplateExpander
                c == '-' || c == '.' || c == '_' || c == '~';
     }
 
-    private static bool IsReservedChar(char c)
+    internal static bool IsReservedChar(char c)
     {
         // gen-delims: : / ? # [ ] @
         // sub-delims: ! $ & ' ( ) * + , ; =
@@ -580,7 +458,7 @@ internal static class UriTemplateExpander
         }
     }
 
-    private static bool IsHexDigit(char c)
+    internal static bool IsHexDigit(char c)
     {
         return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
     }
