@@ -33,6 +33,8 @@ public abstract class UriTemplateValue
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pairs"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when any key or value in <paramref name="pairs"/> is null.</exception>
     public static DictionaryValue From(IDictionary<string, string> pairs) => new DictionaryValue(pairs);
+
+    internal abstract object? ToRawValue();
 }
 
 public sealed class StringValue : UriTemplateValue
@@ -43,6 +45,8 @@ public sealed class StringValue : UriTemplateValue
         if (value is null) throw new ArgumentNullException(nameof(value));
         Value = value;
     }
+
+    internal override object? ToRawValue() => Value;
 }
 
 public sealed class ListValue : UriTemplateValue
@@ -59,6 +63,8 @@ public sealed class ListValue : UriTemplateValue
         }
         Values = list.AsReadOnly();
     }
+
+    internal override object? ToRawValue() => new List<string>(Values);
 }
 
 public sealed class DictionaryValue : UriTemplateValue
@@ -76,4 +82,6 @@ public sealed class DictionaryValue : UriTemplateValue
         }
         Pairs = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(dict);
     }
+
+    internal override object? ToRawValue() => new Dictionary<string, string>(Pairs);
 }

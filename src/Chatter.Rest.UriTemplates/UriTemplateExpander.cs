@@ -13,22 +13,7 @@ internal static class UriTemplateExpander
                 nameof(value));
         }
 
-        switch (value)
-        {
-            case StringValue s:
-                return s.Value;
-            case ListValue l:
-                return new List<string>(l.Values);
-            case DictionaryValue d:
-                var dict = new Dictionary<string, string>();
-                foreach (var kvp in d.Pairs)
-                {
-                    dict[kvp.Key] = kvp.Value;
-                }
-                return dict;
-            default:
-                return null;
-        }
+        return value.ToRawValue();
     }
 
     internal static string Expand(UriTemplateExpression expression, IDictionary<string, object?> variables)
