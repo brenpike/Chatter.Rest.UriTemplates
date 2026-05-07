@@ -2,8 +2,10 @@ using System.Text;
 
 namespace Chatter.Rest.UriTemplates;
 
-internal static class UriTemplateExpander
+internal sealed class UriTemplateExpander : IUriTemplateExpander
 {
+    internal static readonly UriTemplateExpander Default = new UriTemplateExpander();
+
     internal static object? MapValue(string key, UriTemplateValue value)
     {
         if (value is null)
@@ -16,7 +18,7 @@ internal static class UriTemplateExpander
         return value.ToRawValue();
     }
 
-    internal static string Expand(UriTemplateExpression expression, IDictionary<string, object?> variables)
+    public string Expand(UriTemplateExpression expression, IDictionary<string, object?> variables)
     {
         var strategy = OperatorStrategyFactory.For(expression.Operator);
         var parts = new List<string>();

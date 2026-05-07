@@ -2,12 +2,14 @@ using System.Text;
 
 namespace Chatter.Rest.UriTemplates;
 
-internal static class UriTemplateParser
+internal sealed class UriTemplateParser : IUriTemplateParser
 {
+    internal static readonly UriTemplateParser Default = new UriTemplateParser();
+
     private static readonly char[] OperatorChars = { '+', '#', '.', '/', ';', '?', '&' };
     private static readonly char[] ReservedOperatorChars = { '=', ',', '!', '@', '|' };
 
-    internal static IReadOnlyList<object> Parse(string template)
+    public IReadOnlyList<object> Parse(string template)
     {
         var tokens = new List<object>();
         var pos = 0;

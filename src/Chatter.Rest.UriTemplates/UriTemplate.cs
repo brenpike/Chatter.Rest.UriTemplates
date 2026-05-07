@@ -3,15 +3,22 @@ namespace Chatter.Rest.UriTemplates;
 public sealed class UriTemplate
 {
     private readonly IReadOnlyList<object> _tokens;
+    private readonly IUriTemplateExpander _expander;
 
     public UriTemplate(string template)
+        : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
+    {
+    }
+
+    internal UriTemplate(string template, IUriTemplateParser parser, IUriTemplateExpander expander)
     {
         if (template is null)
         {
             throw new ArgumentNullException(nameof(template));
         }
 
-        _tokens = UriTemplateParser.Parse(template);
+        _tokens = parser.Parse(template);
+        _expander = expander;
     }
 
     /// <summary>
@@ -125,7 +132,7 @@ public sealed class UriTemplate
             }
             else if (token is UriTemplateExpression expression)
             {
-                sb.Append(UriTemplateExpander.Expand(expression, ordinalVariables));
+                sb.Append(_expander.Expand(expression, ordinalVariables));
             }
         }
 
