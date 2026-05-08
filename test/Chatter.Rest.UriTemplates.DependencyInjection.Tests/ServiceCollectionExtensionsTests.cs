@@ -45,7 +45,7 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddUriTemplates_IUriTemplateFactory_IsSingleton()
+    public void AddUriTemplates_IUriTemplateFactory_IsTransient()
     {
         var services = new ServiceCollection();
 
@@ -54,7 +54,35 @@ public class ServiceCollectionExtensionsTests
         using var provider = services.BuildServiceProvider();
         var first = provider.GetRequiredService<IUriTemplateFactory>();
         var second = provider.GetRequiredService<IUriTemplateFactory>();
-        ReferenceEquals(first, second).Should().BeTrue();
+        ReferenceEquals(first, second).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AddUriTemplates_ScopedCustomParser_ResolvableFromScope()
+    {
+        var services = new ServiceCollection();
+
+        services.AddScoped<IUriTemplateParser, StubUriTemplateParser>();
+        services.AddUriTemplates();
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<IUriTemplateFactory>();
+        factory.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void AddUriTemplates_TransientCustomParser_ResolvableFromScope()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTransient<IUriTemplateParser, StubUriTemplateParser>();
+        services.AddUriTemplates();
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+        var factory = scope.ServiceProvider.GetRequiredService<IUriTemplateFactory>();
+        factory.Should().NotBeNull();
     }
 
     [Fact]
