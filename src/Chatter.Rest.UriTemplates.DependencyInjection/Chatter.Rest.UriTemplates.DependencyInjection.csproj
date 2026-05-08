@@ -5,26 +5,25 @@
     <LangVersion>10.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>0.2.1</Version>
+    <Version>0.1.0</Version>
     <Authors>Brennan Pike</Authors>
     <Owners>Brennan Pike</Owners>
-    <Description>RFC 6570 URI Template expansion for .NET (Levels 1–4)</Description>
-    <PackageId>Chatter.Rest.UriTemplates</PackageId>
+    <Description>Dependency injection extensions for Chatter.Rest.UriTemplates</Description>
+    <PackageId>Chatter.Rest.UriTemplates.DependencyInjection</PackageId>
     <RepositoryUrl>https://github.com/brenpike/Chatter.Rest.UriTemplates</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>.net;Chatter;REST;URI Templates;RFC 6570</PackageTags>
+    <PackageTags>.net;Chatter;REST;URI Templates;RFC 6570;DependencyInjection</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IsPackable>true</IsPackable>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>$(AssemblyName).Tests</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>Chatter.Rest.UriTemplates.DependencyInjection</_Parameter1>
-    </AssemblyAttribute>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj" />
   </ItemGroup>
 
 </Project>
