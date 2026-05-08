@@ -14,13 +14,17 @@ src/
   Chatter.Rest.UriTemplates/
     Chatter.Rest.UriTemplates.csproj     <- targets net8.0;netstandard2.0
     UriTemplate.cs                        <- public entry point
+    IUriTemplateParser.cs
+    IUriTemplateFactory.cs
+    UriTemplateToken.cs
     UriTemplateOperator.cs
-    UriTemplateExpression.cs
+    UriTemplateVarSpec.cs
     UriTemplateParser.cs
     UriTemplateExpander.cs
+    UriTemplateFactory.cs
   Chatter.Rest.UriTemplates.DependencyInjection/
     Chatter.Rest.UriTemplates.DependencyInjection.csproj  <- targets net8.0;netstandard2.0
-    UriTemplateServiceCollectionExtensions.cs             <- public DI registration helpers
+    ServiceCollectionExtensions.cs        <- AddUriTemplates() extension method
 test/
   Chatter.Rest.UriTemplates.Tests/
     Chatter.Rest.UriTemplates.Tests.csproj  <- targets net8.0
@@ -30,6 +34,9 @@ test/
     UriTemplateLevel4Tests.cs
     UriTemplateEdgeCaseTests.cs
     UriTemplateGetVariablesTests.cs
+  Chatter.Rest.UriTemplates.DependencyInjection.Tests/
+    Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj  <- targets net8.0
+    ServiceCollectionExtensionsTests.cs
 ```
 
 **Target frameworks:**
@@ -70,8 +77,15 @@ dotnet test --filter FullyQualifiedName~Level1
 CI runs tests with `-c Release --no-build` after a Release build step. To replicate exactly:
 
 ```bash
+# Core package CI/CD test parity (uritemplate-cicd.yml)
 dotnet build -c Release --no-restore
 dotnet test test/Chatter.Rest.UriTemplates.Tests/Chatter.Rest.UriTemplates.Tests.csproj -c Release --no-build
+```
+
+```bash
+# DI package CI/CD test parity (uritemplate-di-cicd.yml)
+dotnet build -c Release --no-restore
+dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj -c Release --no-build
 ```
 
 **Test classes:**
@@ -101,18 +115,40 @@ Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.1.1.
 
 ## 6. CI/CD Parity
 
-Single workflow in `.github/workflows/uritemplate-cicd.yml`.
+Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGet package independently.
+
+### Core package — `uritemplate-cicd.yml`
 
 | Trigger | Condition |
 |---|---|
-| Push | `feature/**` branches (path-scoped to `src/` and `test/`) |
-| Push | `main` |
-| Pull request | targeting `main` (path-scoped) |
+| Push | `feature/**`, `bugfix/**`, `hotfix/**`, `refactor/**`, `chore/**`, `docs/**`, `test/**`, `ci/**`, `main` (path-scoped to `src/Chatter.Rest.UriTemplates/` and `test/Chatter.Rest.UriTemplates.Tests/`) |
+| Pull request | targeting `main` (same path scope) |
 | Manual | `workflow_dispatch` |
 
-**Build job:** restore (`--locked-mode`), build (`-c Release`), test, pack, upload artifact.
+### DI package — `uritemplate-di-cicd.yml`
 
-**Deploy job:** runs only when `github.ref == 'refs/heads/main'` (after successful PR merge). Pushes package to NuGet.org via `NUGET_API_KEY_CHATTER_URITEMPLATE` secret.
+| Trigger | Condition |
+|---|---|
+| Push | same branch patterns (path-scoped to `src/Chatter.Rest.UriTemplates.DependencyInjection/` and `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`) |
+| Pull request | targeting `main` (same path scope) |
+| Manual | `workflow_dispatch` |
+
+### Reusable workflows
+
+| File | Purpose |
+|---|---|
+| `version-check.yml` | Checks that the csproj `<Version>` is strictly greater than the latest release tag. Runs on pull requests only. Bootstraps (passes) when no tags exist yet. |
+| `create-version-tag.yml` | Creates an annotated git tag (`{prefix}/vX.Y.Z`) after a successful deploy. Runs on main push only. |
+
+### Job structure (both workflows)
+
+**build:** restore (`--locked-mode`), build (`-c Release`), test (package-scoped), pack (package-scoped), upload artifact.
+
+**version-check:** calls `version-check.yml`. Runs on pull requests only. Tag prefixes: `uritemplate` (core), `uritemplate-di` (DI).
+
+**deploy:** runs only when `github.ref == 'refs/heads/main'` (after successful PR merge). Downloads artifact, pushes `*.nupkg` to NuGet.org via `NUGET_API_KEY_CHATTER_URITEMPLATE` secret. Uses `--skip-duplicate` so both workflows can push safely.
+
+**tag:** calls `create-version-tag.yml`. Runs after deploy on main push. Tag format: `uritemplate/vX.Y.Z` (core) or `uritemplate-di/vX.Y.Z` (DI).
 
 ## 7. Code Style
 
@@ -132,4 +168,4 @@ All projects have `<Nullable>enable</Nullable>`.
 - **Coverage:** coverlet.msbuild
 - **Test naming:** `Method_Scenario_Expected` — e.g., `Expand_WithUndefinedVariable_OmitsVariable`
 - **Test data:** all inline (no JSON fixture files)
-- **InternalsVisibleTo:** configured in `Chatter.Rest.UriTemplates.csproj` — internal types (`UriTemplateParser`, `UriTemplateExpander`, `UriTemplateExpression`, `UriTemplateOperator`) are accessible in tests
+- **InternalsVisibleTo:** configured in `Chatter.Rest.UriTemplates.csproj` — internal types (`UriTemplateParser`, `UriTemplateExpander`, `UriTemplateFactory`) are accessible in tests

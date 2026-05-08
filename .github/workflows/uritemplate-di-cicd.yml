@@ -1,4 +1,4 @@
-name: UriTemplates CI/CD
+name: UriTemplates DI CI/CD
 
 on:
   workflow_dispatch:
@@ -20,17 +20,17 @@ on:
       - 'ci/**'
       - main
     paths:
-      - '**/src/Chatter.Rest.UriTemplates/**'
-      - '.github/workflows/uritemplate-cicd.yml'
-      - '**/test/Chatter.Rest.UriTemplates.Tests/**'
+      - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
+      - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
+      - '.github/workflows/uritemplate-di-cicd.yml'
 
   pull_request:
     branches:
       - main
     paths:
-      - '**/src/Chatter.Rest.UriTemplates/**'
-      - '.github/workflows/uritemplate-cicd.yml'
-      - '**/test/Chatter.Rest.UriTemplates.Tests/**'
+      - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
+      - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
+      - '.github/workflows/uritemplate-di-cicd.yml'
 
 env:
   dotnet-version: '8.0.x'
@@ -63,16 +63,16 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
-      - name: Test
-        run: dotnet test test/Chatter.Rest.UriTemplates.Tests/Chatter.Rest.UriTemplates.Tests.csproj -c Release --no-build
+      - name: Test (DI)
+        run: dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj -c Release --no-build
 
-      - name: Pack
-        run: dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release --no-build -o publish/nuget
+      - name: Pack (DI)
+        run: dotnet pack src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj -c Release --no-build -o publish/nuget
 
       - name: Upload NuGet
         uses: actions/upload-artifact@v6
         with:
-          name: nuget-uritemplate
+          name: nuget-uritemplate-di
           path: publish/nuget/**
           retention-days: 5
           if-no-files-found: error
@@ -82,9 +82,9 @@ jobs:
     uses: ./.github/workflows/version-check.yml
     if: github.event_name == 'pull_request'
     with:
-      src-path: 'src/Chatter.Rest.UriTemplates/'
-      csproj-path: 'src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj'
-      tag-prefix: 'uritemplate'
+      src-path: 'src/Chatter.Rest.UriTemplates.DependencyInjection/'
+      csproj-path: 'src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj'
+      tag-prefix: 'uritemplate-di'
 
   deploy:
     name: deploy
@@ -106,7 +106,7 @@ jobs:
       - name: Download NuGet
         uses: actions/download-artifact@v6
         with:
-          name: nuget-uritemplate
+          name: nuget-uritemplate-di
           path: ./dist/nuget
 
       - name: Push NuGet packages
@@ -125,6 +125,6 @@ jobs:
     permissions:
       contents: write
     with:
-      csproj-path: 'src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj'
-      tag-prefix: 'uritemplate'
-      package-name: 'Chatter.Rest.UriTemplates'
+      csproj-path: 'src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj'
+      tag-prefix: 'uritemplate-di'
+      package-name: 'Chatter.Rest.UriTemplates.DependencyInjection'
