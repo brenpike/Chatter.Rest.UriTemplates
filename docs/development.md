@@ -129,7 +129,7 @@ Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGe
 
 | Trigger | Condition |
 |---|---|
-| Push | same branch patterns (path-scoped to `src/Chatter.Rest.UriTemplates.DependencyInjection/` and `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`) |
+| Push | same branch patterns (path-scoped to `src/Chatter.Rest.UriTemplates.DependencyInjection/`, `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`, and `src/Chatter.Rest.UriTemplates/` to catch DI integration impact of core changes) |
 | Pull request | targeting `main` (same path scope) |
 | Manual | `workflow_dispatch` |
 
