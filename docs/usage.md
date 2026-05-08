@@ -58,6 +58,14 @@ Constructor. Parses the template string eagerly on construction.
 var template = new UriTemplate("/search{?q,lang}");
 ```
 
+### `IUriTemplateFactory.Create(string template)`
+
+DI alternative to calling `new UriTemplate()` directly. Inject `IUriTemplateFactory` and call `Create` to obtain a `UriTemplate` instance. Available via the `Chatter.Rest.UriTemplates.DependencyInjection` package. See [Section 11 — Dependency Injection](#11-dependency-injection) for setup and usage.
+
+```csharp
+UriTemplate template = factory.Create("/orders{?status,page}");
+```
+
 ### `string Expand(IDictionary<string, string> variables)`
 
 Expands the URI template using the provided variable dictionary.
@@ -529,3 +537,59 @@ var uri = new UriTemplate("/users/{id}{?tag*}").Expand(new Dictionary<string, Ur
 | `Expand(params (string, object?)[])` | Quick inline calls with mixed value types (string, list, dict). |
 
 The `object?` and `UriTemplateValue` overloads (both dictionary and tuple forms) produce identical expansion results. Choose `UriTemplateValue` when you want the compiler to catch invalid value types instead of getting a `FormatException` at runtime. The tuple overloads delegate to their dictionary counterparts, adding only first-wins duplicate handling.
+
+---
+
+## 11. Dependency Injection
+
+The `Chatter.Rest.UriTemplates.DependencyInjection` package provides integration with `Microsoft.Extensions.DependencyInjection`.
+
+### Installation
+
+```bash
+dotnet add package Chatter.Rest.UriTemplates.DependencyInjection
+```
+
+### Service Registration
+
+Call `AddUriTemplates()` on your `IServiceCollection` during startup:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+
+var services = new ServiceCollection();
+services.AddUriTemplates();
+```
+
+This registers:
+
+- `IUriTemplateParser` as a **singleton** — the stateless parser is shared across the application.
+- `IUriTemplateFactory` as **transient** — a new factory instance is resolved each time, using the parser from the current scope.
+
+Both registrations use `TryAdd`, so they will not override any custom registrations you have already added to the container.
+
+### Using `IUriTemplateFactory`
+
+Inject `IUriTemplateFactory` and call `Create` to build `UriTemplate` instances:
+
+```csharp
+using Chatter.Rest.UriTemplates;
+
+public class OrderClient
+{
+    private readonly IUriTemplateFactory _templateFactory;
+
+    public OrderClient(IUriTemplateFactory templateFactory)
+    {
+        _templateFactory = templateFactory;
+    }
+
+    public string BuildOrderUri(string status, string page)
+    {
+        var template = _templateFactory.Create("/orders{?status,page}");
+        return template.Expand(("status", status), ("page", page));
+    }
+}
+```
+
+`IUriTemplateFactory.Create(string template)` returns a `UriTemplate` instance with the same behavior as `new UriTemplate(string)` — the same `Expand` overloads, `GetVariables()`, and encoding rules apply. Use the factory when you want to avoid a direct dependency on the `UriTemplate` constructor for testability or when the parser/expander implementations are provided through the container.
