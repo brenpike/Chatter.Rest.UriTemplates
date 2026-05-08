@@ -2,7 +2,7 @@ namespace Chatter.Rest.UriTemplates;
 
 public sealed class UriTemplate
 {
-    private readonly IReadOnlyList<object> _tokens;
+    private readonly IReadOnlyList<UriTemplateToken> _tokens;
     private readonly IUriTemplateExpander _expander;
 
     public UriTemplate(string template)
@@ -126,11 +126,11 @@ public sealed class UriTemplate
 
         foreach (var token in _tokens)
         {
-            if (token is string literal)
+            if (token is UriTemplateLiteralToken literal)
             {
-                sb.Append(literal);
+                sb.Append(literal.Value);
             }
-            else if (token is UriTemplateExpression expression)
+            else if (token is UriTemplateExpressionToken expression)
             {
                 sb.Append(_expander.Expand(expression, ordinalVariables));
             }
@@ -214,7 +214,7 @@ public sealed class UriTemplate
 
         foreach (var token in _tokens)
         {
-            if (token is UriTemplateExpression expression)
+            if (token is UriTemplateExpressionToken expression)
             {
                 foreach (var varSpec in expression.Variables)
                 {

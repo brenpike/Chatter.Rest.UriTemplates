@@ -18,7 +18,7 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
         return value.ToRawValue();
     }
 
-    public string Expand(UriTemplateExpression expression, IDictionary<string, object?> variables)
+    public string Expand(UriTemplateExpressionToken expression, IDictionary<string, object?> variables)
     {
         var strategy = OperatorStrategyFactory.For(expression.Operator);
         var parts = new List<string>();

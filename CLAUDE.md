@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-4. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with prefix modifier, explode modifier, list value, and associative-array value support. No external NuGet dependencies.
+Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-4. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with prefix modifier, explode modifier, list value, and associative-array value support. The core package has no external NuGet dependencies. A companion DI extension package (`Chatter.Rest.UriTemplates.DependencyInjection`) depends on `Microsoft.Extensions.DependencyInjection.Abstractions 8.0.0`.
 
 **Repository:** https://github.com/brenpike/Chatter.Rest.UriTemplates
 **RFC 6570 Specification:** https://datatracker.ietf.org/doc/html/rfc6570
@@ -25,6 +25,7 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | Project | NuGet Package |
 |---|---|
 | `src/Chatter.Rest.UriTemplates/` | `Chatter.Rest.UriTemplates` |
+| `src/Chatter.Rest.UriTemplates.DependencyInjection/` | `Chatter.Rest.UriTemplates.DependencyInjection` |
 | `test/Chatter.Rest.UriTemplates.Tests/` | - |
 
 ## Multi-Agent Governance
@@ -53,7 +54,7 @@ See [docs/development.md](docs/development.md) for editorconfig rules (line endi
 
 Additional conventions observed in the codebase:
 
-- `UriTemplate` is the only public type; all other types (`UriTemplateParser`, `UriTemplateExpander`, `UriTemplateExpression`, `UriTemplateOperator`) are internal
+- Public API (`Chatter.Rest.UriTemplates` package): `UriTemplate`, `IUriTemplateParser`, `IUriTemplateFactory`, `UriTemplateToken` (abstract base), `UriTemplateLiteralToken`, `UriTemplateExpressionToken`, `UriTemplateOperator`, `UriTemplateVarSpec`; public API (`Chatter.Rest.UriTemplates.DependencyInjection` package): `ServiceCollectionExtensions` (`AddUriTemplates` extension method); internal implementation types (not public): `UriTemplateParser`, `UriTemplateExpander`, `UriTemplateFactory`; `UriTemplateExpression` was removed (replaced by `UriTemplateExpressionToken`)
 - All types use the `Chatter.Rest.UriTemplates` namespace
 - Internal members are exposed to test assembly via `InternalsVisibleTo` in the csproj
 
@@ -74,11 +75,12 @@ See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
 | Artifact | NuGet Package ID | Current Version |
 |---|---|---|
-| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.2.1` |
+| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.3.0` |
+| `Chatter.Rest.UriTemplates.DependencyInjection` | `Chatter.Rest.UriTemplates.DependencyInjection` | `0.1.1` |
 
 ### Canonical Version Source
 
-`src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element is the single source of truth.
+`src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element is the single source of truth for the core package. `src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj` — `<Version>` element is the single source of truth for the DI extension package (versioned independently).
 
 ### Files to Update Atomically on Version Bump
 
@@ -88,10 +90,17 @@ All of the following must be updated together in the same commit when bumping `C
 2. `CLAUDE.md` — version in this table
 3. `docs/development.md` — line that reads `Package ID: \`Chatter.Rest.UriTemplates\` vX.Y.Z`
 
+All of the following must be updated together in the same commit when bumping `Chatter.Rest.UriTemplates.DependencyInjection`:
+
+1. `src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj` — `<Version>` element (canonical)
+2. `CLAUDE.md` — version in the Artifact table
+3. `docs/development.md` — line that reads `Package ID: \`Chatter.Rest.UriTemplates.DependencyInjection\` vX.Y.Z`
+
 ### Bump-Triggering Paths
 
 A version bump is required when a PR modifies any file under:
 - `src/Chatter.Rest.UriTemplates/**`
+- `src/Chatter.Rest.UriTemplates.DependencyInjection/**`
 
 No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root), agent framework files.
 

@@ -14,16 +14,20 @@ on:
       - main
     paths:
       - '**/src/Chatter.Rest.UriTemplates/**'
+      - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
       - '.github/workflows/uritemplate-cicd.yml'
       - '**/test/Chatter.Rest.UriTemplates.Tests/**'
+      - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
 
   pull_request:
     branches:
       - main
     paths:
       - '**/src/Chatter.Rest.UriTemplates/**'
+      - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
       - '.github/workflows/uritemplate-cicd.yml'
       - '**/test/Chatter.Rest.UriTemplates.Tests/**'
+      - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
 
 env:
   dotnet-version: '8.0.x'
@@ -59,8 +63,14 @@ jobs:
       - name: Test
         run: dotnet test test/Chatter.Rest.UriTemplates.Tests/Chatter.Rest.UriTemplates.Tests.csproj -c Release --no-build
 
+      - name: Test (DI)
+        run: dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj -c Release --no-build
+
       - name: Pack
         run: dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release --no-build -o publish/nuget
+
+      - name: Pack (DI)
+        run: dotnet pack src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj -c Release --no-build -o publish/nuget
 
       - name: Upload NuGet
         uses: actions/upload-artifact@v6
