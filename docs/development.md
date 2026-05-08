@@ -18,6 +18,9 @@ src/
     UriTemplateExpression.cs
     UriTemplateParser.cs
     UriTemplateExpander.cs
+  Chatter.Rest.UriTemplates.DependencyInjection/
+    Chatter.Rest.UriTemplates.DependencyInjection.csproj  <- targets net8.0;netstandard2.0
+    UriTemplateServiceCollectionExtensions.cs             <- public DI registration helpers
 test/
   Chatter.Rest.UriTemplates.Tests/
     Chatter.Rest.UriTemplates.Tests.csproj  <- targets net8.0
@@ -86,7 +89,15 @@ dotnet test test/Chatter.Rest.UriTemplates.Tests/Chatter.Rest.UriTemplates.Tests
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.2.1.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.3.0.
+
+To pack the DI extension package:
+
+```bash
+dotnet pack src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj -c Release -o publish/nuget
+```
+
+Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.1.0.
 
 ## 6. CI/CD Parity
 

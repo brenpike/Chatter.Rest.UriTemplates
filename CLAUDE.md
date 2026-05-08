@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-4. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with prefix modifier, explode modifier, list value, and associative-array value support. No external NuGet dependencies.
+Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 URI Template expansion for Levels 1-4. It provides simple string, reserved, fragment, label, path segment, path-style parameter, form-style query, and query continuation expansion with prefix modifier, explode modifier, list value, and associative-array value support. The core package has no external NuGet dependencies. A companion DI extension package (`Chatter.Rest.UriTemplates.DependencyInjection`) depends on `Microsoft.Extensions.DependencyInjection.Abstractions 8.0.0`.
 
 **Repository:** https://github.com/brenpike/Chatter.Rest.UriTemplates
 **RFC 6570 Specification:** https://datatracker.ietf.org/doc/html/rfc6570
@@ -25,6 +25,7 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | Project | NuGet Package |
 |---|---|
 | `src/Chatter.Rest.UriTemplates/` | `Chatter.Rest.UriTemplates` |
+| `src/Chatter.Rest.UriTemplates.DependencyInjection/` | `Chatter.Rest.UriTemplates.DependencyInjection` |
 | `test/Chatter.Rest.UriTemplates.Tests/` | - |
 
 ## Multi-Agent Governance
@@ -74,11 +75,12 @@ See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
 | Artifact | NuGet Package ID | Current Version |
 |---|---|---|
-| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.2.1` |
+| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.3.0` |
+| `Chatter.Rest.UriTemplates.DependencyInjection` | `Chatter.Rest.UriTemplates.DependencyInjection` | `0.1.0` |
 
 ### Canonical Version Source
 
-`src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element is the single source of truth.
+`src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj` — `<Version>` element is the single source of truth for the core package. `src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj` — `<Version>` element is the single source of truth for the DI extension package (versioned independently).
 
 ### Files to Update Atomically on Version Bump
 
