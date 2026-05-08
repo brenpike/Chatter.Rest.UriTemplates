@@ -110,6 +110,6 @@ public class ServiceCollectionExtensionsTests
 
     private sealed class StubUriTemplateParser : IUriTemplateParser
     {
-        public IReadOnlyList<object> Parse(string template) => Array.Empty<object>();
+        public IReadOnlyList<UriTemplateToken> Parse(string template) => Array.Empty<UriTemplateToken>();
     }
 }
