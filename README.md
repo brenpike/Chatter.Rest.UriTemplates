@@ -51,6 +51,53 @@ using Chatter.Rest.UriTemplates;
 The package targets `net8.0` and `netstandard2.0` and has no external runtime
 NuGet dependencies.
 
+## Dependency Injection
+
+A companion package provides integration with `Microsoft.Extensions.DependencyInjection`:
+
+```bash
+dotnet add package Chatter.Rest.UriTemplates.DependencyInjection
+```
+
+NuGet resolves the core `Chatter.Rest.UriTemplates` package as a transitive
+dependency, so a single install command is sufficient.
+
+Register the services during startup:
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+
+services.AddUriTemplates();
+```
+
+Then inject `IUriTemplateFactory` to create and expand templates:
+
+```csharp
+using Chatter.Rest.UriTemplates;
+
+public class OrderClient
+{
+    private readonly IUriTemplateFactory _templateFactory;
+
+    public OrderClient(IUriTemplateFactory templateFactory)
+    {
+        _templateFactory = templateFactory;
+    }
+
+    public string BuildOrderUri(string status, string page)
+    {
+        var template = _templateFactory.Create("/orders{?status,page}");
+        return template.Expand(("status", status), ("page", page));
+    }
+}
+```
+
+`AddUriTemplates()` registers `IUriTemplateParser` as a singleton and
+`IUriTemplateFactory` as transient. Both use `TryAdd`, so they will not
+override custom registrations. See the
+[usage guide (section 11)](docs/usage.md#11-dependency-injection) for full
+details.
+
 ## Quick Start
 
 Create a template once, then expand it with either a dictionary or tuple pairs.
@@ -192,6 +239,10 @@ Parses the template eagerly.
 - Throws `FormatException` for malformed templates, such as unclosed braces,
   nested braces, empty `{}` expressions, or mutually exclusive prefix and
   explode modifiers.
+
+For dependency injection scenarios, use `IUriTemplateFactory.Create(string)`
+instead of calling the constructor directly. See the
+[Dependency Injection](#dependency-injection) section.
 
 ### `Expand(IDictionary<string, string> variables)`
 
@@ -379,6 +430,7 @@ string-only values, including templates with prefix modifiers.
 
 - [Usage guide](docs/usage.md)
 - [Architecture and design](docs/architecture.md)
+- [Development guide](docs/development.md)
 - [RFC 6570 test plan](docs/test-plan.md)
 - [Backlog](docs/backlog.md)
 - [RFC 6570 specification](https://datatracker.ietf.org/doc/html/rfc6570)
