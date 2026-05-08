@@ -6,7 +6,7 @@ Spec: https://datatracker.ietf.org/doc/html/rfc6570
 
 ## Overview
 
-Standalone .NET library implementing RFC 6570 URI Template expansion for Levels 1–4. Ships as NuGet package `Chatter.Rest.UriTemplates`. No external NuGet dependencies.
+Standalone .NET library implementing RFC 6570 URI Template expansion for Levels 1–4. Ships as NuGet package `Chatter.Rest.UriTemplates`. The core package has no external NuGet dependencies. A companion DI extension package (`Chatter.Rest.UriTemplates.DependencyInjection`) depends on `Microsoft.Extensions.DependencyInjection.Abstractions 8.0.0`.
 
 ---
 
@@ -45,10 +45,32 @@ src/
     Chatter.Rest.UriTemplates.csproj
     UriTemplate.cs               ← public entry point
     UriTemplateValue.cs          ← public strongly-typed value hierarchy
-    UriTemplateOperator.cs       ← operator enum
-    UriTemplateExpression.cs     ← one parsed {expression}
-    UriTemplateParser.cs         ← tokenises template into literals + expressions
-    UriTemplateExpander.cs       ← applies per-operator expansion rules
+    UriTemplateOperator.cs       ← public operator enum
+    UriTemplateToken.cs          ← public token hierarchy (UriTemplateToken, UriTemplateLiteralToken, UriTemplateExpressionToken)
+    UriTemplateVarSpec.cs        ← public variable specifier record
+    IUriTemplateParser.cs        ← public parser interface
+    IUriTemplateFactory.cs       ← public factory interface
+    IUriTemplateExpander.cs      ← internal expander interface
+    IOperatorStrategy.cs         ← internal strategy interface
+    UriTemplateParser.cs         ← internal parser implementation
+    UriTemplateExpander.cs       ← internal expander implementation
+    UriTemplateFactory.cs        ← internal factory implementation
+    UriTemplateEncoder.cs        ← internal percent-encoding utility
+    OperatorStrategyFactory.cs   ← internal strategy resolver
+    IsExternalInit.cs            ← netstandard2.0 polyfill for init-only setters
+    Operators/
+      NoneOperatorStrategy.cs    ← Level 1 simple expansion
+      PlusOperatorStrategy.cs    ← Level 2 reserved expansion
+      HashOperatorStrategy.cs    ← Level 2 fragment expansion
+      DotOperatorStrategy.cs     ← Level 3 label expansion
+      SlashOperatorStrategy.cs   ← Level 3 path segment expansion
+      SemicolonOperatorStrategy.cs ← Level 3 path-style parameter expansion
+      QueryOperatorStrategy.cs   ← Level 3 query string expansion
+      AmpersandOperatorStrategy.cs ← Level 3 query continuation expansion
+
+  Chatter.Rest.UriTemplates.DependencyInjection/
+    Chatter.Rest.UriTemplates.DependencyInjection.csproj
+    ServiceCollectionExtensions.cs ← public AddUriTemplates() extension method
 
 test/
   Chatter.Rest.UriTemplates.Tests/
@@ -59,16 +81,23 @@ test/
     UriTemplateLevel4Tests.cs
     UriTemplateEdgeCaseTests.cs
     UriTemplateGetVariablesTests.cs
+    UriTemplateValueTests.cs
+    UriTemplateTupleOverloadTests.cs
+    UriTemplateComplianceTests.cs
+
+  Chatter.Rest.UriTemplates.DependencyInjection.Tests/
+    Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj
+    ServiceCollectionExtensionsTests.cs
 ```
 
 ---
 
 ## Type Design
 
-### `UriTemplateOperator` (enum)
+### `UriTemplateOperator` (public enum)
 
 ```csharp
-internal enum UriTemplateOperator
+public enum UriTemplateOperator
 {
     None,        // Level 1 — simple string expansion: {var}
     Plus,        // Level 2 — reserved expansion: {+var}
@@ -81,12 +110,12 @@ internal enum UriTemplateOperator
 }
 ```
 
-### `UriTemplateVarSpec` (internal record)
+### `UriTemplateVarSpec` (public record)
 
 Represents a single variable specifier within an expression, including optional Level 4 modifiers.
 
 ```csharp
-internal sealed record UriTemplateVarSpec(
+public sealed record UriTemplateVarSpec(
     string Name,
     int? PrefixLength,
     bool Explode
@@ -98,20 +127,55 @@ internal sealed record UriTemplateVarSpec(
 - `Explode` — when `true`, the explode modifier (`*`) is present. Per-operator explode behavior is applied at expansion time.
 - Prefix and explode are mutually exclusive. The parser throws `FormatException` if both are present on a single varspec.
 
-### `UriTemplateExpression` (internal record)
+### `UriTemplateToken` hierarchy (public)
 
-Represents one parsed `{expression}` token.
+Parsed URI template tokens form a two-level class hierarchy. The abstract base prevents external subclassing via a `private protected` constructor. The parser emits a sequence of these tokens representing alternating literal text and `{expression}` segments.
 
 ```csharp
-internal sealed record UriTemplateExpression(
-    UriTemplateOperator Operator,
-    IReadOnlyList<UriTemplateVarSpec> Variables
-);
+public abstract class UriTemplateToken
+{
+    private protected UriTemplateToken() { }
+}
+
+public sealed class UriTemplateLiteralToken : UriTemplateToken
+{
+    public string Value { get; }
+    public UriTemplateLiteralToken(string value);
+}
+
+public sealed class UriTemplateExpressionToken : UriTemplateToken
+{
+    public UriTemplateOperator Operator { get; }
+    public IReadOnlyList<UriTemplateVarSpec> Variables { get; }
+    public UriTemplateExpressionToken(UriTemplateOperator @operator, IReadOnlyList<UriTemplateVarSpec> variables);
+}
+```
+
+- `UriTemplateLiteralToken` — represents a literal text segment of the template. The `Value` property holds the literal string (validated and encoded by the parser per RFC 6570 section 2.1).
+- `UriTemplateExpressionToken` — represents a `{...}` expression segment. Holds the parsed `UriTemplateOperator` and the list of `UriTemplateVarSpec` instances extracted from the expression.
+
+### `IUriTemplateParser` (public interface)
+
+Defines the contract for parsing URI template strings into token sequences.
+
+```csharp
+public interface IUriTemplateParser
+{
+    IReadOnlyList<UriTemplateToken> Parse(string template);
+}
 ```
 
 ### `UriTemplateParser` (internal)
 
-Scans a template string left to right. Emits a sequence of string literals and `UriTemplateExpression` objects.
+Implements `IUriTemplateParser`. Scans a template string left to right, emitting a sequence of `UriTemplateLiteralToken` and `UriTemplateExpressionToken` instances.
+
+```csharp
+internal sealed class UriTemplateParser : IUriTemplateParser
+{
+    internal static readonly UriTemplateParser Default;
+    public IReadOnlyList<UriTemplateToken> Parse(string template);
+}
+```
 
 Responsibilities:
 - Detect the operator character immediately after `{` (if any)
@@ -120,17 +184,28 @@ Responsibilities:
 - Parse Level 4 modifier syntax: prefix (`:N` where N is 1–9999) and explode (`*` at the end of a varspec). Produces `UriTemplateVarSpec` instances with the appropriate modifier fields set.
 - Enforce mutual exclusion of prefix and explode modifiers on a single varspec; throw `FormatException` if both are present.
 - Throw `FormatException` for malformed templates (unclosed `{`, nested `{`, invalid modifier syntax)
+- Validate and encode literal segments per RFC 6570 section 2.1/3.1 (reject spaces, lone `}`, invalid percent triplets; UTF-8 pct-encode non-ASCII characters)
 
-### `UriTemplateExpander` (internal static)
+### `IUriTemplateExpander` (internal interface)
 
-Applies expansion rules for a single `UriTemplateExpression` given a variable dictionary.
+Defines the contract for expanding a single expression token given a variable dictionary.
 
 ```csharp
-internal static class UriTemplateExpander
+internal interface IUriTemplateExpander
 {
-    internal static string Expand(
-        UriTemplateExpression expression,
-        IDictionary<string, object?> variables);
+    string Expand(UriTemplateExpressionToken expression, IDictionary<string, object?> variables);
+}
+```
+
+### `UriTemplateExpander` (internal)
+
+Implements `IUriTemplateExpander`. Applies expansion rules for a single `UriTemplateExpressionToken` given a variable dictionary. Delegates per-operator formatting and encoding to `IOperatorStrategy` implementations resolved via `OperatorStrategyFactory`.
+
+```csharp
+internal sealed class UriTemplateExpander : IUriTemplateExpander
+{
+    internal static readonly UriTemplateExpander Default;
+    public string Expand(UriTemplateExpressionToken expression, IDictionary<string, object?> variables);
 }
 ```
 
@@ -270,6 +345,86 @@ public sealed class UriTemplate
     public IReadOnlyList<string> GetVariables();
 }
 ```
+
+### `IOperatorStrategy` / `OperatorStrategyFactory` (internal)
+
+The strategy pattern decouples per-operator expansion logic from the core expander. Each RFC 6570 operator has a dedicated strategy class.
+
+```csharp
+internal interface IOperatorStrategy
+{
+    string Prefix { get; }
+    string Separator { get; }
+    bool IsNamed { get; }
+    string FormatEmpty(string varName);
+    string FormatValue(string varName, string encodedValue);
+    string Encode(string value);
+}
+```
+
+- `Prefix` — the string prepended to the entire expression result when at least one variable produces output (e.g., `#` for fragment, `?` for query).
+- `Separator` — the string used to join multiple variable results within one expression (e.g., `,`, `.`, `/`, `;`, `&`).
+- `IsNamed` — whether the operator emits `varname=value` format (true for `;`, `?`, `&`).
+- `FormatEmpty` — applies the operator-specific empty-value rule (e.g., `;varname` without `=` vs `varname=` with `=`).
+- `FormatValue` — formats a non-empty encoded value with the variable name where applicable.
+- `Encode` — delegates to `UriTemplateEncoder.EncodeUnreserved` or `UriTemplateEncoder.EncodeReserved` as appropriate for the operator.
+
+`OperatorStrategyFactory` is an internal static class that maps `UriTemplateOperator` enum values to singleton `IOperatorStrategy` instances:
+
+```csharp
+internal static class OperatorStrategyFactory
+{
+    internal static IOperatorStrategy For(UriTemplateOperator op);
+}
+```
+
+Eight strategy classes under `Operators/` implement operator-specific formatting: `NoneOperatorStrategy`, `PlusOperatorStrategy`, `HashOperatorStrategy`, `DotOperatorStrategy`, `SlashOperatorStrategy`, `SemicolonOperatorStrategy`, `QueryOperatorStrategy`, `AmpersandOperatorStrategy`. All are `internal sealed` classes.
+
+### `UriTemplateEncoder` (internal static)
+
+Encapsulates percent-encoding rules per RFC 6570 section 1.6 and RFC 3986.
+
+```csharp
+internal static class UriTemplateEncoder
+{
+    internal static string EncodeUnreserved(string value);
+    internal static string EncodeReserved(string value);
+}
+```
+
+- `EncodeUnreserved` — passes through only unreserved characters (`A-Z a-z 0-9 - . _ ~`) unencoded; percent-encodes all other characters as UTF-8 bytes. Used by Level 1 and Level 3 operators.
+- `EncodeReserved` — passes through both unreserved and reserved characters unencoded; preserves existing valid pct-encoded triplets (`%XX`); percent-encodes everything else. Used by Level 2 operators (`+`, `#`).
+
+### `IUriTemplateFactory` / `UriTemplateFactory` (public interface / internal class)
+
+The factory pattern provides a DI-friendly entry point for creating `UriTemplate` instances with injected parser and expander dependencies.
+
+```csharp
+public interface IUriTemplateFactory
+{
+    UriTemplate Create(string template);
+}
+
+internal sealed class UriTemplateFactory : IUriTemplateFactory
+{
+    internal static readonly UriTemplateFactory Default;
+    internal UriTemplateFactory(IUriTemplateParser parser, IUriTemplateExpander expander);
+    public UriTemplate Create(string template);
+}
+```
+
+- `IUriTemplateFactory` — public interface exposing `Create(string template)`. Consumers depend on this interface for compile-time safety and testability.
+- `UriTemplateFactory` — internal implementation that accepts `IUriTemplateParser` and `IUriTemplateExpander` via constructor injection. Delegates to the internal `UriTemplate(string, IUriTemplateParser, IUriTemplateExpander)` constructor.
+- `UriTemplate` also retains its `public UriTemplate(string template)` constructor for direct usage without DI; this constructor uses `UriTemplateParser.Default` and `UriTemplateExpander.Default` internally.
+
+### Dependency Injection (`Chatter.Rest.UriTemplates.DependencyInjection` package)
+
+The companion NuGet package `Chatter.Rest.UriTemplates.DependencyInjection` provides `ServiceCollectionExtensions.AddUriTemplates(IServiceCollection)` for registering URI template services with the Microsoft DI container:
+
+- `IUriTemplateParser` is registered as a **singleton** (via `TryAddSingleton`, using `UriTemplateParser.Default`).
+- `IUriTemplateFactory` is registered as **transient** (via `TryAddTransient`), resolving `IUriTemplateParser` from the service provider at each resolution.
+
+The extension method is in the `Microsoft.Extensions.DependencyInjection` namespace following the standard .NET convention. See [docs/usage.md](usage.md) for consumer wiring examples.
 
 ---
 
