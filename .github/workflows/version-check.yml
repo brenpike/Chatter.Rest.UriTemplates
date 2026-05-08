@@ -48,16 +48,6 @@ jobs:
 
           VERSION=$(grep -m1 '<Version>' '${{ inputs.csproj-path }}' | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | tr -d ' \r')
 
-          # Filter out pre-release tags to get latest stable release baseline
-          LATEST_TAG=$(git tag -l '${{ inputs.tag-prefix }}/v*' | grep -v -- '-' | sort -V | tail -1 || true)
-
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No existing ${{ inputs.tag-prefix }}/v* release tags found. Bootstrapping — version check passes."
-            exit 0
-          fi
-
-          TAG_VERSION="${LATEST_TAG#${{ inputs.tag-prefix }}/v}"
-
           # SemVer-aware strictly-greater comparison (strips pre-release suffix before comparing)
           version_gt() {
             local v1 v2
@@ -76,6 +66,22 @@ jobs:
             done
             return 1
           }
+
+          # Filter out pre-release tags to get latest stable release baseline
+          LATEST_TAG=$(git tag -l '${{ inputs.tag-prefix }}/v*' | grep -v -- '-' | sort -V | tail -1 || true)
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing ${{ inputs.tag-prefix }}/v* release tags found. Falling back to comparing against origin/main."
+            MAIN_VERSION=$(git show origin/main:'${{ inputs.csproj-path }}' | grep -m1 '<Version>' | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | tr -d ' \r')
+            if ! version_gt "$VERSION" "$MAIN_VERSION"; then
+              echo "ERROR: Version $VERSION must be greater than origin/main version $MAIN_VERSION. Bump the version before merging."
+              exit 1
+            fi
+            echo "Version check passed (no tags): csproj=$VERSION, origin/main=$MAIN_VERSION"
+            exit 0
+          fi
+
+          TAG_VERSION="${LATEST_TAG#${{ inputs.tag-prefix }}/v}"
 
           if ! version_gt "$VERSION" "$TAG_VERSION"; then
             echo "ERROR: Version $VERSION must be greater than latest release tag version $TAG_VERSION. Bump the version before merging."
