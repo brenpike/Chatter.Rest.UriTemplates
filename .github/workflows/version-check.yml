@@ -15,6 +15,11 @@ on:
         description: 'Git tag prefix for this package (e.g., hal, codegen)'
         required: true
         type: string
+      extra-src-path:
+        description: 'Optional additional source directory to also check for non-markdown changes (e.g., src/CorePackage/)'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   version-check:
@@ -29,7 +34,11 @@ jobs:
       - name: Check version bump
         shell: bash
         run: |
-          CHANGED=$(git diff --name-only "origin/main...HEAD" -- '${{ inputs.src-path }}' | grep -v '\.md$' || true)
+          if [ -n '${{ inputs.extra-src-path }}' ]; then
+            CHANGED=$(git diff --name-only "origin/main...HEAD" -- '${{ inputs.src-path }}' '${{ inputs.extra-src-path }}' | grep -v '\.md$' || true)
+          else
+            CHANGED=$(git diff --name-only "origin/main...HEAD" -- '${{ inputs.src-path }}' | grep -v '\.md$' || true)
+          fi
           if [ -z "$CHANGED" ]; then
             echo "No non-markdown src/ changes detected. Version bump not required."
             exit 0
