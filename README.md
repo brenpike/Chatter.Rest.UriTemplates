@@ -4,6 +4,8 @@ RFC 6570 URI Template expansion for .NET.
 
 [![CI](https://github.com/brenpike/Chatter.Rest.UriTemplates/actions/workflows/uritemplate-cicd.yml/badge.svg)](https://github.com/brenpike/Chatter.Rest.UriTemplates/actions/workflows/uritemplate-cicd.yml)
 [![NuGet](https://img.shields.io/nuget/v/Chatter.Rest.UriTemplates?label=Chatter.Rest.UriTemplates)](https://www.nuget.org/packages/Chatter.Rest.UriTemplates)
+[![DI CI](https://github.com/brenpike/Chatter.Rest.UriTemplates/actions/workflows/uritemplate-di-cicd.yml/badge.svg)](https://github.com/brenpike/Chatter.Rest.UriTemplates/actions/workflows/uritemplate-di-cicd.yml)
+[![NuGet](https://img.shields.io/nuget/v/Chatter.Rest.UriTemplates.DependencyInjection?label=Chatter.Rest.UriTemplates.DependencyInjection)](https://www.nuget.org/packages/Chatter.Rest.UriTemplates.DependencyInjection)
 
 `Chatter.Rest.UriTemplates` helps API clients expand templated links like
 `/orders/{id}{?status,page}` into safe, correctly encoded URIs. It is useful
