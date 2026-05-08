@@ -86,7 +86,7 @@ dotnet test test/Chatter.Rest.UriTemplates.Tests/Chatter.Rest.UriTemplates.Tests
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.2.0.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.2.1.
 
 ## 6. CI/CD Parity
 

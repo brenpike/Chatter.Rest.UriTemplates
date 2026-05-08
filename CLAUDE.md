@@ -74,7 +74,7 @@ See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
 | Artifact | NuGet Package ID | Current Version |
 |---|---|---|
-| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.2.0` |
+| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.2.1` |
 
 ### Canonical Version Source
 

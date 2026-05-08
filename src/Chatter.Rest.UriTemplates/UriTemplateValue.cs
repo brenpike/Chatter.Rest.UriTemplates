@@ -83,5 +83,13 @@ public sealed class DictionaryValue : UriTemplateValue
         Pairs = new System.Collections.ObjectModel.ReadOnlyDictionary<string, string>(dict);
     }
 
-    internal override object? ToRawValue() => new Dictionary<string, string>(Pairs);
+    internal override object? ToRawValue()
+    {
+        var dict = new Dictionary<string, string>();
+        foreach (var kvp in Pairs)
+        {
+            dict[kvp.Key] = kvp.Value;
+        }
+        return dict;
+    }
 }
