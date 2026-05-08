@@ -97,7 +97,7 @@ To pack the DI extension package:
 dotnet pack src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj -c Release -o publish/nuget
 ```
 
-Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.1.0.
+Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.1.1.
 
 ## 6. CI/CD Parity
 
