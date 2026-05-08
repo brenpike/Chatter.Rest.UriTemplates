@@ -20,6 +20,7 @@ on:
       - 'ci/**'
       - main
     paths:
+      - '**/src/Chatter.Rest.UriTemplates/**'
       - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
       - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
       - '.github/workflows/uritemplate-di-cicd.yml'
@@ -28,6 +29,7 @@ on:
     branches:
       - main
     paths:
+      - '**/src/Chatter.Rest.UriTemplates/**'
       - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
       - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
       - '.github/workflows/uritemplate-di-cicd.yml'
