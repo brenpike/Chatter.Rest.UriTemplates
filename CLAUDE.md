@@ -54,7 +54,7 @@ See [docs/development.md](docs/development.md) for editorconfig rules (line endi
 
 Additional conventions observed in the codebase:
 
-- `UriTemplate` is the only public type; all other types (`UriTemplateParser`, `UriTemplateExpander`, `UriTemplateExpression`, `UriTemplateOperator`) are internal
+- Public API (`Chatter.Rest.UriTemplates` package): `UriTemplate`, `IUriTemplateParser`, `IUriTemplateFactory`, `UriTemplateToken` (abstract base), `UriTemplateLiteralToken`, `UriTemplateExpressionToken`, `UriTemplateOperator`, `UriTemplateVarSpec`; public API (`Chatter.Rest.UriTemplates.DependencyInjection` package): `ServiceCollectionExtensions` (`AddUriTemplates` extension method); internal implementation types (not public): `UriTemplateParser`, `UriTemplateExpander`, `UriTemplateFactory`; `UriTemplateExpression` was removed (replaced by `UriTemplateExpressionToken`)
 - All types use the `Chatter.Rest.UriTemplates` namespace
 - Internal members are exposed to test assembly via `InternalsVisibleTo` in the csproj
 
@@ -90,10 +90,17 @@ All of the following must be updated together in the same commit when bumping `C
 2. `CLAUDE.md` — version in this table
 3. `docs/development.md` — line that reads `Package ID: \`Chatter.Rest.UriTemplates\` vX.Y.Z`
 
+All of the following must be updated together in the same commit when bumping `Chatter.Rest.UriTemplates.DependencyInjection`:
+
+1. `src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj` — `<Version>` element (canonical)
+2. `CLAUDE.md` — version in the Artifact table
+3. `docs/development.md` — line that reads `Package ID: \`Chatter.Rest.UriTemplates.DependencyInjection\` vX.Y.Z`
+
 ### Bump-Triggering Paths
 
 A version bump is required when a PR modifies any file under:
 - `src/Chatter.Rest.UriTemplates/**`
+- `src/Chatter.Rest.UriTemplates.DependencyInjection/**`
 
 No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root), agent framework files.
 
