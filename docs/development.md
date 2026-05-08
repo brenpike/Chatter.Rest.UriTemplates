@@ -137,7 +137,7 @@ Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGe
 
 | File | Purpose |
 |---|---|
-| `version-check.yml` | Checks that the csproj `<Version>` is strictly greater than the latest release tag. Runs on pull requests only. Bootstraps (passes) when no tags exist yet. |
+| `version-check.yml` | Checks that the csproj `<Version>` is strictly greater than the latest release tag. Runs on pull requests only. When no tags exist, falls back to comparing against the origin/main csproj version. |
 | `create-version-tag.yml` | Creates an annotated git tag (`{prefix}/vX.Y.Z`) after a successful deploy. Runs on main push only. |
 
 ### Job structure (both workflows)
