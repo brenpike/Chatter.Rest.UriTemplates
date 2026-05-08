@@ -110,11 +110,11 @@ No `CHANGELOG.md` exists. Release notes are not currently maintained. A changelo
 
 ### Git Tags
 
-Tags are not created by CI and no tag format has been established. A tagging policy may be defined in a future chore.
+Tags are created by CI via `create-version-tag.yml`, called by each caller workflow after a successful deploy on merge to `main`. Tag format: `uritemplate/vX.Y.Z` (core package) and `uritemplate-di/vX.Y.Z` (DI extension package).
 
 ### NuGet Publish
 
-CI publishes to NuGet.org automatically on merge to `main` (via `uritemplate-cicd.yml` deploy job, using `NUGET_API_KEY_CHATTER_URITEMPLATE` secret).
+CI publishes to NuGet.org automatically on merge to `main`. The core package is published via `uritemplate-cicd.yml` and the DI extension package via `uritemplate-di-cicd.yml`. Both workflows use the `NUGET_API_KEY_CHATTER_URITEMPLATE` secret.
 
 ## Memory Usage
 
