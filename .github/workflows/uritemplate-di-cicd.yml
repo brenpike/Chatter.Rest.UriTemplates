@@ -24,6 +24,8 @@ on:
       - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
       - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
       - '.github/workflows/uritemplate-di-cicd.yml'
+      - '.github/workflows/version-check.yml'
+      - '.github/workflows/create-version-tag.yml'
 
   pull_request:
     branches:
@@ -33,6 +35,8 @@ on:
       - '**/src/Chatter.Rest.UriTemplates.DependencyInjection/**'
       - '**/test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/**'
       - '.github/workflows/uritemplate-di-cicd.yml'
+      - '.github/workflows/version-check.yml'
+      - '.github/workflows/create-version-tag.yml'
 
 env:
   dotnet-version: '8.0.x'

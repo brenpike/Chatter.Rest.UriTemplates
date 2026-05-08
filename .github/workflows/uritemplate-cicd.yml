@@ -22,6 +22,8 @@ on:
     paths:
       - '**/src/Chatter.Rest.UriTemplates/**'
       - '.github/workflows/uritemplate-cicd.yml'
+      - '.github/workflows/version-check.yml'
+      - '.github/workflows/create-version-tag.yml'
       - '**/test/Chatter.Rest.UriTemplates.Tests/**'
 
   pull_request:
@@ -30,6 +32,8 @@ on:
     paths:
       - '**/src/Chatter.Rest.UriTemplates/**'
       - '.github/workflows/uritemplate-cicd.yml'
+      - '.github/workflows/version-check.yml'
+      - '.github/workflows/create-version-tag.yml'
       - '**/test/Chatter.Rest.UriTemplates.Tests/**'
 
 env:
