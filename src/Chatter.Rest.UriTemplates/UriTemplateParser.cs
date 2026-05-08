@@ -9,9 +9,9 @@ internal sealed class UriTemplateParser : IUriTemplateParser
     private static readonly char[] OperatorChars = { '+', '#', '.', '/', ';', '?', '&' };
     private static readonly char[] ReservedOperatorChars = { '=', ',', '!', '@', '|' };
 
-    public IReadOnlyList<object> Parse(string template)
+    public IReadOnlyList<UriTemplateToken> Parse(string template)
     {
-        var tokens = new List<object>();
+        var tokens = new List<UriTemplateToken>();
         var pos = 0;
 
         while (pos < template.Length)
@@ -21,14 +21,14 @@ internal sealed class UriTemplateParser : IUriTemplateParser
             if (openIndex < 0)
             {
                 // No more expressions; rest is literal
-                tokens.Add(ProcessLiteral(template.Substring(pos)));
+                tokens.Add(new UriTemplateLiteralToken(ProcessLiteral(template.Substring(pos))));
                 break;
             }
 
             // Emit literal text before the '{'
             if (openIndex > pos)
             {
-                tokens.Add(ProcessLiteral(template.Substring(pos, openIndex - pos)));
+                tokens.Add(new UriTemplateLiteralToken(ProcessLiteral(template.Substring(pos, openIndex - pos))));
             }
 
             // Find matching '}'
@@ -177,7 +177,7 @@ internal sealed class UriTemplateParser : IUriTemplateParser
                 variables.Add(new UriTemplateVarSpec(name, null, false));
             }
 
-            tokens.Add(new UriTemplateExpression(op, variables));
+            tokens.Add(new UriTemplateExpressionToken(op, variables));
 
             pos = closeIndex + 1;
         }
