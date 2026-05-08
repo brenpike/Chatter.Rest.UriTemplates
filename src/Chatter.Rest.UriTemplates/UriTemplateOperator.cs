@@ -1,6 +1,6 @@
 namespace Chatter.Rest.UriTemplates;
 
-internal enum UriTemplateOperator
+public enum UriTemplateOperator
 {
     None,
     Plus,
