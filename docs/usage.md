@@ -592,4 +592,4 @@ public class OrderClient
 }
 ```
 
-`IUriTemplateFactory.Create(string template)` returns a `UriTemplate` instance with the same behavior as `new UriTemplate(string)` — the same `Expand` overloads, `GetVariables()`, and encoding rules apply. Use the factory when you want to avoid a direct dependency on the `UriTemplate` constructor for testability or when the parser/expander implementations are provided through the container.
+`IUriTemplateFactory.Create(string template)` returns a `UriTemplate` instance with the same behavior as `new UriTemplate(string)` — the same `Expand` overloads, `GetVariables()`, and encoding rules apply. Use the factory when you want to avoid a direct dependency on the `UriTemplate` constructor for testability or when the parser implementation is provided through the container. Note: `IUriTemplateExpander` is internal and not registered in the DI container — the expander cannot be replaced via DI.
