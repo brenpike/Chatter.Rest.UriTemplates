@@ -193,6 +193,8 @@ var vars = template.GetVariables();
 // Result: ["status", "page", "lang"]
 ```
 
+RFC 6570 permits duplicate variable names, and each occurrence expands: `{?x,x}` with `x = "1"` produces `?x=1&x=1`, while `GetVariables()` reports `x` once. Callers that count expansion output via `GetVariables()` will under-count in that case.
+
 ---
 
 ## 5. Operator Examples
@@ -223,6 +225,14 @@ t.Expand(("path", "foo/bar/baz"));
 // Result: "/proxy/foo/bar/baz"
 ```
 
+**Only expand trusted values with `{+var}` and `{#var}`.** Both operators bypass reserved-character encoding — exactly what RFC 6570 Section 3.2.3 requires — so the value can change the meaning of the surrounding URI. With `http://ex.com/a{+p}`:
+
+- `p = "?admin=1"` produces `http://ex.com/a?admin=1` — the value rewrites the query string.
+- `p = "#frag"`, `p = "x@evil.com"`, and `p = "//evil.com/a"` rewrite the fragment, userinfo, and authority the same way.
+- `p = "../../etc/passwd"` passes the traversal sequence through raw.
+
+Under the default `{var}` operator all of these characters are percent-encoded, so none of the above is possible. Use the default operator for untrusted values; if reserved expansion is genuinely required, validate the value against a caller-side allowlist first. See [Encoding Rules](#6-encoding-rules) for how pre-encoded sequences behave under `{+}` and `{#}`.
+
 ### Level 2 — Fragment Expansion `{#var}`
 
 Prepends `#` to the expanded value:
@@ -232,6 +242,8 @@ var t = new UriTemplate("/page{#section}");
 t.Expand(("section", "overview"));
 // Result: "/page#overview"
 ```
+
+`{#var}` uses the same reserved encoding as `{+var}`, so the trust warning above applies equally here.
 
 ### Level 3 — Label Expansion `{.var}`
 
@@ -256,6 +268,8 @@ var t = new UriTemplate("/files{/dir,file}");
 t.Expand(("dir", "photos"), ("file", "cat.jpg"));
 // Result: "/files/photos/cat.jpg"
 ```
+
+Note: a template that begins with `{/...}` can produce a scheme-relative URL when the first variable expands to an empty string — `{/a,b}` with `a = ""` and `b = "evil.com"` produces `//evil.com`. This is RFC-conformant, but if such a template's values are not trusted, prefix the template with a literal path segment.
 
 ### Level 3 — Path-Style Parameter Expansion `{;var}`
 
@@ -315,13 +329,19 @@ t.Expand(("query", "hello world!"));
 **Reserved encoding** (Level 2: `+` and `#` operators):
 Both unreserved and reserved characters pass through unencoded. Only characters outside both sets are percent-encoded.
 
-Reserved characters: `: / ? # [ ] @ ! $ & ' ( ) * + , ; = %`
+Reserved characters: `: / ? # [ ] @ ! $ & ' ( ) * + , ; =`
 
 ```csharp
 var t = new UriTemplate("{+path}");
 t.Expand(("path", "/foo/bar?q=1"));
 // Result: "/foo/bar?q=1"   (slashes, ?, = all preserved)
 ```
+
+`%` itself is not in the pass-through set: under `{+}` and `{#}` a valid percent triplet (`%` followed by two hex digits) is preserved verbatim, while a bare `%` is encoded as `%25`.
+
+**Trust boundary.** Preserving pre-encoded triplets is part of the `{+}`/`{#}` trust boundary: `{+p}` with `p = "%0d%0aX: y"` yields `%0d%0aX:%20y`, and `p = "%2e%2e%2fetc"` stays `%2e%2e%2fetc` — a downstream server that decodes these sees control characters or a traversal sequence. Unreserved encoding neutralizes the same input by encoding `%` as `%25`, so this is the key behavioral difference between the two operator families: values expanded with `{+}` or `{#}` must be trusted.
+
+Even under `{+}` and `{#}`, characters outside the reserved and unreserved sets are always percent-encoded: raw CR, LF, NUL, backslash, and direction-override characters such as U+202E never pass through (`"a\r\nb"` becomes `a%0D%0Ab`), so expansion cannot split HTTP headers, and non-ASCII text is always UTF-8 percent-encoded, so raw homograph bytes never reach a host position.
 
 ---
 

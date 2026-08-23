@@ -179,6 +179,25 @@ var uri = new UriTemplate("/proxy/{path}")
 // "/proxy/files%2F2026%2Freport.pdf"
 ```
 
+**Only expand trusted values with `{+var}` and `{#var}`.** Reserved and
+fragment expansion exist to let reserved URI characters pass through
+unencoded — exactly what RFC 6570 Section 3.2.3 requires — but that also means
+the value can change the meaning of the surrounding URI. With
+`http://ex.com/a{+p}`:
+
+- `p = "?admin=1"` produces `http://ex.com/a?admin=1` — the value rewrites
+  the query string.
+- `p = "#frag"`, `p = "x@evil.com"`, and `p = "//evil.com/a"` rewrite the
+  fragment, userinfo, and authority the same way.
+- `p = "../../etc/passwd"` passes the traversal sequence through raw.
+
+Under the default `{var}` operator all of these characters are
+percent-encoded, so none of the above is possible. Use the default operator
+for untrusted values; if reserved expansion is genuinely required, validate
+the value against a caller-side allowlist first. See
+[Encoding](#encoding) for how pre-encoded sequences behave under `{+}` and
+`{#}`.
+
 ### Optional Variables
 
 Variables that are not supplied are omitted. Prefixes such as `?`, `&`, `/`,
@@ -346,6 +365,11 @@ var variables = new UriTemplate("/{resource}/{id}{?id,format}")
 // ["resource", "id", "format"]
 ```
 
+RFC 6570 permits duplicate variable names, and each occurrence expands:
+`{?x,x}` with `x = "1"` produces `?x=1&x=1`, while `GetVariables()` reports
+`x` once. Callers that count expansion output via `GetVariables()` will
+under-count in that case.
+
 ## Supported Template Features
 
 The library supports RFC 6570 Levels 1-4.
@@ -368,6 +392,12 @@ Variables are supplied as `string` for simple values. Level 4 composite values
 `Expand(IDictionary<string, object?>)` overload or the strongly-typed
 `Expand(IDictionary<string, UriTemplateValue>)` overload.
 
+Note: a template that begins with `{/...}` can produce a scheme-relative URL
+when the first variable expands to an empty string — `{/a,b}` with `a = ""`
+and `b = "evil.com"` produces `//evil.com`. This is RFC-conformant, but if a
+template starts with `{/...}` and its values are not trusted, prefix the
+template with a literal path segment.
+
 ## Encoding
 
 `Chatter.Rest.UriTemplates` percent-encodes values as UTF-8 bytes.
@@ -388,6 +418,22 @@ new UriTemplate("{+url}")
     .Expand(("url", "https://example.com/docs?q=uri%20templates"));
 // "https://example.com/docs?q=uri%20templates"
 ```
+
+Preserving pre-encoded sequences is part of the `{+}`/`{#}` trust boundary: a
+valid-looking percent triplet in the value is kept verbatim, so `{+p}` with
+`p = "%0d%0aX: y"` yields `%0d%0aX:%20y` and `p = "%2e%2e%2fetc"` stays
+`%2e%2e%2fetc` — a downstream server that decodes these sees control
+characters or a traversal sequence. The default operator neutralizes the same
+input by encoding `%` as `%25`. This difference between the two operator
+families is the reason `{+}` and `{#}` values must be trusted; expand
+`{+url}`-style templates only with URLs you already trust.
+
+Even under `{+}` and `{#}`, characters outside the reserved and unreserved
+sets are always percent-encoded: raw CR, LF, NUL, backslash, and
+direction-override characters such as U+202E never pass through (`"a\r\nb"`
+becomes `a%0D%0Ab`), so expansion cannot split HTTP headers, and non-ASCII
+text is always UTF-8 percent-encoded, so raw homograph bytes never reach a
+host position.
 
 ## Level 4: Prefix, Explode, and Composite Values
 
