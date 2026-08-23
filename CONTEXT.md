@@ -10,7 +10,9 @@ A standalone .NET library that expands RFC 6570 URI Templates (Levels 1-4) into 
 
 **Token**: One parsed unit of a URI Template — either a literal or an expression. _Avoid_: node, segment, part.
 
-**Literal**: A run of template text outside any expression, emitted unchanged during expansion. _Avoid_: static text, constant.
+**Literal**: A run of template text outside any expression, validated and where
+necessary UTF-8 percent-encoded during parsing, after which the resulting token
+value is emitted unchanged during expansion. _Avoid_: static text, constant.
 
 **Expression**: The `{...}` construct inside a template, consisting of an optional operator followed by one or more variable specifiers. _Avoid_: placeholder, slot, binding.
 
@@ -40,7 +42,7 @@ A standalone .NET library that expands RFC 6570 URI Templates (Levels 1-4) into 
 
 **Expansion**: The act of turning a template plus variable values into a URI string. _Avoid_: rendering, interpolation, formatting, substitution.
 
-**Expander**: The component that walks a template's tokens and produces the expanded URI. _Avoid_: renderer, formatter, engine.
+**Expander**: The component that expands one **Expression** into its output string. It does not walk the template — `UriTemplate` owns token traversal and literal appending. _Avoid_: renderer, formatter, engine.
 
 **Simple Expansion**: Level 1 expansion under the no-operator form `{var}`, percent-encoding everything outside the unreserved set.
 
@@ -79,9 +81,9 @@ A standalone .NET library that expands RFC 6570 URI Templates (Levels 1-4) into 
 - A **Prefix Modifier** applies only to string **Template Values**; applying it to a **List Value** or **Associative Array** is an error.
 - An **Explode Modifier** changes output only for **List Values** and **Associative Arrays**.
 - An **Undefined Variable** produces no output and no separator, so surrounding **Literals** join directly.
-- The **Expander** consumes Tokens and **Template Values** and produces the expanded URI, delegating per-value **Percent-Encoding** to the active Operator Strategy.
+- **URI Template** walks its **Tokens**, appending each **Literal**'s value directly and delegating each **Expression** to the **Expander**, which expands that one expression and delegates per-value **Percent-Encoding** to the active **Operator Strategy**.
 - Each **Level** subsumes the levels below it: Level 4 templates may use every Operator plus both modifiers.
-- The **Compliance Suite** exercises the Expander across all Levels and Operators.
+- The **Compliance Suite** exercises **Expansion** across all Levels and Operators.
 
 ## Example dialogue
 
