@@ -13,6 +13,14 @@ public sealed class UriTemplate
     /// </summary>
     private readonly HashSet<string> _referencedVariables;
 
+    /// <summary>
+    /// The subset of <see cref="_referencedVariables"/> that at least one expression
+    /// references with a prefix modifier (<c>:N</c>). RFC 6570 forbids a prefix modifier
+    /// on a composite value, so a composite bound to one of these names can be rejected
+    /// before it is read — preserving the expander's own pre-enumeration validation.
+    /// </summary>
+    private readonly HashSet<string> _prefixModifiedVariables;
+
     public UriTemplate(string template)
         : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
     {
@@ -37,15 +45,20 @@ public sealed class UriTemplate
 
         _tokens = tokens;
         _expander = expander;
-        _referencedVariables = CollectReferencedVariables(tokens);
+        CollectVariableUsage(tokens, out _referencedVariables, out _prefixModifiedVariables);
     }
 
     /// <summary>
-    /// Builds the set of variable names referenced by any expression in the template.
+    /// Walks the template's expressions once and records which variable names are
+    /// referenced at all, and which of them are referenced with a prefix modifier.
     /// </summary>
-    private static HashSet<string> CollectReferencedVariables(IReadOnlyList<UriTemplateToken> tokens)
+    private static void CollectVariableUsage(
+        IReadOnlyList<UriTemplateToken> tokens,
+        out HashSet<string> referenced,
+        out HashSet<string> prefixModified)
     {
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        referenced = new HashSet<string>(StringComparer.Ordinal);
+        prefixModified = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var token in tokens)
         {
@@ -53,12 +66,15 @@ public sealed class UriTemplate
             {
                 foreach (var varSpec in expression.Variables)
                 {
-                    names.Add(varSpec.Name);
+                    referenced.Add(varSpec.Name);
+
+                    if (varSpec.PrefixLength.HasValue)
+                    {
+                        prefixModified.Add(varSpec.Name);
+                    }
                 }
             }
         }
-
-        return names;
     }
 
     /// <summary>
@@ -310,6 +326,12 @@ public sealed class UriTemplate
     /// recognized before lists. Unsupported types are passed through unchanged so the expander
     /// still reports them as a <see cref="FormatException"/>.
     /// </para>
+    /// <para>
+    /// Taking the snapshot must not change what the caller observes. Two validations the
+    /// expander performs before it reads a value are therefore reproduced here, so that a
+    /// value which could only ever have failed is rejected without being enumerated: a
+    /// prefix modifier applied to a composite, and a null associative-array key.
+    /// </para>
     /// </summary>
     private object? SnapshotIfReferenced(string name, object? value)
     {
@@ -322,18 +344,26 @@ public sealed class UriTemplate
             return value;
         }
 
-        return Snapshot(value);
+        return Snapshot(name, value);
     }
 
-    private static object? Snapshot(object? value)
+    private object? Snapshot(string name, object? value)
     {
         if (value is null || value is string)
         {
             return value;
         }
 
+        // Every branch below is selected by a runtime type test, which reads nothing from
+        // the value. Both validations that the expander performs before it enumerates —
+        // rejecting a prefix modifier on a composite, and rejecting a null associative-array
+        // key — are reproduced here so that snapshotting cannot change which exception the
+        // caller sees, nor cause an enumeration the expander would never have performed.
+
         if (value is IDictionary<string, string> dictionaryValue)
         {
+            ThrowIfPrefixModified(name);
+
             // Copy into a dictionary, not a list: UriTemplateExpander dispatches on the
             // runtime type and applies its ordinal key ordering only to IDictionary values.
             // Flattening to IEnumerable<KeyValuePair<,>> here would silently opt these
@@ -341,21 +371,25 @@ public sealed class UriTemplate
             //
             // The entries are copied by hand rather than through the copy constructor:
             // Dictionary<,> rejects a null key with ArgumentNullException, which would
-            // pre-empt the expander's own null-key validation and replace this overload's
-            // documented FormatException with a different exception type.
+            // replace this overload's documented FormatException with a different type.
             var snapshot = new Dictionary<string, string>(StringComparer.Ordinal);
 
             foreach (var entry in dictionaryValue)
             {
                 if (entry.Key is null)
                 {
-                    // Hand the caller's instance to the expander untouched. It is still an
-                    // IDictionary<string, string>, so it takes the same dispatch branch and
-                    // reports the variable-specific FormatException. No snapshot guarantee
-                    // is lost, because expansion cannot succeed with a null key.
-                    return dictionaryValue;
+                    // Report the failure the expander would have reported, word for word,
+                    // instead of handing it back the caller's instance. The source has
+                    // already given up its one enumeration by this point, so re-reading it
+                    // would surface a single-pass sequence's InvalidOperationException in
+                    // place of this variable-specific FormatException.
+                    throw new FormatException(
+                        $"Variable '{name}' contains a null key. " +
+                        "Associative array keys must be non-null strings.");
                 }
 
+                // Null values are copied through untouched: Dictionary<,> accepts them, so
+                // the expander still reports its own null-value FormatException.
                 snapshot[entry.Key] = entry.Value;
             }
 
@@ -364,15 +398,43 @@ public sealed class UriTemplate
 
         if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)
         {
+            ThrowIfPrefixModified(name);
+
             return new List<KeyValuePair<string, string>>(pairsValue);
         }
 
         if (value is IEnumerable<string> listValue)
         {
+            ThrowIfPrefixModified(name);
+
             return new List<string>(listValue);
         }
 
+        // Not a composite at all. Leave it alone so the expander reports it as an
+        // unsupported type rather than as a misapplied prefix modifier.
         return value;
+    }
+
+    /// <summary>
+    /// Rejects a prefix modifier applied to a composite value, reproducing the
+    /// <see cref="FormatException"/> <see cref="UriTemplateExpander"/> raises for the same
+    /// input. The expander performs this check before it reads the value, so the snapshot
+    /// must too: otherwise a sequence that throws, blocks, or never ends would be
+    /// enumerated on the way to an expansion that could only ever have failed.
+    /// </summary>
+    /// <remarks>
+    /// A composite bound to a prefix-modified name cannot expand successfully, whichever
+    /// expression the expander reaches first, so raising the failure here is equivalent.
+    /// The check is deliberately not applied to strings, for which a prefix modifier is
+    /// valid, nor to unsupported types, which carry their own diagnostic.
+    /// </remarks>
+    private void ThrowIfPrefixModified(string name)
+    {
+        if (_prefixModifiedVariables.Contains(name))
+        {
+            throw new FormatException(
+                $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{name}').");
+        }
     }
 
     /// <summary>

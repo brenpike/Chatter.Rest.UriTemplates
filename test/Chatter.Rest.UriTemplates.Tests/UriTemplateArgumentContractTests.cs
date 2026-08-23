@@ -164,6 +164,158 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
+		// 1c. Snapshotting must not pre-empt the expander's prefix validation
+		// ----------------------------------------------------------------
+
+		// RFC 6570 forbids a prefix modifier on a composite value, and the expander
+		// rejects it before it ever reads the value. Snapshotting a referenced value
+		// eagerly would enumerate the sequence first, turning that documented
+		// FormatException into whatever the sequence happens to do — an arbitrary
+		// exception, a block, or a non-terminating enumeration.
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixOnCompositeSequence_ThrowsFormatExceptionWithoutEnumerating()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?> { ["items"] = landmine };
+			var template = new UriTemplate("{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'items'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_PrefixOnCompositeSequence_ThrowsFormatExceptionWithoutEnumerating()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{items:3}");
+
+			var act = () => template.Expand(("items", (object?)landmine));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'items'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixOnCompositeAssociativeArray_ThrowsFormatExceptionWithoutEnumerating()
+		{
+			var landmine = new ThrowingDictionary();
+			var vars = new Dictionary<string, object?> { ["items"] = landmine };
+			var template = new UriTemplate("{?items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'items'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The prefix modifier need not be on the first expression: any prefixed
+		// reference to a composite makes the expansion fail, so the value must not be
+		// enumerated on account of the unprefixed reference either.
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixOnLaterReference_ThrowsFormatExceptionWithoutEnumerating()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?> { ["items"] = landmine };
+			var template = new UriTemplate("{items}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'items'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// A prefix modifier on a plain string is legal, and a composite-shaped value
+		// must not be rejected when no reference to it carries a prefix.
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixOnStringValue_IsUnaffectedByCompositeValidation()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["s"] = "value",
+				["items"] = new List<string> { "red", "green" },
+			};
+			var template = new UriTemplate("{s:3}{items}");
+
+			template.Expand(vars).Should().Be("valred,green");
+		}
+
+		// ----------------------------------------------------------------
+		// 1d. A null key must not cost the caller a second enumeration
+		// ----------------------------------------------------------------
+
+		// Falling back to the caller's instance after the snapshot loop already
+		// consumed it would hand the expander a drained sequence: a single-pass
+		// dictionary would then surface InvalidOperationException from its second
+		// enumeration instead of the documented variable-specific FormatException.
+		[Fact]
+		public void Expand_ObjectDictionary_SinglePassDictionaryWithNullKey_ThrowsFormatExceptionNamingVariable()
+		{
+			var oneShot = new SinglePassNullKeyDictionary();
+			var vars = new Dictionary<string, object?> { ["keys"] = oneShot };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'keys'*null key*");
+			oneShot.EnumerationCount.Should().Be(1);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_SinglePassDictionaryWithNullKey_ThrowsFormatExceptionNamingVariable()
+		{
+			var oneShot = new SinglePassNullKeyDictionary();
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(("keys", (object?)oneShot));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'keys'*null key*");
+			oneShot.EnumerationCount.Should().Be(1);
+		}
+
+		// A null value carries its own variable-specific FormatException, which the
+		// snapshot preserves by copying null values through untouched.
+		[Fact]
+		public void Expand_ObjectDictionary_SinglePassDictionaryWithNullValue_ThrowsFormatExceptionNamingVariable()
+		{
+			var oneShot = new SinglePassDictionary(
+				new KeyValuePair<string, string>("ok", null!));
+			var vars = new Dictionary<string, object?> { ["keys"] = oneShot };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'keys'*null value*");
+			oneShot.EnumerationCount.Should().Be(1);
+		}
+
+		// The snapshot must keep dictionary values dispatching down the expander's
+		// IDictionary<string, string> branch rather than the insertion-ordered
+		// IEnumerable<KeyValuePair<,>> branch.
+		[Fact]
+		public void Expand_ObjectDictionary_SinglePassDictionary_ReachesExpanderAsDictionary()
+		{
+			var oneShot = new SinglePassDictionary(
+				new KeyValuePair<string, string>("semi", ";"),
+				new KeyValuePair<string, string>("dot", "."));
+			var vars = new Dictionary<string, object?> { ["keys"] = oneShot };
+			var template = new UriTemplate("{?keys*}{&keys*}");
+
+			var result = template.Expand(vars);
+
+			result.Should().Contain("semi=%3B").And.Contain("dot=.");
+			oneShot.EnumerationCount.Should().Be(1);
+		}
+
+		// ----------------------------------------------------------------
 		// 2. Null UriTemplateValue entries are undefined, not an exception
 		// ----------------------------------------------------------------
 
@@ -428,6 +580,107 @@ namespace Chatter.Rest.UriTemplates.Tests
 			public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
 
 			public bool TryGetValue(string key, out string value) => throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// Base for <see cref="IDictionary{TKey, TValue}"/> test doubles that model a
+		/// caller-supplied associative array. Only enumeration is meaningful; every
+		/// other member is unsupported so that any accidental reliance on it fails
+		/// loudly rather than silently.
+		/// </summary>
+		private abstract class EnumerationOnlyDictionary : IDictionary<string, string>
+		{
+			public abstract IEnumerator<KeyValuePair<string, string>> GetEnumerator();
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+			public int Count => throw new NotSupportedException();
+
+			public bool IsReadOnly => true;
+
+			public string this[string key]
+			{
+				get => throw new NotSupportedException();
+				set => throw new NotSupportedException();
+			}
+
+			public ICollection<string> Keys => throw new NotSupportedException();
+
+			public ICollection<string> Values => throw new NotSupportedException();
+
+			public void Add(string key, string value) => throw new NotSupportedException();
+
+			public void Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public void Clear() => throw new NotSupportedException();
+
+			public bool Contains(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public bool ContainsKey(string key) => throw new NotSupportedException();
+
+			public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+
+			public bool Remove(string key) => throw new NotSupportedException();
+
+			public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public bool TryGetValue(string key, out string value) => throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// A genuinely single-pass <see cref="IDictionary{TKey, TValue}"/>: the second
+		/// call to <see cref="GetEnumerator"/> throws, so any code path that reads the
+		/// caller's dictionary twice fails loudly instead of quietly substituting
+		/// <see cref="InvalidOperationException"/> for the documented
+		/// <see cref="FormatException"/>.
+		/// </summary>
+		private class SinglePassDictionary : EnumerationOnlyDictionary
+		{
+			private readonly KeyValuePair<string, string>[] _entries;
+
+			internal SinglePassDictionary(params KeyValuePair<string, string>[] entries) => _entries = entries;
+
+			internal int EnumerationCount { get; private set; }
+
+			public override IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+			{
+				EnumerationCount++;
+
+				if (EnumerationCount > 1)
+				{
+					throw new InvalidOperationException("This dictionary can only be enumerated once.");
+				}
+
+				return ((IEnumerable<KeyValuePair<string, string>>)_entries).GetEnumerator();
+			}
+		}
+
+		/// <summary>
+		/// A single-pass dictionary whose only enumeration yields a null key.
+		/// </summary>
+		private sealed class SinglePassNullKeyDictionary : SinglePassDictionary
+		{
+			internal SinglePassNullKeyDictionary()
+				: base(
+					new KeyValuePair<string, string>("ok", "1"),
+					new KeyValuePair<string, string>(null!, "2"))
+			{
+			}
+		}
+
+		/// <summary>
+		/// The associative-array counterpart of <see cref="ThrowingSequence"/>: a
+		/// dictionary that cannot be enumerated safely.
+		/// </summary>
+		private sealed class ThrowingDictionary : EnumerationOnlyDictionary
+		{
+			internal int EnumerationAttempts { get; private set; }
+
+			public override IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+			{
+				EnumerationAttempts++;
+				throw new InvalidOperationException("This dictionary must never be enumerated.");
+			}
 		}
 
 		private sealed class NullReturningParser : IUriTemplateParser
