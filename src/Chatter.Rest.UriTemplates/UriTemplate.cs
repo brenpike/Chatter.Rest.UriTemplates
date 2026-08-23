@@ -58,7 +58,7 @@ public sealed class UriTemplate
     /// that got hold of it could cast it back and write through it.
     /// </para>
     /// </summary>
-    private static IReadOnlyList<UriTemplateToken> CopyTokens(IReadOnlyList<UriTemplateToken> tokens)
+    private static System.Collections.ObjectModel.ReadOnlyCollection<UriTemplateToken> CopyTokens(IReadOnlyList<UriTemplateToken> tokens)
     {
         var copy = new List<UriTemplateToken>();
 
