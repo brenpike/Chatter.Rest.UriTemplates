@@ -845,12 +845,195 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
+		// 1c-4. A prefix violation waits for the reference that carries it
+		// ----------------------------------------------------------------
+
+		// A composite the template prefixes anywhere cannot expand, so it must never be
+		// materialized — but that is a reason not to read it, not a reason to fail early.
+		// Reporting the violation at the variable's first reference let it jump ahead of
+		// variables the template names in between: "{items}{bad}{items:3}" reported
+		// 'items' when 'bad' fails first in template order. The violation is now marked
+		// pending at the first reference and raised only when the walk reaches the
+		// prefixed one, so both properties hold at once.
+		[Fact]
+		public void Expand_ObjectDictionary_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedFirst()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["items"] = new[] { "x" },
+				["bad"] = 42,
+			};
+			var template = new UriTemplate("{items}{bad}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedSecond()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = 42,
+				["items"] = new[] { "x" },
+			};
+			var template = new UriTemplate("{items}{bad}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedFirst()
+		{
+			var template = new UriTemplate("{items}{bad}{items:3}");
+
+			var act = () => template.Expand(
+				("items", (object?)new[] { "x" }),
+				("bad", (object?)42));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedSecond()
+		{
+			var template = new UriTemplate("{items}{bad}{items:3}");
+
+			var act = () => template.Expand(
+				("bad", (object?)42),
+				("items", (object?)new[] { "x" }));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		// Deferring the violation must not cost the composite its exemption from being
+		// read: the pending mark skips the snapshot, it does not postpone it.
+		[Fact]
+		public void Expand_ObjectDictionary_PendingPrefixViolation_LeavesTheCompositeUnenumerated()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["items"] = landmine,
+				["bad"] = 42,
+			};
+			var template = new UriTemplate("{items}{bad}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The round-2 invariant, pinned against the deferral: with nothing failing in
+		// between, the walk reaches "{items:3}" and reports the prefix violation there,
+		// and the unprefixed reference still enumerates nothing on the way.
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixOnLaterReference_ReportsPrefixErrorWithZeroEnumerations()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?> { ["items"] = landmine };
+			var template = new UriTemplate("{items}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_PrefixOnLaterReference_ReportsPrefixErrorWithZeroEnumerations()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{items}{items:3}");
+
+			var act = () => template.Expand(("items", (object?)landmine));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// A pending violation cannot be lost: the name is pending only because some
+		// varspec carries a prefix over it, and the walk visits every varspec, so it must
+		// arrive there unless something earlier throws first. An intervening variable
+		// that expands cleanly does not absolve it.
+		[Fact]
+		public void Expand_ObjectDictionary_PendingPrefixViolation_IsStillReportedAfterAValidInterveningVariable()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["items"] = landmine,
+				["other"] = "ok",
+			};
+			var template = new UriTemplate("{items}{other}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The type check precedes the prefix rule for one and the same variable, so an
+		// unsupported value under a prefixed reference is reported as the unsupported
+		// type it is, not as a misapplied modifier.
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValueUnderALaterPrefix_ReportsTheTypeNotThePrefix()
+		{
+			var vars = new Dictionary<string, object?> { ["bad"] = 42 };
+			var template = new UriTemplate("{bad}{bad:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_UnsupportedValueUnderALaterPrefix_ReportsTheTypeNotThePrefix()
+		{
+			var template = new UriTemplate("{bad}{bad:3}");
+
+			var act = () => template.Expand(("bad", (object?)42));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		// The pending mark and the once-only snapshot are independent: a variable named
+		// three times is still materialized exactly once.
+		[Fact]
+		public void Expand_ObjectDictionary_ThreeReferences_MaterializeTheValueOnce()
+		{
+			var oneShot = new SinglePassList("red", "green");
+			var vars = new Dictionary<string, object?> { ["list"] = oneShot };
+			var template = new UriTemplate("{list}/{list}{?list*}");
+
+			template.Expand(vars).Should().Be("red,green/red,green?list=red&list=green");
+			oneShot.EnumerationCount.Should().Be(1);
+		}
+
+		// ----------------------------------------------------------------
 		// Expected messages, quoted from UriTemplateExpander
 		// ----------------------------------------------------------------
 
 		private static string UnsupportedTypeMessage(string name, Type type) =>
 			$"Variable '{name}' has unsupported type '{type.FullName}'. " +
 			"Expected string, IEnumerable<string>, IDictionary<string, string>, or IEnumerable<KeyValuePair<string, string>>.";
+
+		private static string PrefixOnCompositeMessage(string name) =>
+			$"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{name}').";
 
 		private static string NullKeyMessage(string name) =>
 			$"Variable '{name}' contains a null key. " +

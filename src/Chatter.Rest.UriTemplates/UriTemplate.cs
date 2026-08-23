@@ -280,13 +280,28 @@ public sealed class UriTemplate
     /// template's tokens once, in order, and completing all of one variable's work
     /// before looking at the next.
     /// <para>
-    /// For each variable the template references, at the position of its first
-    /// reference: its value's type is checked against the supported set, the RFC 6570
-    /// prohibition on a prefix modifier over a composite is applied, and only then is
-    /// the value snapshotted — with each member validated as it is copied. Every
-    /// failure <see cref="UriTemplateExpander"/> can raise for a value is therefore
-    /// raised here instead, at the variable that owns it, before any later variable's
-    /// value has been so much as touched.
+    /// The rule the walk follows: every failure is reported at the point in the
+    /// template where it becomes unavoidable, and no value is read on the way to a
+    /// failure that is already certain.
+    /// </para>
+    /// <para>
+    /// At a variable's first reference its value's type is checked against the
+    /// supported set, and the value is then snapshotted — with each member validated
+    /// as it is copied. A composite bound to a name the template prefixes anywhere is
+    /// the exception: it is marked pending instead, which skips the snapshot without
+    /// raising anything, because its failure does not become unavoidable until the
+    /// walk reaches the reference that carries the prefix. Every failure
+    /// <see cref="UriTemplateExpander"/> can raise for a value is raised here rather
+    /// than during expansion, with the expander's message verbatim.
+    /// </para>
+    /// <para>
+    /// Marking a variable pending cannot lose its failure. A name is pending only
+    /// because some varspec in this template carries a prefix over it, and the walk
+    /// visits every varspec of every expression in order, so it must arrive at that
+    /// varspec — where the prefix violation is raised — unless something earlier in
+    /// the template throws first, which is the outcome template order calls for
+    /// anyway. Deferring the throw is therefore a change of position, never of
+    /// whether the input is rejected.
     /// </para>
     /// <para>
     /// The alternative — validating everything, then snapshotting everything, then
@@ -298,12 +313,13 @@ public sealed class UriTemplate
     /// <para>
     /// Values the template never references are never visited, so an unused lazy,
     /// blocking, or infinite sequence is left alone; a value referenced from several
-    /// expressions is prepared exactly once.
+    /// expressions is prepared exactly once, and a pending one not at all.
     /// </para>
     /// </summary>
     private void PrepareVariables(Dictionary<string, object?> variables)
     {
         var prepared = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string>? pendingPrefixViolations = null;
 
         foreach (var token in _tokens)
         {
@@ -316,32 +332,49 @@ public sealed class UriTemplate
             {
                 var name = varSpec.Name;
 
-                // The first reference decides the variable's position in the walk;
-                // later references add nothing that is not already accounted for.
-                if (!prepared.Add(name))
+                // The first reference is where the variable's own work happens; later
+                // references add nothing beyond the prefix modifier they may carry,
+                // which is handled below. Guarding on `prepared` is also what keeps a
+                // value referenced three times from being snapshotted more than once.
+                if (prepared.Add(name)
+                    && variables.TryGetValue(name, out var value)
+                    && value is not null
+                    && value is not string)
                 {
-                    continue;
+                    // Undefined values and simple strings need neither validation nor a
+                    // snapshot, and a prefix modifier over a string is legal.
+                    //
+                    // Order matters, and mirrors the expander: an unsupported type is
+                    // reported as such, here at the variable's own position, rather than
+                    // as a misapplied prefix modifier. That is why "{bad}{bad:3}" over an
+                    // unsupported value reports the type and not the prefix.
+                    ThrowIfUnsupportedType(name, value);
+
+                    if (_prefixModifiedVariables.Contains(name))
+                    {
+                        // A composite the template prefixes somewhere cannot expand, so
+                        // materializing it would read a value on the way to a certain
+                        // failure. Skip the snapshot, but leave the failure to the
+                        // reference that actually carries the prefix, so that variables
+                        // between here and there keep their precedence.
+                        pendingPrefixViolations ??= new HashSet<string>(StringComparer.Ordinal);
+                        pendingPrefixViolations.Add(name);
+                    }
+                    else
+                    {
+                        variables[name] = Snapshot(name, value);
+                    }
                 }
 
-                if (!variables.TryGetValue(name, out var value))
+                // Reached in template order, including on the very iteration that marked
+                // the variable pending — a prefix on the first reference fails there.
+                if (varSpec.PrefixLength.HasValue
+                    && pendingPrefixViolations is not null
+                    && pendingPrefixViolations.Contains(name))
                 {
-                    // Undefined per RFC 6570 §2.3.
-                    continue;
+                    throw new FormatException(
+                        $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{name}').");
                 }
-
-                if (value is null || value is string)
-                {
-                    // Undefined, or a simple string: nothing to validate and nothing
-                    // to snapshot. A prefix modifier over a string is legal.
-                    continue;
-                }
-
-                // Order matters, and mirrors the expander: an unsupported type is
-                // reported as such rather than as a misapplied prefix modifier.
-                ThrowIfUnsupportedType(name, value);
-                ThrowIfPrefixModified(name);
-
-                variables[name] = Snapshot(name, value);
             }
         }
     }
@@ -372,31 +405,9 @@ public sealed class UriTemplate
     }
 
     /// <summary>
-    /// Applies RFC 6570's prohibition on a prefix modifier over a composite value.
-    /// Called only once the value is known to be a composite, and only from the
-    /// variable's own turn in the walk, so it can never pre-empt the failure of a
-    /// variable referenced earlier in the template.
-    /// <para>
-    /// The check is against every reference to the variable, not just the one currently
-    /// being walked: a composite bound to a name the template prefixes anywhere cannot
-    /// expand successfully, so the expansion's outcome is already decided at the
-    /// variable's first reference, and enumerating the value on the way to that outcome
-    /// buys nothing.
-    /// </para>
-    /// </summary>
-    private void ThrowIfPrefixModified(string name)
-    {
-        if (_prefixModifiedVariables.Contains(name))
-        {
-            throw new FormatException(
-                $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{name}').");
-        }
-    }
-
-    /// <summary>
     /// Collects the names the template references with a prefix modifier, so
-    /// <see cref="ThrowIfPrefixModified(string)"/> costs a set lookup rather than a
-    /// second walk per variable.
+    /// the prefix check inside <see cref="PrepareVariables(Dictionary{string, object})"/>
+    /// costs a set lookup rather than a second walk per variable.
     /// </summary>
     private static HashSet<string> CollectPrefixModifiedVariables(IReadOnlyList<UriTemplateToken> tokens)
     {
