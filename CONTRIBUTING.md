@@ -78,10 +78,16 @@ By contributing, you agree your contributions will be licensed under the project
 
 ## Claude Code Plugins
 
-The repository's checked-in `.claude/settings.json` enables two third-party Claude Code plugins for every contributor who trusts the workspace:
+The repository's checked-in `.claude/settings.json` enables four third-party Claude Code plugins for every contributor who trusts the workspace:
 
 - `claude-mem@thedotmack`
-- `agent-framework@brenpike`
+- `hivemind@brenpike`
+- `caveman@caveman`
+- `codex@openai-codex`
+
+The same file also sets `agent` to `hivemind:overlord`, making that plugin's
+orchestrator the default agent for sessions opened in this workspace, and
+registers a `SubagentStart` hook from `.claude/hooks/`.
 
 Plugins run hooks and agents at your local privilege level, so an update published by a plugin author executes on contributor machines that may hold NuGet and GitHub credentials.
 
@@ -106,11 +112,12 @@ Treat plugin updates like dependency updates:
   {
     "enabledPlugins": {
       "claude-mem@thedotmack": false,
-      "agent-framework@brenpike": false
+      "hivemind@brenpike": false,
+      "caveman@caveman": false,
+      "codex@openai-codex": false
     }
   }
   ```
 
   Local project settings take precedence over the repository's `.claude/settings.json`, and `enabledPlugins` entries apply per individual plugin, so a local `false` overrides the shared `true` for that plugin without restating anything else. This is the opt-out mechanism the [Claude Code settings reference](https://code.claude.com/docs/en/settings-reference#enabledplugins) documents: "To opt out of a project-enabled plugin on your machine, set it to `false` in `.claude/settings.local.json`." The library builds and tests without the plugins.
 
-  Note: the `agent-framework` plugin's source repository has been renamed to [brenpike/hivemind](https://github.com/brenpike/hivemind), whose marketplace publishes the successor plugin under the name `hivemind`. If your machine has that successor installed, its identifier is `hivemind@brenpike` — add `"hivemind@brenpike": false` to the same object to disable it.

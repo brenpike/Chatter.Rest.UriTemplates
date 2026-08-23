@@ -28,17 +28,24 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | `src/Chatter.Rest.UriTemplates.DependencyInjection/` | `Chatter.Rest.UriTemplates.DependencyInjection` |
 | `test/Chatter.Rest.UriTemplates.Tests/` | - |
 
-## Multi-Agent Governance
-
-This repository uses a constrained multi-agent workflow powered by the `agent-framework@brenpike` plugin (configured in `.claude/settings.json`).
-
-Governance, agent roles, branching/commit/PR workflow, versioning policy, and PR review remediation are defined in the plugin. Canonical governance files are installed under `<claude-plugins-cache>/brenpike/agent-framework/<version>/governance/` by the Claude Code plugin system.
-
-External AI reviewer (Codex) guidance: `AGENTS.md`
-
 ## Build and Test Commands
 
 See [docs/development.md](docs/development.md) for all build, test, and pack commands.
+
+## Validation
+
+Run from the repository root before opening a PR:
+
+```bash
+dotnet restore --locked-mode
+dotnet build -c Release --no-restore
+dotnet test
+```
+
+`dotnet test` runs both test projects (`Chatter.Rest.UriTemplates.Tests` and
+`Chatter.Rest.UriTemplates.DependencyInjection.Tests`) via the solution. If
+`dotnet restore --locked-mode` fails, see the lock file note in
+[docs/development.md](docs/development.md).
 
 ## Architecture
 
@@ -102,7 +109,7 @@ A version bump is required when a PR modifies any file under:
 - `src/Chatter.Rest.UriTemplates/**`
 - `src/Chatter.Rest.UriTemplates.DependencyInjection/**`
 
-No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root), agent framework files.
+No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root).
 
 ### Changelog
 
