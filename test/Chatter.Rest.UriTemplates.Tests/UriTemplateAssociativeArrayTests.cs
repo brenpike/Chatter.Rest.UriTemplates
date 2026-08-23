@@ -1,26 +1,36 @@
+using System.Collections.Frozen;
+using System.Collections.ObjectModel;
 using FluentAssertions;
 using Xunit;
 
 namespace Chatter.Rest.UriTemplates.Tests
 {
 	/// <summary>
-	/// Associative-array expansion tests covering the two determinism/validation
-	/// guarantees made by <c>UriTemplateExpander.ExpandAssociativeArray</c>:
+	/// Associative-array expansion tests covering the determinism guarantee made by
+	/// <c>UriTemplateExpander.ExpandAssociativeArray</c>:
 	///
-	/// 1. Pair ordering is deterministic. Values supplied as an ordered sequence
-	///    (<see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/>,
-	///    e.g. <see cref="List{T}"/>) keep their enumeration order. Values supplied
-	///    as an <see cref="IDictionary{TKey, TValue}"/> — a contract with no defined
-	///    enumeration order — are ordered by ordinal key comparison.
-	/// 2. Empty-string keys are rejected with <see cref="FormatException"/>, matching
-	///    the existing null-key rule.
+	/// 1. A value that is index-addressable — <see cref="IList{T}"/> or
+	///    <see cref="IReadOnlyList{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/>,
+	///    which covers <see cref="List{T}"/>, arrays, and
+	///    <see cref="ReadOnlyCollection{T}"/> — has a caller-defined order, so that
+	///    order is preserved verbatim, duplicate keys included.
+	/// 2. Every other <see cref="IEnumerable{T}"/> of
+	///    <see cref="KeyValuePair{TKey, TValue}"/> has no ordering contract — this
+	///    covers <see cref="IDictionary{TKey, TValue}"/> implementations (including
+	///    <see cref="FrozenDictionary{TKey, TValue}"/>), hash sets of pairs, and LINQ
+	///    iterators — so its pairs are canonicalized: ordinal by key, with an ordinal
+	///    value comparison as tie-break.
 	///
-	/// References: GitHub issue #22, docs/test-plan.md §6.3, RFC 6570 §3.2.
+	/// Empty member names are legal: RFC 6570 §2.3 models associative-array members as
+	/// (name, value) string pairs and treats only a zero-member composite as undefined.
+	/// Null keys and null values remain rejected as defects.
+	///
+	/// References: GitHub issue #22, docs/test-plan.md §6.3, RFC 6570 §2.3, §3.2.
 	/// </summary>
 	public class UriTemplateAssociativeArrayTests
 	{
 		// ----------------------------------------------------------------
-		// 1. IDictionary inputs — ordinal key ordering
+		// 1. Unordered inputs — canonical (ordinal key) ordering
 		// ----------------------------------------------------------------
 
 		/// <summary>
@@ -144,7 +154,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// 2. Ordered sequence inputs — supplied order preserved
+		// 2. Index-addressable inputs — supplied order preserved
 		// ----------------------------------------------------------------
 
 		// A List<KeyValuePair<,>> has a defined enumeration order, so it is kept
@@ -201,11 +211,31 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// 3. Empty-string key rejection
+		// 3. Empty member names are preserved (RFC 6570 §2.3)
 		// ----------------------------------------------------------------
 
+		// RFC 6570 §2.3 places no constraint on associative-array member names; the
+		// varchar grammar constrains template variable names, not member names. An
+		// empty name therefore expands like any other.
 		[Fact]
-		public void Dictionary_EmptyKey_ThrowsFormatException()
+		public void KeyValuePairSequence_EmptyKey_IsPreserved()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["keys"] = new List<KeyValuePair<string, string>>
+				{
+					new("", "v"),
+				},
+			};
+
+			new UriTemplate("{keys}").Expand(vars).Should().Be(",v");
+			new UriTemplate("{keys*}").Expand(vars).Should().Be("=v");
+			new UriTemplate("{?keys*}").Expand(vars).Should().Be("?=v");
+			new UriTemplate("{?keys}").Expand(vars).Should().Be("?keys=,v");
+		}
+
+		[Fact]
+		public void Dictionary_EmptyKey_IsPreserved()
 		{
 			var vars = new Dictionary<string, object?>
 			{
@@ -215,15 +245,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 					["x"] = "1",
 				},
 			};
-			var template = new UriTemplate("{?keys*}");
 
-			Action act = () => template.Expand(vars);
-			act.Should().Throw<FormatException>()
-				.WithMessage("*keys*empty key*");
+			// The empty key sorts first under ordinal comparison.
+			new UriTemplate("{?keys*}").Expand(vars).Should().Be("?=&x=1");
 		}
 
 		[Fact]
-		public void Dictionary_EmptyKey_NonExplode_ThrowsFormatException()
+		public void Dictionary_EmptyKey_NonExplode_IsPreserved()
 		{
 			var vars = new Dictionary<string, object?>
 			{
@@ -232,29 +260,15 @@ namespace Chatter.Rest.UriTemplates.Tests
 					[""] = "v",
 				},
 			};
-			var template = new UriTemplate("{?keys}");
 
-			Action act = () => template.Expand(vars);
-			act.Should().Throw<FormatException>();
+			new UriTemplate("{?keys}").Expand(vars).Should().Be("?keys=,v");
 		}
 
-		[Fact]
-		public void KeyValuePairSequence_EmptyKey_ThrowsFormatException()
-		{
-			var vars = new Dictionary<string, object?>
-			{
-				["keys"] = new List<KeyValuePair<string, string>>
-				{
-					new("", "1"),
-				},
-			};
-			var template = new UriTemplate("{keys*}");
+		// ----------------------------------------------------------------
+		// 4. Value validation
+		// ----------------------------------------------------------------
 
-			Action act = () => template.Expand(vars);
-			act.Should().Throw<FormatException>();
-		}
-
-		// Empty *values* remain legal — only empty keys are rejected.
+		// Empty values remain legal.
 		[Fact]
 		public void EmptyValue_IsStillAccepted()
 		{
@@ -285,6 +299,120 @@ namespace Chatter.Rest.UriTemplates.Tests
 			Action act = () => template.Expand(vars);
 			act.Should().Throw<FormatException>()
 				.WithMessage("*null key*");
+		}
+
+		// ----------------------------------------------------------------
+		// 5. Container-shape dispatch — ordered vs unordered
+		// ----------------------------------------------------------------
+
+		private static readonly KeyValuePair<string, string>[] ReverseOrdinalPairs =
+		{
+			new("z", "1"),
+			new("m", "2"),
+			new("a", "3"),
+		};
+
+		// An array is index-addressable (KeyValuePair<,>[] implements
+		// IList<KeyValuePair<,>>), so its order is the caller's and is preserved.
+		[Fact]
+		public void Array_IsTreatedAsOrdered()
+		{
+			var vars = new Dictionary<string, object?> { ["d"] = ReverseOrdinalPairs };
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
+		}
+
+		// ReadOnlyCollection<KVP> implements IList<KVP>; same rule.
+		[Fact]
+		public void ReadOnlyCollection_IsTreatedAsOrdered()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = new ReadOnlyCollection<KeyValuePair<string, string>>(
+					new List<KeyValuePair<string, string>>(ReverseOrdinalPairs)),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
+		}
+
+		// A HashSet of pairs is an IEnumerable<KVP> that is not an IDictionary, but it
+		// has no ordering contract — its enumeration order can change after
+		// remove/reinsert or between processes — so it is canonicalized, not preserved.
+		[Fact]
+		public void HashSetOfPairs_IsCanonicalized()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = new HashSet<KeyValuePair<string, string>>(ReverseOrdinalPairs),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
+		}
+
+		// FrozenDictionary does implement IDictionary<string, string>, so it reaches the
+		// unordered branch; this pins that it is canonicalized rather than enumerated
+		// in whatever bucket order the frozen layout happens to produce.
+		[Fact]
+		public void FrozenDictionary_IsCanonicalized()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = new Dictionary<string, string>
+				{
+					["z"] = "1",
+					["m"] = "2",
+					["a"] = "3",
+				}.ToFrozenDictionary(),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
+		}
+
+		// A LINQ iterator is a custom enumerable with no ordering contract.
+		[Fact]
+		public void LinqIterator_IsCanonicalized()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = ReverseOrdinalPairs.Select(pair => pair),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
+		}
+
+		// An unordered container may still hold repeated keys. Ordinal key comparison
+		// alone would leave those pairs tied under an unstable sort, so the value is
+		// compared as a tie-break to keep the canonical order total.
+		[Fact]
+		public void UnorderedContainer_DuplicateKeys_AreOrderedByKeyThenValue()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = new HashSet<KeyValuePair<string, string>>
+				{
+					new("z", "3"),
+					new("a", "2"),
+					new("z", "1"),
+				},
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=2&z=1&z=3");
+		}
+
+		// Two logically identical unordered containers built in different insertion
+		// orders must expand identically — the determinism guarantee itself, extended
+		// past IDictionary.
+		[Fact]
+		public void UnorderedContainers_BuiltDifferently_ExpandIdentically()
+		{
+			var forward = new HashSet<KeyValuePair<string, string>>
+			{
+				new("a", "3"),
+				new("m", "2"),
+				new("z", "1"),
+			};
+			var reverse = new HashSet<KeyValuePair<string, string>>(ReverseOrdinalPairs);
+
+			var template = new UriTemplate("{?d*}");
+			var fromForward = template.Expand(new Dictionary<string, object?> { ["d"] = forward });
+			var fromReverse = template.Expand(new Dictionary<string, object?> { ["d"] = reverse });
+
+			fromForward.Should().Be(fromReverse);
+			fromForward.Should().Be("?a=3&m=2&z=1");
 		}
 	}
 }
