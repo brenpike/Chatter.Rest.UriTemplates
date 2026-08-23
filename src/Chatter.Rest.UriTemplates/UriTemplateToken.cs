@@ -30,8 +30,9 @@ public sealed class UriTemplateExpressionToken : UriTemplateToken
     public IReadOnlyList<UriTemplateVarSpec> Variables { get; }
 
     /// <summary>
-    /// Creates an expression token. The supplied variable specifications are copied,
-    /// so later mutation of <paramref name="variables"/> cannot alter the token.
+    /// Creates an expression token. The supplied variable specifications are copied into a
+    /// read-only wrapper, so neither later mutation of <paramref name="variables"/> nor casting
+    /// <see cref="Variables"/> to a mutable collection interface can alter the token.
     /// </summary>
     /// <param name="operator">The expression operator.</param>
     /// <param name="variables">One or more non-null variable specifications.</param>
@@ -52,7 +53,7 @@ public sealed class UriTemplateExpressionToken : UriTemplateToken
                 "An expression must declare at least one variable specification.", nameof(variables));
         }
 
-        // Defensive copy: the token exposes a read-only view that callers must not be able to mutate.
+        // Defensive copy: the token must not alias a caller-owned collection.
         var copy = new UriTemplateVarSpec[variables.Count];
 
         for (var i = 0; i < variables.Count; i++)
@@ -62,6 +63,11 @@ public sealed class UriTemplateExpressionToken : UriTemplateToken
         }
 
         Operator = @operator;
-        Variables = copy;
+
+        // Wrap the copy: a bare array is an IList<T>, so exposing it would let a caller cast
+        // Variables back to IList<UriTemplateVarSpec> (or UriTemplateVarSpec[]) and replace
+        // entries, including with null. ReadOnlyCollection<T> throws from every IList<T>
+        // mutator, and is available on both net8.0 and netstandard2.0.
+        Variables = Array.AsReadOnly(copy);
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using FluentAssertions;
 using Xunit;
 
@@ -85,6 +86,99 @@ namespace Chatter.Rest.UriTemplates.Tests
 			token.Variables.Should().HaveCount(2);
 			token.Variables[0].Should().Be(new UriTemplateVarSpec("a", 3, false));
 			token.Variables[1].Should().Be(new UriTemplateVarSpec("b", null, true));
+		}
+
+		[Fact]
+		public void ExpressionToken_Variables_IsNotACastableMutableArray()
+		{
+			var token = new UriTemplateExpressionToken(
+				UriTemplateOperator.None,
+				new List<UriTemplateVarSpec> { new UriTemplateVarSpec("a", null, false) });
+
+			(token.Variables as UriTemplateVarSpec[]).Should().BeNull();
+			token.Variables.Should().BeAssignableTo<ReadOnlyCollection<UriTemplateVarSpec>>();
+		}
+
+		[Fact]
+		public void ExpressionToken_Variables_IndexerAssignmentThroughIList_Throws()
+		{
+			var token = new UriTemplateExpressionToken(
+				UriTemplateOperator.None,
+				new List<UriTemplateVarSpec> { new UriTemplateVarSpec("a", null, false) });
+
+			var mutable = (IList<UriTemplateVarSpec>)token.Variables;
+
+			Action act = () => mutable[0] = new UriTemplateVarSpec("b", null, false);
+
+			act.Should().Throw<NotSupportedException>();
+			token.Variables[0].Name.Should().Be("a");
+		}
+
+		[Fact]
+		public void ExpressionToken_Variables_NullAssignmentThroughIList_Throws()
+		{
+			var token = new UriTemplateExpressionToken(
+				UriTemplateOperator.None,
+				new List<UriTemplateVarSpec> { new UriTemplateVarSpec("a", null, false) });
+
+			var mutable = (IList<UriTemplateVarSpec>)token.Variables;
+
+			Action act = () => mutable[0] = null!;
+
+			act.Should().Throw<NotSupportedException>();
+			token.Variables[0].Should().NotBeNull();
+		}
+
+		[Fact]
+		public void ExpressionToken_Variables_AddThroughIList_Throws()
+		{
+			var token = new UriTemplateExpressionToken(
+				UriTemplateOperator.None,
+				new List<UriTemplateVarSpec> { new UriTemplateVarSpec("a", null, false) });
+
+			var mutable = (IList<UriTemplateVarSpec>)token.Variables;
+
+			mutable.IsReadOnly.Should().BeTrue();
+
+			Action act = () => mutable.Add(new UriTemplateVarSpec("b", null, false));
+
+			act.Should().Throw<NotSupportedException>();
+			token.Variables.Should().HaveCount(1);
+		}
+
+		[Fact]
+		public void ExpressionToken_Variables_ClearThroughIList_Throws()
+		{
+			var token = new UriTemplateExpressionToken(
+				UriTemplateOperator.None,
+				new List<UriTemplateVarSpec> { new UriTemplateVarSpec("a", null, false) });
+
+			var mutable = (IList<UriTemplateVarSpec>)token.Variables;
+
+			Action act = () => mutable.Clear();
+
+			act.Should().Throw<NotSupportedException>();
+			token.Variables.Should().HaveCount(1);
+		}
+
+		[Fact]
+		public void ExpressionToken_Variables_RemoveAndInsertThroughIList_Throw()
+		{
+			var token = new UriTemplateExpressionToken(
+				UriTemplateOperator.None,
+				new List<UriTemplateVarSpec> { new UriTemplateVarSpec("a", null, false) });
+
+			var mutable = (IList<UriTemplateVarSpec>)token.Variables;
+			var existing = token.Variables[0];
+
+			Action insert = () => mutable.Insert(0, new UriTemplateVarSpec("b", null, false));
+			Action removeAt = () => mutable.RemoveAt(0);
+			Action remove = () => mutable.Remove(existing);
+
+			insert.Should().Throw<NotSupportedException>();
+			removeAt.Should().Throw<NotSupportedException>();
+			remove.Should().Throw<NotSupportedException>();
+			token.Variables.Should().HaveCount(1);
 		}
 
 		// ---------------------------------------------------------------
