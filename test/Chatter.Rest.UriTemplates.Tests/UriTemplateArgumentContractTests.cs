@@ -880,6 +880,60 @@ namespace Chatter.Rest.UriTemplates.Tests
 			((ISet<KeyValuePair<string, string>>)recorder.Captured!).Count.Should().Be(2);
 		}
 
+		// The same defect as the set case, one type over. A caller's dictionary may be
+		// built with a comparer finer than StringComparer.Ordinal — reference identity,
+		// for instance — and may then legally hold two entries whose keys have equal text
+		// but are distinct instances. Copying into an ordinal Dictionary<string, string>
+		// collapses them and the expanded URI loses a member, where the expander had
+		// enumerated and canonicalized both.
+		[Fact]
+		public void Expand_ObjectDictionary_DictionaryWithFinerKeyEquality_KeepsEveryObservedEntry()
+		{
+			// Distinct instances with equal text: a reference-identity comparer keeps both
+			// as separate keys, an ordinal one does not.
+			var firstKey = new string("dot".ToCharArray());
+			var secondKey = new string("dot".ToCharArray());
+
+			// The premise the test rests on, asserted rather than assumed.
+			ReferenceEquals(firstKey, secondKey).Should().BeFalse();
+			StringComparer.Ordinal.Equals(firstKey, secondKey).Should().BeTrue();
+
+			var source = new ReferenceKeyedDictionary(
+				new KeyValuePair<string, string>("semi", ";"),
+				new KeyValuePair<string, string>(firstKey, "."),
+				new KeyValuePair<string, string>(secondKey, "."));
+
+			// The source really does hold all three, so anything lost is lost by the copy.
+			source.Count.Should().Be(3);
+
+			var vars = new Dictionary<string, object?> { ["keys"] = source };
+			var template = new UriTemplate("{?keys*}");
+
+			// Both 'dot' entries survive, and the pairs arrive in the canonical order the
+			// expander imposes on a keyed map, not the dictionary's own.
+			template.Expand(vars).Should().Be("?dot=.&dot=.&semi=%3B");
+		}
+
+		// Keeping every entry must not cost the dictionary its dispatch: the snapshot has
+		// to stay on the expander's IDictionary branch, or the canonical ordering the
+		// branch exists to apply is lost.
+		[Fact]
+		public void Expand_ObjectDictionary_DictionaryWithFinerKeyEquality_StillReachesExpanderAsDictionary()
+		{
+			var recorder = new RecordingExpander();
+			var source = new ReferenceKeyedDictionary(
+				new KeyValuePair<string, string>(new string("dot".ToCharArray()), "."),
+				new KeyValuePair<string, string>(new string("dot".ToCharArray()), "."));
+			var vars = new Dictionary<string, object?> { ["keys"] = source };
+			var template = new UriTemplate("{?keys*}", UriTemplateParser.Default, recorder);
+
+			template.Expand(vars);
+
+			recorder.Captured.Should().BeAssignableTo<IDictionary<string, string>>();
+			recorder.Captured.Should().NotBeSameAs(source);
+			((IDictionary<string, string>)recorder.Captured!).Count.Should().Be(2);
+		}
+
 		// A dictionary is checked before a set, so a type that is somehow both still
 		// takes the expander's IDictionary branch.
 		[Fact]
@@ -1272,6 +1326,86 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<FormatException>()
 				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
 			oneShot.EnumerationCount.Should().Be(0);
+		}
+
+		// An expression's operator is a failure the expression owns, and only a custom
+		// IUriTemplateParser can produce an undefined one. It used to be reported by
+		// OperatorStrategyFactory during expansion — which is after the preparation pass,
+		// so a throwing, blocking, or endless composite the expression named was read
+		// first and masked it. The walk now resolves each expression's strategy before
+		// touching any of its variables.
+		[Fact]
+		public void Expand_ParserReturnsUndefinedOperator_IsReportedBeforeAnyValueIsRead()
+		{
+			var parser = new MutableTokenParser(
+				new UriTemplateExpressionToken(
+					(UriTemplateOperator)99,
+					new[] { new UriTemplateVarSpec("items", null, false) }));
+			var template = new UriTemplate("{items}", parser, UriTemplateExpander.Default);
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?> { ["items"] = landmine };
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<ArgumentOutOfRangeException>();
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_ParserReturnsUndefinedOperator_IsReportedBeforeAnyValueIsRead()
+		{
+			var parser = new MutableTokenParser(
+				new UriTemplateExpressionToken(
+					(UriTemplateOperator)99,
+					new[] { new UriTemplateVarSpec("items", null, false) }));
+			var template = new UriTemplate("{items}", parser, UriTemplateExpander.Default);
+			var landmine = new ThrowingSequence();
+
+			var act = () => template.Expand(("items", (object?)landmine));
+
+			act.Should().Throw<ArgumentOutOfRangeException>();
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// Resolving the operator inside the walk, rather than in a pass of its own, is what
+		// keeps the established rule: the first problem in template order is the one
+		// reported. A whole-template operator pass would report the bad operator here even
+		// though the template names the unsupported value before it.
+		[Fact]
+		public void Expand_UndefinedOperatorAfterAnEarlierFailure_StillReportsTheEarlierFailure()
+		{
+			var parser = new MutableTokenParser(
+				Expression(new UriTemplateVarSpec("bad", null, false)),
+				new UriTemplateExpressionToken(
+					(UriTemplateOperator)99,
+					new[] { new UriTemplateVarSpec("items", null, false) }));
+			var template = new UriTemplate("{bad}{items}", parser, UriTemplateExpander.Default);
+			var vars = new Dictionary<string, object?> { ["bad"] = 42, ["items"] = new ThrowingSequence() };
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		// And the converse: a bad operator ahead of a later failure still wins, because it
+		// is what template order reaches first.
+		[Fact]
+		public void Expand_UndefinedOperatorBeforeALaterFailure_ReportsTheOperator()
+		{
+			var parser = new MutableTokenParser(
+				new UriTemplateExpressionToken(
+					(UriTemplateOperator)99,
+					new[] { new UriTemplateVarSpec("items", null, false) }),
+				Expression(new UriTemplateVarSpec("bad", null, false)));
+			var template = new UriTemplate("{items}{bad}", parser, UriTemplateExpander.Default);
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?> { ["bad"] = 42, ["items"] = landmine };
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<ArgumentOutOfRangeException>();
+			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
 		private static UriTemplateExpressionToken Expression(params UriTemplateVarSpec[] variables) =>
@@ -1692,6 +1826,72 @@ namespace Chatter.Rest.UriTemplates.Tests
 		private sealed class NullReturningParser : IUriTemplateParser
 		{
 			public IReadOnlyList<UriTemplateToken> Parse(string template) => null!;
+		}
+
+		/// <summary>
+		/// An <see cref="IDictionary{TKey, TValue}"/> whose key equality is reference
+		/// identity rather than ordinal text, so it can legally hold two entries whose keys
+		/// read the same. Only enumeration and <see cref="Count"/> are implemented, which is
+		/// all the snapshot and the expander need.
+		/// </summary>
+		private sealed class ReferenceKeyedDictionary : IDictionary<string, string>
+		{
+			private readonly List<KeyValuePair<string, string>> _entries = new List<KeyValuePair<string, string>>();
+
+			internal ReferenceKeyedDictionary(params KeyValuePair<string, string>[] entries)
+			{
+				foreach (var entry in entries)
+				{
+					// Reference identity on the key, the point of the double: two textually
+					// equal but distinct key instances are two entries, not one.
+					var existing = _entries.FindIndex(e => ReferenceEquals(e.Key, entry.Key));
+
+					if (existing >= 0)
+					{
+						_entries[existing] = entry;
+					}
+					else
+					{
+						_entries.Add(entry);
+					}
+				}
+			}
+
+			public IEnumerator<KeyValuePair<string, string>> GetEnumerator() => _entries.GetEnumerator();
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+			public int Count => _entries.Count;
+
+			public bool IsReadOnly => true;
+
+			public string this[string key]
+			{
+				get => throw new NotSupportedException();
+				set => throw new NotSupportedException();
+			}
+
+			public ICollection<string> Keys => throw new NotSupportedException();
+
+			public ICollection<string> Values => throw new NotSupportedException();
+
+			public void Add(string key, string value) => throw new NotSupportedException();
+
+			public void Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public void Clear() => throw new NotSupportedException();
+
+			public bool Contains(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public bool ContainsKey(string key) => throw new NotSupportedException();
+
+			public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+
+			public bool Remove(string key) => throw new NotSupportedException();
+
+			public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public bool TryGetValue(string key, out string value) => throw new NotSupportedException();
 		}
 
 		/// <summary>

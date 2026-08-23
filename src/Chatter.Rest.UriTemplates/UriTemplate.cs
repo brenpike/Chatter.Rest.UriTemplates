@@ -322,6 +322,13 @@ public sealed class UriTemplate
     /// failure that is already certain.
     /// </para>
     /// <para>
+    /// Each expression is checked before its variables, because an expression can fail on
+    /// its own account: its operator may lie outside the defined set, which a custom
+    /// <see cref="IUriTemplateParser"/> is free to produce. Resolving its strategy first
+    /// puts that failure at the expression's own position, ahead of the values it names,
+    /// so no composite is read on the way to it.
+    /// </para>
+    /// <para>
     /// At a variable's first reference its value's type is checked against the
     /// supported set, and the value is then snapshotted — with each member validated
     /// as it is copied. A composite bound to a name the template prefixes anywhere is
@@ -364,6 +371,22 @@ public sealed class UriTemplate
             {
                 continue;
             }
+
+            // Resolve the expression's strategy before any of its variables are touched.
+            // An expression carries one failure of its own — an operator outside the
+            // defined set, which only a custom IUriTemplateParser can produce — and it
+            // belongs to the expression, so it is due at the expression's position, ahead
+            // of every value the expression names. Without this the walk prepared those
+            // values first and an undefined operator was reported by the expander only
+            // afterwards, so a throwing, blocking, or endless composite masked it, or
+            // stopped it being reached at all.
+            //
+            // Resolving inside the existing walk rather than in a pass of its own is what
+            // keeps the ordering rule intact: a whole-template operator pass would let a
+            // bad operator anywhere pre-empt a failure the template names before it,
+            // which is precisely the phase-ordering defect this single walk replaced. It
+            // also holds the walk to one traversal instead of adding a third.
+            _ = OperatorStrategyFactory.For(expression.Operator);
 
             foreach (var varSpec in expression.Variables)
             {
@@ -503,21 +526,30 @@ public sealed class UriTemplate
 
         if (value is IDictionary<string, string> dictionaryValue)
         {
-            // Copy into a dictionary, not a list: UriTemplateExpander dispatches on the
-            // runtime type, and its ordinal key ordering is selected by that type rather
-            // than by the contents of the sequence. Flattening to IEnumerable<KeyValuePair<,>>
-            // here would silently opt these values out of that ordering.
+            // Copy into a dictionary shape, not a list: UriTemplateExpander dispatches on
+            // the runtime type, and its ordinal key ordering is selected by that type
+            // rather than by the contents of the sequence. Flattening to
+            // IEnumerable<KeyValuePair<,>> here would silently opt these values out of
+            // that ordering.
             //
-            // The entries are copied by hand rather than through the copy constructor:
-            // Dictionary<,> rejects a null key with ArgumentNullException, which would
-            // replace this overload's documented FormatException with a different type.
-            var snapshot = new Dictionary<string, string>(StringComparer.Ordinal);
+            // Not into a Dictionary<string, string>, though, for the reason the set
+            // branch below cannot use a HashSet: that would impose the copy's own key
+            // equality on entries that were never subject to it. A caller's dictionary
+            // may be built with a comparer finer than ordinal and so legally hold two
+            // entries whose keys have equal text but are distinct instances, which an
+            // ordinal copy collapses into one — dropping a member the expander used to
+            // enumerate and canonicalize. UriTemplateDictionarySnapshot keeps every
+            // entry it observes, in order, and is still an IDictionary<string, string>.
+            // Copying by hand also keeps a null key reported as this overload's
+            // documented FormatException rather than the ArgumentNullException a
+            // Dictionary<,> copy constructor would raise.
+            var snapshot = new UriTemplateDictionarySnapshot();
 
             foreach (var entry in dictionaryValue)
             {
                 ThrowIfNullPair(name, entry);
 
-                snapshot[entry.Key] = entry.Value;
+                snapshot.Append(entry);
             }
 
             return snapshot;
