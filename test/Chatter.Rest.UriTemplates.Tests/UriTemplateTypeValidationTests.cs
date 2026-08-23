@@ -161,6 +161,184 @@ namespace Chatter.Rest.UriTemplates.Tests
 			spec.Explode.Should().BeFalse();
 		}
 
+		// ---------------------------------------------------------------
+		// UriTemplateVarSpec - object-initializer / 'with' construction paths
+		// ---------------------------------------------------------------
+
+		[Fact]
+		public void VarSpec_ObjectInitializer_NullName_Throws()
+		{
+			Action act = () => new UriTemplateVarSpec("var", null, false) { Name = null! };
+
+			act.Should().Throw<ArgumentNullException>()
+				.Which.ParamName.Should().Be("Name");
+		}
+
+		[Fact]
+		public void VarSpec_ObjectInitializer_EmptyName_Throws()
+		{
+			Action act = () => new UriTemplateVarSpec("var", null, false) { Name = "" };
+
+			act.Should().ThrowExactly<ArgumentException>()
+				.Which.ParamName.Should().Be("Name");
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_EmptyName_Throws()
+		{
+			var spec = new UriTemplateVarSpec("var", null, false);
+
+			Action act = () => _ = spec with { Name = "" };
+
+			act.Should().ThrowExactly<ArgumentException>()
+				.Which.ParamName.Should().Be("Name");
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_NullName_Throws()
+		{
+			var spec = new UriTemplateVarSpec("var", null, false);
+
+			Action act = () => _ = spec with { Name = null! };
+
+			act.Should().Throw<ArgumentNullException>()
+				.Which.ParamName.Should().Be("Name");
+		}
+
+		[Theory]
+		[InlineData(0)]
+		[InlineData(-1)]
+		[InlineData(10000)]
+		public void VarSpec_ObjectInitializer_PrefixLengthOutOfRange_Throws(int prefixLength)
+		{
+			Action act = () => new UriTemplateVarSpec("var", null, false) { PrefixLength = prefixLength };
+
+			act.Should().Throw<ArgumentOutOfRangeException>()
+				.Which.ParamName.Should().Be("PrefixLength");
+		}
+
+		[Theory]
+		[InlineData(0)]
+		[InlineData(-1)]
+		[InlineData(10000)]
+		public void VarSpec_WithExpression_PrefixLengthOutOfRange_Throws(int prefixLength)
+		{
+			var spec = new UriTemplateVarSpec("var", null, false);
+
+			Action act = () => _ = spec with { PrefixLength = prefixLength };
+
+			act.Should().Throw<ArgumentOutOfRangeException>()
+				.Which.ParamName.Should().Be("PrefixLength");
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_ExplodeOnPrefixedSpec_Throws()
+		{
+			var spec = new UriTemplateVarSpec("var", 3, false);
+
+			Action act = () => _ = spec with { Explode = true };
+
+			act.Should().ThrowExactly<ArgumentException>()
+				.Which.ParamName.Should().Be("Explode");
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_PrefixLengthOnExplodedSpec_Throws()
+		{
+			var spec = new UriTemplateVarSpec("var", null, true);
+
+			Action act = () => _ = spec with { PrefixLength = 3 };
+
+			act.Should().ThrowExactly<ArgumentException>()
+				.Which.ParamName.Should().Be("PrefixLength");
+		}
+
+		[Fact]
+		public void VarSpec_ObjectInitializer_PrefixLengthThenExplode_Throws()
+		{
+			Action act = () => new UriTemplateVarSpec("var", null, false)
+			{
+				PrefixLength = 3,
+				Explode = true,
+			};
+
+			act.Should().ThrowExactly<ArgumentException>()
+				.Which.ParamName.Should().Be("Explode");
+		}
+
+		[Fact]
+		public void VarSpec_ObjectInitializer_ExplodeThenPrefixLength_Throws()
+		{
+			Action act = () => new UriTemplateVarSpec("var", null, false)
+			{
+				Explode = true,
+				PrefixLength = 3,
+			};
+
+			act.Should().ThrowExactly<ArgumentException>()
+				.Which.ParamName.Should().Be("PrefixLength");
+		}
+
+		[Fact]
+		public void VarSpec_ObjectInitializer_ValidValues_AreAccepted()
+		{
+			var spec = new UriTemplateVarSpec("var", null, false)
+			{
+				Name = "other",
+				PrefixLength = 4,
+			};
+
+			spec.Name.Should().Be("other");
+			spec.PrefixLength.Should().Be(4);
+			spec.Explode.Should().BeFalse();
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_ValidValues_AreAccepted()
+		{
+			var spec = new UriTemplateVarSpec("var", null, false);
+
+			var prefixed = spec with { PrefixLength = 9999 };
+			var exploded = spec with { Explode = true };
+
+			prefixed.PrefixLength.Should().Be(9999);
+			prefixed.Explode.Should().BeFalse();
+			exploded.PrefixLength.Should().BeNull();
+			exploded.Explode.Should().BeTrue();
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_ClearingPrefixLengthBeforeSettingExplode_IsAccepted()
+		{
+			var spec = new UriTemplateVarSpec("var", 3, false);
+
+			var exploded = spec with { PrefixLength = null, Explode = true };
+
+			exploded.PrefixLength.Should().BeNull();
+			exploded.Explode.Should().BeTrue();
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_ClearingExplodeBeforeSettingPrefixLength_IsAccepted()
+		{
+			var spec = new UriTemplateVarSpec("var", null, true);
+
+			var prefixed = spec with { Explode = false, PrefixLength = 3 };
+
+			prefixed.PrefixLength.Should().Be(3);
+			prefixed.Explode.Should().BeFalse();
+		}
+
+		[Fact]
+		public void VarSpec_WithExpression_UnrelatedChange_PreservesModifiers()
+		{
+			var prefixed = new UriTemplateVarSpec("var", 3, false) with { Name = "other" };
+			var exploded = new UriTemplateVarSpec("var", null, true) with { Name = "other" };
+
+			prefixed.Should().Be(new UriTemplateVarSpec("other", 3, false));
+			exploded.Should().Be(new UriTemplateVarSpec("other", null, true));
+		}
+
 		[Fact]
 		public void VarSpec_EqualityIsUnchanged()
 		{
