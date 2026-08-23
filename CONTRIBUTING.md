@@ -21,11 +21,16 @@ Prerequisites:
 Clone and build:
 
 ```bash
-git clone https://github.com/brenpike/Chatter.Rest.UriTemplates.git
+git clone --recurse-submodules https://github.com/brenpike/Chatter.Rest.UriTemplates.git
 cd Chatter.Rest.UriTemplates
 dotnet restore
 dotnet build
 ```
+
+If you already cloned without `--recurse-submodules`, run `git submodule update
+--init` before running the tests. The `uritemplate-test` submodule carries the
+official RFC 6570 suite that `UriTemplateComplianceTests` reads, and those tests
+fail rather than skip when it is missing.
 
 Run tests:
 

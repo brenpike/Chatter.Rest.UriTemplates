@@ -47,6 +47,9 @@ test/
 ## 3. Build Commands
 
 ```bash
+# Initialize the uritemplate-test submodule (required for the compliance tests)
+git submodule update --init
+
 # Restore (locked mode - requires packages.lock.json)
 dotnet restore --locked-mode
 
@@ -62,6 +65,10 @@ dotnet build -c Release --no-restore
 **Warnings:** zero warnings expected on `net8.0`. The `netstandard2.0` target may emit baseline nullable-context warnings (`CS8604`/`CS8603`) — these are pre-existing and not regressions.
 
 ## 4. Test Commands
+
+`UriTemplateComplianceTests` reads the official RFC 6570 suite from the
+`uritemplate-test` submodule. Run `git submodule update --init` first, or those
+tests throw `FileNotFoundException` instead of skipping.
 
 ```bash
 # Run all tests

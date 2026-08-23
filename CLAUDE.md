@@ -37,14 +37,22 @@ See [docs/development.md](docs/development.md) for all build, test, and pack com
 Run from the repository root before opening a PR:
 
 ```bash
+git submodule update --init
 dotnet restore --locked-mode
 dotnet build -c Release --no-restore
 dotnet test
 ```
 
 `dotnet test` runs both test projects (`Chatter.Rest.UriTemplates.Tests` and
-`Chatter.Rest.UriTemplates.DependencyInjection.Tests`) via the solution. If
-`dotnet restore --locked-mode` fails, see the lock file note in
+`Chatter.Rest.UriTemplates.DependencyInjection.Tests`) via the solution.
+
+The submodule step is required, not optional. `UriTemplateComplianceTests` reads
+the official RFC 6570 suite from the `uritemplate-test` submodule, which the test
+project copies to `TestData/`. On an uninitialized submodule the glob copies
+nothing and those tests throw `FileNotFoundException` rather than skipping. CI
+checks out with `submodules: true`, so this only bites fresh local clones.
+
+If `dotnet restore --locked-mode` fails, see the lock file note in
 [docs/development.md](docs/development.md).
 
 ## Architecture
