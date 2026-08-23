@@ -75,17 +75,30 @@ jobs:
             return 1
           }
 
-          # Filter out pre-release tags to get latest stable release baseline
+          # The baseline is the MAXIMUM of two sources: the latest stable
+          # release tag AND the <Version> currently on origin/main. Tags are
+          # created post-merge by the tag job, so between a version-bump merge
+          # and its tag the tag baseline is stale; comparing against
+          # origin/main as well closes that window. The PR version must be
+          # strictly greater than both.
           LATEST_TAG=$(git tag -l "${TAG_PREFIX}/v*" | grep -v '/v.*-' | sort -V | tail -1 || true)
+          MAIN_VERSION=$(git show "origin/main:${CSPROJ_PATH}" 2>/dev/null | grep -m1 '<Version>' | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | tr -d ' \r' || true)
 
-          if [ -z "$LATEST_TAG" ]; then
-            echo "No existing ${TAG_PREFIX}/v* release tags found. Falling back to comparing against origin/main."
-            MAIN_VERSION=$(git show "origin/main:${CSPROJ_PATH}" | grep -m1 '<Version>' | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | tr -d ' \r')
+          if [ -n "$MAIN_VERSION" ]; then
             if ! version_gt "$VERSION" "$MAIN_VERSION"; then
-              echo "ERROR: Version $VERSION must be greater than origin/main version $MAIN_VERSION. Bump the version before merging."
+              echo "ERROR: Version $VERSION must be greater than the origin/main version $MAIN_VERSION. A merged bump may not have been tagged yet; bump above origin/main before merging."
               exit 1
             fi
-            echo "Version check passed (no tags): csproj=$VERSION, origin/main=$MAIN_VERSION"
+          else
+            echo "No ${CSPROJ_PATH} found on origin/main (new package); skipping origin/main comparison."
+          fi
+
+          if [ -z "$LATEST_TAG" ]; then
+            if [ -z "$MAIN_VERSION" ]; then
+              echo "ERROR: No ${TAG_PREFIX}/v* release tags and no ${CSPROJ_PATH} on origin/main; cannot establish a version baseline."
+              exit 1
+            fi
+            echo "Version check passed (no ${TAG_PREFIX}/v* tags): csproj=$VERSION > origin/main=$MAIN_VERSION"
             exit 0
           fi
 
@@ -96,4 +109,4 @@ jobs:
             exit 1
           fi
 
-          echo "Version check passed: csproj=$VERSION, latest release tag=$LATEST_TAG"
+          echo "Version check passed: csproj=$VERSION > latest release tag=$LATEST_TAG and origin/main=${MAIN_VERSION:-<none>}"
