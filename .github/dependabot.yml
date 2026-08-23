@@ -1,0 +1,10 @@
+# Keeps SHA-pinned GitHub Actions current across all workflows.
+# A `nuget` ecosystem entry is a deliberate follow-up: the dependency-pinning
+# lane (#27) is regenerating the test lockfiles, and adding NuGet updates now
+# would produce competing lockfile changes.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
