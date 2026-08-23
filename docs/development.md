@@ -146,9 +146,9 @@ Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGe
 
 **version-check:** calls `version-check.yml` with the package's `src/` directory plus `src/Directory.Build.props` (via `extra-src-path`) — the same source set the deploy job's publish gate diffs post-merge, so the two gates agree. Runs on pull requests only. Tag prefixes: `uritemplate` (core), `uritemplate-di` (DI).
 
-**deploy:** runs only when `github.ref == 'refs/heads/main'` **and** `github.event_name == 'push'` — i.e., the push produced by merging to `main`; a `workflow_dispatch` run never reaches deploy. Downloads the build artifact, then a "Determine publish action" step (`publish-gate`) queries the nuget.org flat-container index for the `<Version>` being packed and picks one of three outcomes:
+**deploy:** runs only when `github.ref == 'refs/heads/main'` **and** `github.event_name == 'push'` — i.e., the push produced by merging to `main`; a `workflow_dispatch` run never reaches deploy. The job declares a job-level `concurrency` group scoped to the package and ref (`nuget-deploy-uritemplate-${{ github.ref }}` core, `nuget-deploy-uritemplate-di-${{ github.ref }}` DI) with `cancel-in-progress: false`, so overlapping `main` pushes for the same package queue rather than racing the publish check and upload — and a run is never cancelled mid-push. Downloads the build artifact, then a "Determine publish action" step (`publish-gate`) queries the nuget.org flat-container index for the `<Version>` being packed and picks one of three outcomes:
 
-- version not yet published on nuget.org (a 404 for a never-published package counts as unpublished) — push `*.nupkg` to NuGet.org via the `NUGET_API_KEY_CHATTER_URITEMPLATE` secret; `--skip-duplicate` is no longer used, so a genuine push failure fails the job
+- version not yet published on nuget.org (a 404 for a never-published package counts as unpublished) — push `*.nupkg` to NuGet.org via the `NUGET_API_KEY_CHATTER_URITEMPLATE` secret; `--skip-duplicate` is no longer used, so a genuine push failure fails the job. If the push itself returns a 409 Conflict (a same-version publish by another publisher slipped between the gate's index query and the push), the step re-checks the index: when the version is confirmed published it succeeds with a "published concurrently" warning so `tag` still runs; any other failure — including a 409 the index cannot confirm — remains fatal
 - version already published and the push contains no non-markdown changes to the package's sources — skip the push with a notice; the job still succeeds, so `tag` runs
 - version already published but the push did change package sources — fail with an error listing the changed files; the fix is a `<Version>` bump
 
@@ -159,8 +159,9 @@ The source set for that decision is the package's own `src/` directory plus `src
 ### Workflow hardening
 
 - All actions across the workflows are pinned to full commit SHAs (with trailing version comments).
-- Checkouts set `persist-credentials: false`, so the workflow token is not written into the repository's git config. The one exception is `create-version-tag.yml`, whose checkout keeps credentials because that job pushes the tag.
+- Checkouts in the package pipelines and `version-check.yml` set `persist-credentials: false`, so the workflow token is not written into the repository's git config. The exception within these pipelines is `create-version-tag.yml`, whose checkout keeps credentials because that job pushes the tag. (`codeql-analysis.yml`, a repository-scanning workflow outside these pipelines, uses the default checkout behavior.)
 - The NuGet API key is scoped to the deploy job only, via job-level `env`.
+- Each deploy job is serialized per package via a `concurrency` group with `cancel-in-progress: false` (see the deploy description above).
 
 ## 7. Code Style
 

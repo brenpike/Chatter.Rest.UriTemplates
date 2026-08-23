@@ -104,6 +104,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' # only the push produced by merging to protected main; never workflow_dispatch
 
+    # Serialize the publish gate and NuGet push per package: two overlapping
+    # main pushes must not both observe a version as unpublished and race the
+    # upload. Job-level (not workflow-level) so unrelated branch/PR builds keep
+    # running in parallel; cancel-in-progress stays false because cancelling a
+    # run mid-`dotnet nuget push` is worse than letting it queue.
+    concurrency:
+      group: nuget-deploy-uritemplate-di-${{ github.ref }}
+      cancel-in-progress: false
+
     environment:
       name: Production
 
@@ -143,6 +152,7 @@ jobs:
             echo "::error::Could not read <Version> from $CSPROJ_PATH"
             exit 1
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           PACKAGE_ID_LOWER=$(printf '%s' "$PACKAGE_ID" | tr '[:upper:]' '[:lower:]')
           INDEX_URL="https://api.nuget.org/v3-flatcontainer/${PACKAGE_ID_LOWER}/index.json"
@@ -189,10 +199,36 @@ jobs:
       - name: Push NuGet packages
         if: steps.publish-gate.outputs.push == 'true'
         shell: bash
+        env:
+          PACKAGE_ID: 'Chatter.Rest.UriTemplates.DependencyInjection'
+          VERSION: ${{ steps.publish-gate.outputs.version }}
         run: |
-          dotnet nuget push "./dist/nuget/*.nupkg" \
+          set -euo pipefail
+
+          PUSH_LOG=$(mktemp)
+          if dotnet nuget push "./dist/nuget/*.nupkg" \
             -k "$NUGET_AUTH_TOKEN" \
-            -s "$NUGET_URL"
+            -s "$NUGET_URL" 2>&1 | tee "$PUSH_LOG"; then
+            exit 0
+          fi
+
+          # The publish gate saw this version as unpublished, so a 409 Conflict
+          # here means another publisher pushed the same version between the
+          # gate's index query and this push. Classify it distinctly, but only
+          # after re-checking the index so no other failure is masked.
+          if grep -qiE '(: 409|conflict)' "$PUSH_LOG"; then
+            PACKAGE_ID_LOWER=$(printf '%s' "$PACKAGE_ID" | tr '[:upper:]' '[:lower:]')
+            INDEX_URL="https://api.nuget.org/v3-flatcontainer/${PACKAGE_ID_LOWER}/index.json"
+            if curl -sS "$INDEX_URL" | jq -e --arg v "$VERSION" '.versions | index($v) != null' > /dev/null; then
+              echo "::warning::$PACKAGE_ID $VERSION was published concurrently by another publisher; treating this run's 409 as 'version already published', not a deploy failure."
+              exit 0
+            fi
+            echo "::error::NuGet push returned 409 Conflict but $PACKAGE_ID $VERSION is not visible in the nuget.org index (possibly index propagation delay). Failing so this can be investigated."
+            exit 1
+          fi
+
+          echo "::error::dotnet nuget push failed; see log above."
+          exit 1
 
   tag:
     name: tag
