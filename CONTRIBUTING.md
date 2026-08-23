@@ -60,7 +60,7 @@ Run `dotnet build` before submitting - zero warnings expected on `net8.0`.
 ## Tests
 
 - All new behavior must include tests
-- Framework: xunit 2.4.x with FluentAssertions 6.x
+- Framework: xunit 2.9.x with FluentAssertions 6.x
 - Test naming: `Method_Scenario_Expected` (example: `Expand_WithUndefinedVariable_OmitsVariable`)
 
 ## Pull Request Checklist
