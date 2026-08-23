@@ -100,4 +100,17 @@ Treat plugin updates like dependency updates:
 
 - Do not run `claude plugin update` for these plugins casually. Review the plugin repository's diff between your installed version and the new one first, paying attention to hooks, agents, and MCP server definitions.
 - The repository owner, Brennan Pike ([@brenpike](https://github.com/brenpike)), reviews and approves plugin version changes and any change to `enabledPlugins` in `.claude/settings.json`. Raise an issue before proposing one.
-- If you are not comfortable running the plugins, disable them for your machine in `.claude/settings.local.json` (gitignored) with `"claude-mem@thedotmack": false` and `"agent-framework@brenpike": false`; the library builds and tests without them.
+- If you are not comfortable running the plugins, disable them for your machine in `.claude/settings.local.json` (gitignored). The flags must be nested inside an `enabledPlugins` object — Claude Code only reads plugin flags from that object, and unknown top-level keys are ignored:
+
+  ```json
+  {
+    "enabledPlugins": {
+      "claude-mem@thedotmack": false,
+      "agent-framework@brenpike": false
+    }
+  }
+  ```
+
+  Local project settings take precedence over the repository's `.claude/settings.json`, and `enabledPlugins` entries apply per individual plugin, so a local `false` overrides the shared `true` for that plugin without restating anything else. This is the opt-out mechanism the [Claude Code settings reference](https://code.claude.com/docs/en/settings-reference#enabledplugins) documents: "To opt out of a project-enabled plugin on your machine, set it to `false` in `.claude/settings.local.json`." The library builds and tests without the plugins.
+
+  Note: the `agent-framework` plugin's source repository has been renamed to [brenpike/hivemind](https://github.com/brenpike/hivemind), whose marketplace publishes the successor plugin under the name `hivemind`. If your machine has that successor installed, its identifier is `hivemind@brenpike` — add `"hivemind@brenpike": false` to the same object to disable it.
