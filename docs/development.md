@@ -68,7 +68,8 @@ dotnet build -c Release --no-restore
 
 `UriTemplateComplianceTests` reads the official RFC 6570 suite from the
 `uritemplate-test` submodule. Run `git submodule update --init` first, or those
-tests throw `FileNotFoundException` instead of skipping.
+tests throw `DirectoryNotFoundException` instead of skipping — on a clean tree
+the `TestData/` directory is never created at all.
 
 ```bash
 # Run all tests

@@ -49,7 +49,8 @@ dotnet test
 The submodule step is required, not optional. `UriTemplateComplianceTests` reads
 the official RFC 6570 suite from the `uritemplate-test` submodule, which the test
 project copies to `TestData/`. On an uninitialized submodule the glob copies
-nothing and those tests throw `FileNotFoundException` rather than skipping. CI
+nothing and those tests throw rather than skipping — `DirectoryNotFoundException`
+on a clean tree, since `TestData/` is never created at all. CI
 checks out with `submodules: true`, so this only bites fresh local clones.
 
 If `dotnet restore --locked-mode` fails, see the lock file note in
