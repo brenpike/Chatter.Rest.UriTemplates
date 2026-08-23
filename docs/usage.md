@@ -95,8 +95,8 @@ Supported value types:
 - `null` — treated as undefined (variable is omitted).
 - `string` — simple string value. Works with all operators and Level 4 prefix modifiers.
 - `IEnumerable<string>` (e.g., `string[]`, `List<string>`) — list value. An empty list is treated as undefined.
-- `IDictionary<string, string>` (e.g., `Dictionary<string, string>`) — associative array value. An empty dictionary is treated as undefined.
-- `IEnumerable<KeyValuePair<string, string>>` (e.g., `List<KeyValuePair<string, string>>`) — associative array value with deterministic insertion order. An empty sequence is treated as undefined.
+- `IDictionary<string, string>` (e.g., `Dictionary<string, string>`) — associative array value, expanded with keys sorted by `string.CompareOrdinal`. An empty dictionary is treated as undefined. See [Associative-array pair order](#associative-array-pair-order).
+- `IEnumerable<KeyValuePair<string, string>>` — associative array value. An index-addressable sequence (`IList<KeyValuePair<string, string>>` or `IReadOnlyList<KeyValuePair<string, string>>`, e.g., `List<KeyValuePair<string, string>>` or `KeyValuePair<string, string>[]`) is expanded in the supplied order, verbatim, duplicate keys included; any other enumerable (e.g., `HashSet<KeyValuePair<string, string>>` or a LINQ iterator) is canonicalized — sorted ordinally by key with the value as tie-break. An empty sequence is treated as undefined. See [Associative-array pair order](#associative-array-pair-order).
 
 ```csharp
 var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
@@ -193,6 +193,8 @@ var vars = template.GetVariables();
 // Result: ["status", "page", "lang"]
 ```
 
+RFC 6570 permits duplicate variable names, and each occurrence expands: `{?x,x}` with `x = "1"` produces `?x=1&x=1`, while `GetVariables()` reports `x` once. Callers that count expansion output via `GetVariables()` will under-count in that case.
+
 ---
 
 ## 5. Operator Examples
@@ -223,6 +225,30 @@ t.Expand(("path", "foo/bar/baz"));
 // Result: "/proxy/foo/bar/baz"
 ```
 
+**Only expand trusted values with `{+var}` and `{#var}`.** Both operators bypass reserved-character encoding — exactly what RFC 6570 Section 3.2.3 requires — so the value can change the meaning of the surrounding URI. Which component it can reach depends on where the expression sits in the template.
+
+With `http://ex.com/a{+p}` the expression sits in the path, after the authority has already ended, so the value can add or rewrite everything from the path onward:
+
+| Value | Expansion | Effect |
+|---|---|---|
+| `?admin=1` | `http://ex.com/a?admin=1` | starts the query string |
+| `#frag` | `http://ex.com/a#frag` | starts the fragment |
+| `../../etc/passwd` | `http://ex.com/a../../etc/passwd` | traversal sequence passes through raw |
+| `x@evil.com` | `http://ex.com/ax@evil.com` | stays in the path — no userinfo is introduced from this position |
+| `//evil.com/a` | `http://ex.com/a//evil.com/a` | stays in the path — no authority is rewritten from this position |
+
+When the expression sits inside or before the authority, the value reaches the host itself:
+
+| Template | Value | Expansion |
+|---|---|---|
+| `http://{+host}/path` | `x@evil.com` | `http://x@evil.com/path` — a userinfo component is introduced and the request moves to another host |
+| `http://{+host}/path` | `evil.com` | `http://evil.com/path` |
+| `{+p}/path` | `//evil.com` | `//evil.com/path` — a scheme-relative URL pointing at another origin |
+
+Under the default `{var}` operator these characters are percent-encoded, so none of them can change the URI's structure: `http://{host}/path` with `host = "x@evil.com"` produces `http://x%40evil.com/path`, and `/proxy/{path}` with `path = "../../etc/passwd"` produces `/proxy/..%2F..%2Fetc%2Fpasswd`. Use the default operator for untrusted values; if reserved expansion is genuinely required, validate the value against a caller-side allowlist first. See [Encoding Rules](#6-encoding-rules) for how pre-encoded sequences behave under `{+}` and `{#}`.
+
+**What the default operator does and does not guarantee.** Percent-encoding guarantees that the value cannot alter the structure of the URI as parsed — the encoded value stays inside the single component it was expanded into. It does not sanitize the value's meaning. `/proxy/..%2F..%2Fetc%2Fpasswd` decodes straight back to `../../etc/passwd`, so any downstream component that percent-decodes before routing or filesystem normalization sees the traversal sequence again. Encoding defers that problem to the consumer; it does not eliminate it. Validate or normalize untrusted path values on the receiving side regardless of which operator produced them.
+
 ### Level 2 — Fragment Expansion `{#var}`
 
 Prepends `#` to the expanded value:
@@ -232,6 +258,8 @@ var t = new UriTemplate("/page{#section}");
 t.Expand(("section", "overview"));
 // Result: "/page#overview"
 ```
+
+`{#var}` uses the same reserved encoding as `{+var}`, so the trust warning above applies equally here.
 
 ### Level 3 — Label Expansion `{.var}`
 
@@ -256,6 +284,8 @@ var t = new UriTemplate("/files{/dir,file}");
 t.Expand(("dir", "photos"), ("file", "cat.jpg"));
 // Result: "/files/photos/cat.jpg"
 ```
+
+Note: a template that begins with `{/...}` can produce a scheme-relative URL when the first variable expands to an empty string — `{/a,b}` with `a = ""` and `b = "evil.com"` produces `//evil.com`. This is RFC-conformant, but if such a template's values are not trusted, prefix the template with a literal path segment.
 
 ### Level 3 — Path-Style Parameter Expansion `{;var}`
 
@@ -315,13 +345,21 @@ t.Expand(("query", "hello world!"));
 **Reserved encoding** (Level 2: `+` and `#` operators):
 Both unreserved and reserved characters pass through unencoded. Only characters outside both sets are percent-encoded.
 
-Reserved characters: `: / ? # [ ] @ ! $ & ' ( ) * + , ; = %`
+Reserved characters: `: / ? # [ ] @ ! $ & ' ( ) * + , ; =`
 
 ```csharp
 var t = new UriTemplate("{+path}");
 t.Expand(("path", "/foo/bar?q=1"));
 // Result: "/foo/bar?q=1"   (slashes, ?, = all preserved)
 ```
+
+`%` itself is not in the pass-through set: under `{+}` and `{#}` a valid percent triplet (`%` followed by two hex digits) is preserved verbatim, while a bare `%` is encoded as `%25`.
+
+**Trust boundary.** Preserving pre-encoded triplets is part of the `{+}`/`{#}` trust boundary: `{+p}` with `p = "%0d%0aX: y"` yields `%0d%0aX:%20y`, and `p = "%2e%2e%2fetc"` stays `%2e%2e%2fetc` — a downstream server that decodes these sees control characters or a traversal sequence. Unreserved encoding neutralizes the same input by encoding `%` as `%25`, so this is the key behavioral difference between the two operator families: values expanded with `{+}` or `{#}` must be trusted.
+
+Even under `{+}` and `{#}`, characters outside the reserved and unreserved sets are always percent-encoded: raw CR, LF, NUL, backslash, and direction-override characters such as U+202E never pass through (`"a\r\nb"` becomes `a%0D%0Ab`), and non-ASCII text is always UTF-8 percent-encoded, so raw homograph bytes never appear in the output.
+
+That guarantee is scoped to *raw* control characters in the value, and it is not an end-to-end guarantee against HTTP header splitting. As the trust-boundary note above states, `{+}` and `{#}` preserve valid percent triplets, so a caller-supplied `%0d%0a` survives expansion unchanged (`{+p}` with `p = "%0d%0aX: y"` yields `%0d%0aX:%20y`) and becomes CR LF again in any consumer that percent-decodes the value before placing it in a header. What this library guarantees is that it never *introduces* a raw control character into the output; whether a decoded value is safe in a header, a host position, or a filesystem path must be validated where that decoding happens.
 
 ---
 
@@ -382,9 +420,53 @@ var uri = new UriTemplate("{?list}").Expand(new Dictionary<string, object?>
 // Result: "?list=red,green,blue"
 ```
 
-### Associative array via `List<KeyValuePair<string, string>>`
+### Associative-array pair order
 
-Use `List<KeyValuePair<string, string>>` for deterministic enumeration order:
+RFC 6570 mandates no particular pair order for associative-array values, so this library defines one. The order an expansion produces is derived from the ordering contract of the value the caller supplies:
+
+| Supplied value | Pair order |
+|---|---|
+| An index-addressable sequence: `IList<KeyValuePair<string, string>>` or `IReadOnlyList<KeyValuePair<string, string>>` (e.g. `List<KeyValuePair<string, string>>`, `KeyValuePair<string, string>[]`, `ImmutableArray<...>`, `ImmutableList<...>`, `ReadOnlyCollection<...>`) | The supplied order, preserved verbatim, duplicate keys included |
+| Any other `IEnumerable<KeyValuePair<string, string>>` — every `IDictionary<string, string>` (`Dictionary<string, string>`, `FrozenDictionary<string, string>`, `ImmutableDictionary<string, string>`, the sorted dictionaries), including `UriTemplateValue.From(IDictionary<string, string>)`, plus `HashSet<KeyValuePair<string, string>>`, LINQ iterators, and custom enumerables | Canonicalized: sorted ordinally by key (`string.CompareOrdinal`), with an ordinal comparison of the value as tie-break |
+
+Only an index-addressable sequence gives the caller an order to preserve. Every other enumerable has no ordering contract — two logically identical dictionaries can enumerate differently depending on insertion and removal history, and a hash-based set can reorder between processes — so those pairs are sorted to make the expansion reproducible. The value tie-break exists because an unordered container can hold repeated keys and the sort by key alone would leave their relative order input-dependent; dictionary keys are unique, so for a dictionary the tie-break never fires and the order is purely ordinal by key. Note that `FrozenDictionary<string, string>` implements `IDictionary<string, string>`, so it is canonicalized rather than order-preserving. **Callers who need a specific pair order — including one that repeats a key — should pass a `List<KeyValuePair<string, string>>` (or another `IList`/`IReadOnlyList` of pairs).**
+
+The sort is ordinal, not culture-aware, so uppercase ASCII sorts before lowercase:
+
+```csharp
+var uri = new UriTemplate("{?o*}").Expand(new Dictionary<string, object?>
+{
+    ["o"] = new Dictionary<string, string>
+    {
+        ["a"] = "1",
+        ["_"] = "2",
+        ["Z"] = "3",
+        ["B"] = "4",
+    }
+});
+// Result: "?B=4&Z=3&_=2&a=1"
+```
+
+#### Associative array via `Dictionary<string, string>`
+
+Keys are sorted ordinally regardless of the order they were added in:
+
+```csharp
+var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, object?>
+{
+    ["keys"] = new Dictionary<string, string>
+    {
+        ["semi"] = ";",
+        ["dot"] = ".",
+        ["comma"] = ",",
+    }
+});
+// Result: "?comma=%2C&dot=.&semi=%3B"
+```
+
+#### Associative array via `List<KeyValuePair<string, string>>`
+
+Use `List<KeyValuePair<string, string>>` to choose the pair order yourself:
 
 ```csharp
 var keys = new List<KeyValuePair<string, string>>
@@ -399,22 +481,28 @@ var uri = new UriTemplate("{keys}").Expand(new Dictionary<string, object?>
     ["keys"] = keys
 });
 // Result: "semi,%3B,dot,.,comma,%2C"
+
+var uri2 = new UriTemplate("{?keys*}").Expand(new Dictionary<string, object?>
+{
+    ["keys"] = keys
+});
+// Result: "?semi=%3B&dot=.&comma=%2C"
 ```
 
-### Associative array via `Dictionary<string, string>`
-
-A `Dictionary<string, string>` also works but note that enumeration order may vary:
+An ordered sequence is also the only way to expand duplicate keys, which a dictionary cannot represent:
 
 ```csharp
-var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, object?>
+var tags = new List<KeyValuePair<string, string>>
 {
-    ["keys"] = new Dictionary<string, string>
-    {
-        ["semi"] = ";",
-        ["dot"] = ".",
-    }
+    new("tag", "a"),
+    new("tag", "b"),
+};
+
+var uri = new UriTemplate("{?tags*}").Expand(new Dictionary<string, object?>
+{
+    ["tags"] = tags
 });
-// Result order may vary, e.g.: "?semi=%3B&dot=." or "?dot=.&semi=%3B"
+// Result: "?tag=a&tag=b"
 ```
 
 ### Explode for path-style (`;`), query (`?`), and ampersand (`&`)
@@ -509,10 +597,13 @@ var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, UriTemplateV
     {
         ["semi"] = ";",
         ["dot"] = ".",
+        ["comma"] = ",",
     })
 });
-// Result order may vary, e.g.: "?semi=%3B&dot=." or "?dot=.&semi=%3B"
+// Result: "?comma=%2C&dot=.&semi=%3B"
 ```
+
+`UriTemplateValue.From(IDictionary<string, string>)` follows the same rule as a plain `IDictionary<string, string>`: keys are sorted by `string.CompareOrdinal`. To choose the pair order, supply a `List<KeyValuePair<string, string>>` through the `IDictionary<string, object?>` overload instead — see [Associative-array pair order](#associative-array-pair-order).
 
 ### Mixed value kinds in one call
 
