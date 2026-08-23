@@ -292,5 +292,108 @@ namespace Chatter.Rest.UriTemplates.Tests
 
 			template.Expand(variables).Should().Be("a%F0%9F%98%80b");
 		}
+
+		// --- Codex follow-up: validate the whole value before applying a prefix ---
+		//
+		// The strict encoder only ever sees the value AFTER the expander has applied the
+		// RFC 6570 section 2.4.1 prefix modifier, so an unpaired surrogate that sits beyond the
+		// prefix boundary is truncated away before it can be rejected. UriTemplateEncoder
+		// therefore exposes ValidateEncodable, which is position-independent and is meant to be
+		// called on the original value before truncation.
+
+		[Fact]
+		public void ValidateEncodable_NullValue_ThrowsArgumentNullException()
+		{
+			Action act = () => UriTemplateEncoder.ValidateEncodable(null!);
+
+			act.Should().Throw<ArgumentNullException>()
+				.And.ParamName.Should().Be("value");
+		}
+
+		[Fact]
+		public void ValidateEncodable_UnpairedHighSurrogate_ThrowsFormatException()
+		{
+			// The same value the {v:1} case truncates down to a bare "a".
+			Action act = () => UriTemplateEncoder.ValidateEncodable("a\uD83Db");
+
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("unpaired UTF-16 surrogate at index 1");
+		}
+
+		[Fact]
+		public void ValidateEncodable_TrailingHighSurrogate_ThrowsFormatException()
+		{
+			Action act = () => UriTemplateEncoder.ValidateEncodable("ab\uD83D");
+
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("unpaired UTF-16 surrogate at index 2");
+		}
+
+		[Fact]
+		public void ValidateEncodable_UnpairedLowSurrogate_ThrowsFormatException()
+		{
+			Action act = () => UriTemplateEncoder.ValidateEncodable("ab\uDE00");
+
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("unpaired UTF-16 surrogate at index 2");
+		}
+
+		[Theory]
+		[InlineData("")]
+		[InlineData("plain")]
+		[InlineData("a\U0001F600b")]
+		[InlineData("\U0001F600\U0001F601")]
+		public void ValidateEncodable_WellFormedValue_DoesNotThrow(string value)
+		{
+			Action act = () => UriTemplateEncoder.ValidateEncodable(value);
+
+			act.Should().NotThrow();
+		}
+
+		[Fact(Skip = "Known gap owned by UriTemplateExpander.ExpandString (PR #38 / lane 22): " +
+			"the prefix modifier truncates before the encoder runs, so an unpaired surrogate " +
+			"beyond the prefix boundary is discarded instead of rejected. Closing this needs a " +
+			"single UriTemplateEncoder.ValidateEncodable(value) call ahead of TruncateByCodePoints, " +
+			"in a file this PR does not own. Un-skip once that call lands.")]
+		public void Expand_UnpairedSurrogateBeyondPrefixWindow_ThrowsInsteadOfTruncatingItAway()
+		{
+			var template = new UriTemplate("{v:1}");
+			var variables = new Dictionary<string, string> { ["v"] = "a\uD83Db" };
+
+			Action act = () => template.Expand(variables);
+
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("unpaired UTF-16 surrogate");
+		}
+
+		[Fact]
+		public void Expand_ValidAstralPlaneValueWithPrefix_TruncatesByCodePointAndIsNotRejected()
+		{
+			// Two code points: 'a' and U+1F600. The surrogate pair must survive truncation
+			// intact and must not be mistaken for malformed input by the stricter encoder.
+			var template = new UriTemplate("{v:2}");
+			var variables = new Dictionary<string, string> { ["v"] = "a\U0001F600b" };
+
+			template.Expand(variables).Should().Be("a%F0%9F%98%80");
+		}
+
+		[Fact]
+		public void Expand_ValidAstralPlaneValueWithPrefixOne_KeepsTheWholeSurrogatePair()
+		{
+			// One code point is the whole pair, never a half of it.
+			var template = new UriTemplate("{v:1}");
+			var variables = new Dictionary<string, string> { ["v"] = "\U0001F600b" };
+
+			template.Expand(variables).Should().Be("%F0%9F%98%80");
+		}
+
+		[Fact]
+		public void Expand_ValidAstralPlaneValueWithReservedOperatorAndPrefix_IsNotRejected()
+		{
+			var template = new UriTemplate("{+v:2}");
+			var variables = new Dictionary<string, string> { ["v"] = "a\U0001F600b" };
+
+			template.Expand(variables).Should().Be("a%F0%9F%98%80");
+		}
 	}
 }

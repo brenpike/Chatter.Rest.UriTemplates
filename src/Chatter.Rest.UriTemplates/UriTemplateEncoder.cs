@@ -13,6 +13,68 @@ internal static class UriTemplateEncoder
     private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
     /// <summary>
+    /// Verifies that <paramref name="value"/> is well-formed UTF-16 and can therefore be
+    /// percent-encoded as UTF-8, without allocating an encoded result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Callers that transform a value before handing it to <see cref="EncodeUnreserved"/> or
+    /// <see cref="EncodeReserved"/> must call this on the ORIGINAL value first. The RFC 6570
+    /// section 2.4.1 prefix modifier (<c>:N</c>) is exactly such a transform: truncating to N
+    /// code points can discard an unpaired surrogate that sits beyond the prefix boundary, so a
+    /// malformed value such as <c>"a\uD83Db"</c> under <c>{v:1}</c> would reach the encoder as
+    /// the perfectly valid <c>"a"</c> and expand successfully instead of being rejected.
+    /// Validating up front makes rejection independent of where the invalid code unit sits
+    /// relative to the prefix boundary.
+    /// </para>
+    /// <para>
+    /// This is a pure UTF-16 well-formedness scan: it accepts a high surrogate only when it is
+    /// immediately followed by a low surrogate and rejects every other surrogate, which is
+    /// exactly the input <see cref="StrictUtf8"/> would reject.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when <paramref name="value"/> contains an unpaired UTF-16 surrogate.
+    /// </exception>
+    internal static void ValidateEncodable(string value)
+    {
+        if (value is null)
+        {
+            throw new ArgumentNullException(nameof(value));
+        }
+
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+
+            if (char.IsHighSurrogate(c))
+            {
+                if (i + 1 >= value.Length || !char.IsLowSurrogate(value[i + 1]))
+                {
+                    throw UnpairedSurrogate(i);
+                }
+
+                // Valid pair: skip the low surrogate, the two units are one code point.
+                i++;
+                continue;
+            }
+
+            if (char.IsLowSurrogate(c))
+            {
+                throw UnpairedSurrogate(i);
+            }
+        }
+    }
+
+    private static FormatException UnpairedSurrogate(int index, Exception? inner = null)
+    {
+        return new FormatException(
+            $"Variable value contains an unpaired UTF-16 surrogate at index {index} and cannot be percent-encoded.",
+            inner);
+    }
+
+    /// <summary>
     /// Encodes <paramref name="value"/> as UTF-8, rejecting unpaired surrogates.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
@@ -21,10 +83,7 @@ internal static class UriTemplateEncoder
     /// </exception>
     private static byte[] GetUtf8Bytes(string value)
     {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
+        ValidateEncodable(value);
 
         try
         {
@@ -32,9 +91,8 @@ internal static class UriTemplateEncoder
         }
         catch (EncoderFallbackException ex)
         {
-            throw new FormatException(
-                $"Variable value contains an unpaired UTF-16 surrogate at index {ex.Index} and cannot be percent-encoded.",
-                ex);
+            // Defence in depth: ValidateEncodable has already rejected this input.
+            throw UnpairedSurrogate(ex.Index, ex);
         }
     }
 
