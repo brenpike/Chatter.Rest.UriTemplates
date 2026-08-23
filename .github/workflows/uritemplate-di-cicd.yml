@@ -94,6 +94,9 @@ jobs:
       src-path: 'src/Chatter.Rest.UriTemplates.DependencyInjection/'
       csproj-path: 'src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj'
       tag-prefix: 'uritemplate-di'
+      # Keep this source set identical to the deploy job's SRC_PATTERN so the
+      # pre-merge version check and the post-merge publish gate agree.
+      extra-src-path: 'src/Directory.Build.props'
 
   deploy:
     name: deploy
