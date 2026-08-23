@@ -156,10 +156,10 @@ The source set for that decision is the package's own `src/` directory plus `src
 
 **tag:** calls `create-version-tag.yml`. Runs after a successful deploy, under the same `main`-push-only condition as deploy (so it also never runs for `workflow_dispatch`). Tag format: `uritemplate/vX.Y.Z` (core) or `uritemplate-di/vX.Y.Z` (DI).
 
-### Workflow hardening (both package workflows)
+### Workflow hardening
 
-- Every `actions/checkout` sets `persist-credentials: false`, so the workflow token is not written into the repository's git config.
-- All actions are pinned to full commit SHAs (with trailing version comments). The reusable workflows (`version-check.yml`, `create-version-tag.yml`) still reference `actions/checkout@v5` by tag.
+- All actions across the workflows are pinned to full commit SHAs (with trailing version comments).
+- Checkouts set `persist-credentials: false`, so the workflow token is not written into the repository's git config. The one exception is `create-version-tag.yml`, whose checkout keeps credentials because that job pushes the tag.
 - The NuGet API key is scoped to the deploy job only, via job-level `env`.
 
 ## 7. Code Style
