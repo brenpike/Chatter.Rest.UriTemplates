@@ -15,5 +15,22 @@ internal static class OperatorStrategyFactory
             { UriTemplateOperator.Ampersand, new AmpersandOperatorStrategy() },
         };
 
-    internal static IOperatorStrategy For(UriTemplateOperator op) => _strategies[op];
+    /// <summary>
+    /// Resolves the expansion strategy for <paramref name="op"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="op"/> is not a defined <see cref="UriTemplateOperator"/> value.
+    /// </exception>
+    internal static IOperatorStrategy For(UriTemplateOperator op)
+    {
+        if (!_strategies.TryGetValue(op, out var strategy))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(op),
+                op,
+                $"No expansion strategy is defined for URI template operator '{op}'.");
+        }
+
+        return strategy;
+    }
 }
