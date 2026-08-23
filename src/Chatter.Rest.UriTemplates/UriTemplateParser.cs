@@ -11,6 +11,11 @@ internal sealed class UriTemplateParser : IUriTemplateParser
 
     public IReadOnlyList<UriTemplateToken> Parse(string template)
     {
+        if (template is null)
+        {
+            throw new ArgumentNullException(nameof(template));
+        }
+
         var tokens = new List<UriTemplateToken>();
         var pos = 0;
 
@@ -205,6 +210,12 @@ internal sealed class UriTemplateParser : IUriTemplateParser
 
             if (c == '.')
             {
+                // Leading dot: RFC 6570 §2.3 requires varname to begin with a varchar
+                if (i == 0)
+                {
+                    throw new FormatException($"Leading dot is not allowed in variable name '{name}'.");
+                }
+
                 // Consecutive dots
                 if (i + 1 < name.Length && name[i + 1] == '.')
                 {
@@ -245,10 +256,26 @@ internal sealed class UriTemplateParser : IUriTemplateParser
 
     /// <summary>
     /// Validates and encodes a literal segment per RFC 6570 §2.1/§3.1.
-    /// Non-ASCII chars are UTF-8 pct-encoded. Spaces, lone '}', and
-    /// invalid percent triplets are rejected with FormatException.
-    /// Valid pct-encoded triplets and RFC 3986 unreserved/reserved chars pass through.
     /// </summary>
+    /// <remarks>
+    /// Policy: invalid input is rejected, never silently repaired.
+    /// <list type="bullet">
+    /// <item><description>Every ASCII character that is neither permitted by the §2.1
+    /// <c>literals</c> production nor permitted in a URI by RFC 3986 is rejected with
+    /// <see cref="FormatException"/>. That set includes the space, all C0 control
+    /// characters (TAB, CR, LF, ...), DEL, a bare <c>{</c> or <c>}</c>, and
+    /// <c>"</c>, <c>&lt;</c>, <c>&gt;</c>, <c>\</c>, <c>^</c>, <c>`</c> and <c>|</c>.</description></item>
+    /// <item><description>A <c>%</c> is accepted only as the start of a valid percent-encoded
+    /// triplet, which is passed through unchanged; any other <c>%</c> is rejected.</description></item>
+    /// <item><description>A non-ASCII character is percent-encoded as UTF-8 only when its Unicode
+    /// scalar value falls inside the §1.5 <c>ucschar</c> or <c>iprivate</c> ranges; every other
+    /// scalar (the C1 controls, the noncharacters, the plane-14 tag/variation-selector block)
+    /// is rejected with <see cref="FormatException"/>. An unpaired UTF-16 surrogate is likewise
+    /// rejected rather than replaced with U+FFFD.</description></item>
+    /// <item><description>All remaining ASCII characters (the RFC 3986 unreserved and reserved
+    /// characters that are members of the <c>literals</c> set) pass through unchanged.</description></item>
+    /// </list>
+    /// </remarks>
     private static string ProcessLiteral(string raw)
     {
         var sb = new StringBuilder(raw.Length);
@@ -257,16 +284,6 @@ internal sealed class UriTemplateParser : IUriTemplateParser
         while (i < raw.Length)
         {
             var c = raw[i];
-
-            if (c == '}')
-            {
-                throw new FormatException("Invalid literal character '}' in URI template.");
-            }
-
-            if (c == ' ')
-            {
-                throw new FormatException("Invalid literal character ' ' in URI template.");
-            }
 
             if (c == '%')
             {
@@ -283,27 +300,192 @@ internal sealed class UriTemplateParser : IUriTemplateParser
                 throw new FormatException("Invalid percent-encoded triplet in literal.");
             }
 
-            if (c > 127)
+            if (c <= 127)
             {
-                // Non-ASCII: encode as UTF-8 pct-encoded bytes
-                var charCount = char.IsHighSurrogate(c) && i + 1 < raw.Length ? 2 : 1;
-                var chars = raw.ToCharArray(i, charCount);
-                var bytes = Encoding.UTF8.GetBytes(chars, 0, charCount);
-                foreach (var b in bytes)
+                if (!IsLiteralChar(c))
                 {
-                    sb.Append('%');
-                    sb.Append(b.ToString("X2"));
+                    throw new FormatException(
+                        $"Invalid literal character '{DescribeChar(c)}' in URI template.");
                 }
-                i += charCount;
+
+                sb.Append(c);
+                i++;
                 continue;
             }
 
-            // All other ASCII chars that are valid URI literals: pass through unchanged
-            sb.Append(c);
-            i++;
+            // Non-ASCII: encode as UTF-8 pct-encoded bytes
+            var charCount = 1;
+
+            if (char.IsHighSurrogate(c))
+            {
+                if (i + 1 >= raw.Length || !char.IsLowSurrogate(raw[i + 1]))
+                {
+                    throw new FormatException(
+                        $"Unpaired high surrogate '{DescribeChar(c)}' at index {i} in URI template literal.");
+                }
+
+                charCount = 2;
+            }
+            else if (char.IsLowSurrogate(c))
+            {
+                throw new FormatException(
+                    $"Unpaired low surrogate '{DescribeChar(c)}' at index {i} in URI template literal.");
+            }
+
+            var codePoint = charCount == 2 ? char.ConvertToUtf32(c, raw[i + 1]) : c;
+
+            if (!IsUcsCharOrIPrivate(codePoint))
+            {
+                throw new FormatException(
+                    $"Invalid literal character '{DescribeCodePoint(codePoint)}' at index {i} in URI template: " +
+                    "the scalar value is outside the ucschar and iprivate ranges that the RFC 6570 §2.1 " +
+                    "literals production admits.");
+            }
+
+            var chars = raw.ToCharArray(i, charCount);
+            var bytes = Encoding.UTF8.GetBytes(chars, 0, charCount);
+            foreach (var b in bytes)
+            {
+                sb.Append('%');
+                sb.Append(b.ToString("X2"));
+            }
+            i += charCount;
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="c"/> is an ASCII character permitted in template literal
+    /// text: the RFC 6570 §2.1 <c>literals</c> production
+    /// (%x21 / %x23-24 / %x26 / %x28-3B / %x3D / %x3F-5B / %x5D / %x5F / %x61-7A / %x7E),
+    /// plus the apostrophe (%x27) — see the remarks below.
+    /// '%' (%x25) is deliberately excluded here: it is only valid as the start of a pct-encoded
+    /// triplet, which <see cref="ProcessLiteral"/> handles before calling this method.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The apostrophe is a deliberate, documented deviation from the §2.1 ABNF, whose comment
+    /// lists <c>"'"</c> among the excluded characters. That exclusion contradicts §2.1's own
+    /// prose, which says literal characters are copied through when the character "is allowed in
+    /// a URI (reserved / unreserved / pct-encoded)". RFC 3986 §2.2 lists <c>'</c> in
+    /// <c>sub-delims</c>, so it is a reserved character and is allowed in a URI. The official
+    /// uritemplate-test suite sides with the prose: its Level 1 example
+    /// <c>'{var}' -&gt; 'value'</c> requires the apostrophe to pass through unchanged.
+    /// </para>
+    /// <para>
+    /// Every other character the §2.1 ABNF excludes was audited against RFC 3986 and is
+    /// genuinely forbidden in a URI, so all of them stay rejected: SP (%x20), DQUOTE (%x22),
+    /// <c>&lt;</c> (%x3C), <c>&gt;</c> (%x3E), <c>\</c> (%x5C), <c>^</c> (%x5E), <c>`</c> (%x60),
+    /// <c>{</c> (%x7B), <c>|</c> (%x7C), <c>}</c> (%x7D), the C0 controls and DEL. <c>%</c> (%x25)
+    /// is the only other character permitted by RFC 3986 that this method rejects, and it is
+    /// accepted upstream as the start of a pct-encoded triplet.
+    /// </para>
+    /// </remarks>
+    private static bool IsLiteralChar(char c)
+    {
+        return c == '\u0021' ||
+               (c >= '\u0023' && c <= '\u0024') ||
+               c == '\u0026' ||
+               c == '\u0027' ||
+               (c >= '\u0028' && c <= '\u003B') ||
+               c == '\u003D' ||
+               (c >= '\u003F' && c <= '\u005B') ||
+               c == '\u005D' ||
+               c == '\u005F' ||
+               (c >= '\u0061' && c <= '\u007A') ||
+               c == '\u007E';
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="codePoint"/> is a non-ASCII Unicode scalar that the
+    /// RFC 6570 §2.1 <c>literals</c> production admits, i.e. one that matches <c>ucschar</c> or
+    /// <c>iprivate</c>. Every other non-ASCII scalar makes the template malformed and must be
+    /// rejected rather than percent-encoded.
+    /// </summary>
+    /// <remarks>
+    /// <para>The two productions are quoted verbatim from RFC 6570 §1.5:</para>
+    /// <code>
+    /// ucschar   = %xA0-D7FF / %xF900-FDCF / %xFDF0-FFEF
+    ///           / %x10000-1FFFD / %x20000-2FFFD / %x30000-3FFFD
+    ///           / %x40000-4FFFD / %x50000-5FFFD / %x60000-6FFFD
+    ///           / %x70000-7FFFD / %x80000-8FFFD / %x90000-9FFFD
+    ///           / %xA0000-AFFFD / %xB0000-BFFFD / %xC0000-CFFFD
+    ///           / %xD0000-DFFFD / %xE1000-EFFFD
+    /// iprivate  = %xE000-F8FF / %xF0000-FFFFD / %x100000-10FFFD
+    /// </code>
+    /// <para>
+    /// Taken together they exclude, above U+007F: the C1 controls U+0080-U+009F; the surrogate
+    /// range U+D800-U+DFFF (already rejected upstream as unpaired code units, and unreachable
+    /// here because a paired surrogate decodes to a supplementary scalar); the noncharacters
+    /// U+FDD0-U+FDEF; U+FFF0-U+FFFF, which covers the specials block and the noncharacters
+    /// U+FFFE/U+FFFF; the last two code points of every supplementary plane (U+1FFFE/U+1FFFF
+    /// through U+10FFFE/U+10FFFF), all of which are noncharacters; and U+E0000-U+E0FFF, the
+    /// plane-14 block holding the deprecated language tag characters and the variation
+    /// selectors supplement.
+    /// </para>
+    /// <para>
+    /// Note that <c>iprivate</c> makes all three private use areas legal literal text
+    /// (U+E000-U+F8FF and planes 15 and 16), so those are accepted and percent-encoded.
+    /// </para>
+    /// </remarks>
+    private static bool IsUcsCharOrIPrivate(int codePoint)
+    {
+        // ucschar, BMP: %xA0-D7FF
+        if (codePoint >= 0x00A0 && codePoint <= 0xD7FF)
+        {
+            return true;
+        }
+
+        // iprivate, BMP private use area (%xE000-F8FF) joined to ucschar %xF900-FDCF —
+        // the two ranges are contiguous, so they are tested as one.
+        if (codePoint >= 0xE000 && codePoint <= 0xFDCF)
+        {
+            return true;
+        }
+
+        // ucschar, BMP: %xFDF0-FFEF
+        if (codePoint >= 0xFDF0 && codePoint <= 0xFFEF)
+        {
+            return true;
+        }
+
+        // ucschar, planes 1-13: %xN0000-NFFFD for N = 1..D, i.e. every scalar in the plane
+        // except the two trailing noncharacters.
+        if (codePoint >= 0x10000 && codePoint <= 0xDFFFD)
+        {
+            return (codePoint & 0xFFFF) <= 0xFFFD;
+        }
+
+        // ucschar, plane 14: %xE1000-EFFFD (U+E0000-U+E0FFF is deliberately excluded).
+        if (codePoint >= 0xE1000 && codePoint <= 0xEFFFD)
+        {
+            return true;
+        }
+
+        // iprivate, planes 15-16: %xF0000-FFFFD / %x100000-10FFFD
+        return (codePoint >= 0xF0000 && codePoint <= 0xFFFFD) ||
+               (codePoint >= 0x100000 && codePoint <= 0x10FFFD);
+    }
+
+    /// <summary>
+    /// Renders a Unicode scalar value for an error message as a U+XXXX escape, using at least
+    /// four hex digits and widening as needed for supplementary code points.
+    /// </summary>
+    private static string DescribeCodePoint(int codePoint)
+    {
+        return "U+" + codePoint.ToString("X4");
+    }
+
+    /// <summary>
+    /// Renders a character for an error message: printable ASCII as-is, everything else
+    /// (control characters, DEL, surrogates) as a \uXXXX escape.
+    /// </summary>
+    private static string DescribeChar(char c)
+    {
+        return c >= '\u0020' && c < '\u007F'
+            ? c.ToString()
+            : "\\u" + ((int)c).ToString("X4");
     }
 
     private static bool IsHexDigit(char c)
