@@ -49,18 +49,30 @@ var uri = template.Expand(new Dictionary<string, string>
 
 ### `UriTemplate(string template)`
 
-Constructor. Parses the template string eagerly on construction.
-
-- Throws `ArgumentNullException` if `template` is null.
-- Throws `FormatException` for malformed templates (unclosed `{`, nested `{`, invalid modifier syntax, mutually exclusive prefix and explode modifiers).
+Constructor. Parses the template string eagerly on construction, so every parse failure listed below surfaces at construction time — never later, at `Expand`.
 
 ```csharp
 var template = new UriTemplate("/search{?q,lang}");
 ```
 
+#### Constructor exceptions
+
+This is the authoritative statement of the constructor's exception contract.
+
+- **`ArgumentNullException`** — `template` is null.
+- **`FormatException`** — the template is malformed:
+  - an unclosed `{`, a nested `{`, or an empty expression `{}`
+  - a double operator, e.g. `{??x}`
+  - an invalid variable name: empty, containing whitespace, a leading, trailing, or consecutive dot, an incomplete percent-encoded triplet, or any other character outside the RFC 6570 §2.3 grammar (`ALPHA / DIGIT / "_" / pct-encoded`, optionally separated by single dots)
+  - an invalid prefix modifier: `:` followed by nothing, a non-numeric length, a leading zero, or a length outside 1–9999 (RFC 6570 §2.4.1)
+  - an explode modifier `*` anywhere but the end of the variable name
+  - a prefix modifier and an explode modifier on the same variable — they are mutually exclusive per RFC 6570
+  - a literal-validation failure: an ASCII character not permitted in literal text (space, C0 control characters, DEL, `"`, `<`, `>`, `\`, `^`, `` ` ``, `|`, or a bare `{` or `}`), a `%` that does not start a valid percent-encoded triplet, an unpaired UTF-16 surrogate, or a non-ASCII character whose scalar value falls outside the RFC 6570 §1.5 `ucschar`/`iprivate` ranges
+- **`NotSupportedException`** — the expression starts with one of the operators RFC 6570 §2.2 reserves for future use: `=`, `,`, `!`, `@`, or `|` (e.g. `{=var}`).
+
 ### `IUriTemplateFactory.Create(string template)`
 
-DI alternative to calling `new UriTemplate()` directly. Inject `IUriTemplateFactory` and call `Create` to obtain a `UriTemplate` instance. Available via the `Chatter.Rest.UriTemplates.DependencyInjection` package. See [Section 11 — Dependency Injection](#11-dependency-injection) for setup and usage.
+DI alternative to calling `new UriTemplate()` directly. Inject `IUriTemplateFactory` and call `Create` to obtain a `UriTemplate` instance. Available via the `Chatter.Rest.UriTemplates.DependencyInjection` package. See [Section 11 — Dependency Injection](#11-dependency-injection) for setup and usage. With the default parser, `Create` throws exactly what the constructor throws — see [Constructor exceptions](#constructor-exceptions); a custom `IUriTemplateParser` registration substitutes its own parse-failure behavior.
 
 ```csharp
 UriTemplate template = factory.Create("/orders{?status,page}");
@@ -107,6 +119,26 @@ var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
 ```
 
 The existing `Expand(IDictionary<string, string>)` overload still works for callers who only need string values (Level 1–3 inputs and string-only Level 4 like `{var:3}`).
+
+#### Values must be finite sequences
+
+List and associative-array values carry a caller contract: **every composite value supplied for a variable the template references must be a finite sequence.**
+
+- Within a single `Expand` call, a value the template references is enumerated exactly once, at the first expression that names it, and is fully drained by that first use. The members are recorded and replayed for any later expression naming the same variable, so a single-pass or lazily evaluated sequence is safe within the call.
+- Because that first use drains the sequence completely, supplying an endless or never-terminating sequence for a variable the template names makes `Expand` never return.
+- Values the template never names are never enumerated at all, so an unused lazy, blocking, or endless sequence alongside the referenced values is harmless.
+
+The same finiteness contract applies to `UriTemplateValue.From(IEnumerable<string>)`, which materializes the sequence eagerly — there, an endless sequence hangs `From` itself rather than `Expand`.
+
+#### Exception message content
+
+Expansion-time `FormatException` messages are written so callers can log them safely:
+
+- Messages identify the failing variable by name — for example, `Variable 'keys' contains a null key. Associative array keys must be non-null strings.` — and, for an associative-array member, the offending key: `Variable 'keys' contains a null value for key 'dot'. Associative array values must be non-null strings.`
+- **Variable values never appear in expansion exception messages.** String values, list elements, and associative-array values are never quoted, so the messages stay safe to log even when values carry secrets or personal data. This is a deliberate posture callers can rely on. Associative-array *keys* are the one piece of supplied data that is quoted, as shown above. One encoding-level failure — a value containing an unpaired UTF-16 surrogate — reports the character index within the value instead of the variable name; it likewise contains no value text.
+- `UriTemplateValue.From` follows the same posture at construction time: its `ArgumentException` messages name the offending key (`Dictionary must not contain null values (key: 'dot').`), never the value.
+
+This posture is scoped to expansion-time messages about variable values. Parse-time `FormatException` messages from the [constructor](#constructor-exceptions) deliberately quote template text — variable names and offending literal characters — because there the template itself is the malformed input.
 
 ### `string Expand(params (string Key, string Value)[] variables)`
 
