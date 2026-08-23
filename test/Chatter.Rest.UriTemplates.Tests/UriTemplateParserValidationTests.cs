@@ -361,21 +361,28 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().NotThrow();
 		}
 
-		[Fact(Skip = "Post-merge follow-up, tracked on issue #30. Call site: " +
-			"src/Chatter.Rest.UriTemplates/UriTemplateExpander.cs, method " +
-			"UriTemplateExpander.ExpandString(IOperatorStrategy, UriTemplateVarSpec, string, string, List<string>), " +
-			"inside the 'if (varSpec.PrefixLength.HasValue)' block, on the line immediately above " +
-			"'value = TruncateByCodePoints(value, varSpec.PrefixLength.Value);'. " +
-			"Insert exactly: UriTemplateEncoder.ValidateEncodable(value); " +
-			"Reason it is not done here: the prefix modifier truncates before the encoder runs, so an " +
-			"unpaired surrogate beyond the prefix boundary is discarded instead of rejected. " +
-			"UriTemplateExpander.cs belongs to PR #38 (lane 22), and that branch cannot add the call " +
-			"either because ValidateEncodable does not exist there until PR #40 merges. " +
-			"Un-skip this test in the same change that adds the call.")]
+		// The prefix modifier truncates before the encoder runs, so an unpaired surrogate beyond
+		// the prefix boundary used to be discarded by TruncateByCodePoints and the malformed value
+		// expanded successfully. UriTemplateExpander.ExpandString now validates the whole value
+		// before truncating it.
+		[Fact]
 		public void Expand_UnpairedSurrogateBeyondPrefixWindow_ThrowsInsteadOfTruncatingItAway()
 		{
 			var template = new UriTemplate("{v:1}");
 			var variables = new Dictionary<string, string> { ["v"] = "a\uD83Db" };
+
+			Action act = () => template.Expand(variables);
+
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain("unpaired UTF-16 surrogate");
+		}
+
+		[Fact]
+		public void Expand_UnpairedLowSurrogateBeyondPrefixWindow_ThrowsInsteadOfTruncatingItAway()
+		{
+			// The lone low surrogate sits at index 1, outside the single-code-point prefix window.
+			var template = new UriTemplate("{v:1}");
+			var variables = new Dictionary<string, string> { ["v"] = "a\uDC00b" };
 
 			Action act = () => template.Expand(variables);
 
