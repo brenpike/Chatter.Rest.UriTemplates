@@ -40,11 +40,13 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
             }
             else if (rawValue is IDictionary<string, string> dictValue)
             {
-                ExpandAssociativeArray(strategy, varSpec, varName, dictValue, parts);
+                // IDictionary<,> defines no enumeration order, so impose one.
+                ExpandAssociativeArray(strategy, varSpec, varName, dictValue, parts, orderKeysOrdinally: true);
             }
             else if (rawValue is IEnumerable<KeyValuePair<string, string>> kvpEnumerable)
             {
-                ExpandAssociativeArray(strategy, varSpec, varName, kvpEnumerable, parts);
+                // An ordered sequence carries its own order; preserve it verbatim.
+                ExpandAssociativeArray(strategy, varSpec, varName, kvpEnumerable, parts, orderKeysOrdinally: false);
             }
             else if (rawValue is IEnumerable<string> listValue)
             {
@@ -201,12 +203,67 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
         }
     }
 
+    /// <summary>
+    /// Expands an associative-array value.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Pair ordering policy.</b> RFC 6570 does not mandate an order for
+    /// associative-array pairs; this library nonetheless guarantees that a given
+    /// logical map always expands to the same URI, so that expansion results are
+    /// usable as cache keys, in signed URLs, and in tests.
+    /// </para>
+    /// <para>
+    /// The order is derived from the supplied value's own ordering contract:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// An ordered sequence — any <see cref="IEnumerable{T}"/> of
+    /// <see cref="KeyValuePair{TKey, TValue}"/> that is not an
+    /// <see cref="IDictionary{TKey, TValue}"/>, such as
+    /// <see cref="List{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> — has a
+    /// defined enumeration order, so that order is preserved verbatim. Duplicate
+    /// keys are emitted in the order supplied. This is the caller-controlled path
+    /// and reproduces the RFC 6570 §3.2.1 example set exactly.
+    /// </description></item>
+    /// <item><description>
+    /// An <see cref="IDictionary{TKey, TValue}"/> defines no enumeration order.
+    /// <see cref="Dictionary{TKey, TValue}"/> in particular enumerates in hash-slot
+    /// order, which diverges from insertion order once an entry has been removed and
+    /// another inserted into the freed slot, so two logically identical maps would
+    /// otherwise expand differently. Pairs from an
+    /// <see cref="IDictionary{TKey, TValue}"/> are therefore sorted by ordinal key
+    /// comparison (<see cref="string.CompareOrdinal(string, string)"/>) before
+    /// expansion. Callers who need a specific pair order must supply an ordered
+    /// sequence instead.
+    /// </description></item>
+    /// </list>
+    /// <para>
+    /// Ordering is applied before percent-encoding, so it depends only on the raw
+    /// keys and never on the operator in effect.
+    /// </para>
+    /// </remarks>
+    /// <param name="strategy">The operator strategy in effect for the expression.</param>
+    /// <param name="varSpec">The variable specification being expanded.</param>
+    /// <param name="varName">The variable name, used for named-operator output and error messages.</param>
+    /// <param name="pairs">The associative-array pairs to expand.</param>
+    /// <param name="parts">The accumulator that receives the formatted parts.</param>
+    /// <param name="orderKeysOrdinally">
+    /// <see langword="true"/> when <paramref name="pairs"/> came from an
+    /// <see cref="IDictionary{TKey, TValue}"/> and must therefore be sorted by ordinal
+    /// key comparison; <see langword="false"/> to preserve the supplied enumeration order.
+    /// </param>
+    /// <exception cref="FormatException">
+    /// A prefix modifier was applied to a composite value, or a pair has a null key,
+    /// an empty key, or a null value.
+    /// </exception>
     private static void ExpandAssociativeArray(
         IOperatorStrategy strategy,
         UriTemplateVarSpec varSpec,
         string varName,
         IEnumerable<KeyValuePair<string, string>> pairs,
-        List<string> parts)
+        List<string> parts,
+        bool orderKeysOrdinally)
     {
         // Prefix modifier is not applicable to composite values per RFC 6570
         if (varSpec.PrefixLength.HasValue)
@@ -225,6 +282,12 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
                     $"Variable '{varName}' contains a null key. " +
                     "Associative array keys must be non-null strings.");
             }
+            if (kvp.Key.Length == 0)
+            {
+                throw new FormatException(
+                    $"Variable '{varName}' contains an empty key. " +
+                    "Associative array keys must be non-empty strings.");
+            }
             if (kvp.Value is null)
             {
                 throw new FormatException(
@@ -238,6 +301,14 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
         if (pairList.Count == 0)
         {
             return;
+        }
+
+        // Impose a deterministic order on inputs that define none (see remarks).
+        // Keys within an IDictionary are unique, and CompareOrdinal never returns 0
+        // for distinct strings, so no two pairs can tie and the sort is total.
+        if (orderKeysOrdinally)
+        {
+            pairList.Sort(static (left, right) => string.CompareOrdinal(left.Key, right.Key));
         }
 
         if (varSpec.Explode)
