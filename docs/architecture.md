@@ -16,7 +16,11 @@ Standalone .NET library implementing RFC 6570 URI Template expansion for Levels 
 
 - Parse URI template strings containing `{expression}` tokens per RFC 6570 Section 2
 - Expand Level 1, Level 2, Level 3, and Level 4 expressions (see [Operator Reference](#operator-reference))
-- Return literal text outside expressions unchanged
+- Validate and percent-encode literal text outside expressions per RFC 6570 Section 2.1:
+  ASCII characters outside the `literals` production that RFC 3986 does not permit in a
+  URI are rejected with `FormatException`, and non-ASCII input is percent-encoded as UTF-8
+  only when its Unicode scalar falls inside `ucschar` or `iprivate` — anything else,
+  including unpaired surrogates, is rejected
 - Undefined variables (key absent from input dictionary) are omitted per RFC 6570 rules
 - Empty-string values are handled per operator semantics (see [Operator Reference](#operator-reference))
 - Percent-encode values per RFC 3986 rules appropriate to each operator (see [Encoding Rules](#encoding-rules))
