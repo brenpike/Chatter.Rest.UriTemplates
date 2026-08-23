@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Xunit;
 
 namespace Chatter.Rest.UriTemplates.Tests
@@ -243,6 +243,120 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var template = new UriTemplate("{s:3}{items}");
 
 			template.Expand(vars).Should().Be("valred,green");
+		}
+
+		// ----------------------------------------------------------------
+		// 1c-2. Validation follows template order, not caller order
+		// ----------------------------------------------------------------
+
+		// Validation must be driven by the template's expressions, not by the order the
+		// caller happened to supply the values. In "{bad:1}{other}" the prefix modifier
+		// on 'bad' makes the expansion fail before 'other' is ever needed, so supplying
+		// 'other' first must not cause it to be materialized: a lazy sequence there could
+		// throw something unrelated, block, or never return.
+		[Fact]
+		public void Expand_ObjectTuple_PrefixViolationInEarlierExpression_PreemptsLaterValueSuppliedFirst()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{bad:1}{other}");
+
+			var act = () => template.Expand(
+				("other", (object?)landmine),
+				("bad", (object?)new[] { "x" }));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'bad'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The mirror of the case above: with the caller's order reversed the outcome must
+		// be identical, which is what proves the behaviour is order-independent rather
+		// than accidentally correct for one arrangement.
+		[Fact]
+		public void Expand_ObjectTuple_PrefixViolationInEarlierExpression_PreemptsLaterValueSuppliedSecond()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{bad:1}{other}");
+
+			var act = () => template.Expand(
+				("bad", (object?)new[] { "x" }),
+				("other", (object?)landmine));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'bad'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The dictionary overload iterates the caller's dictionary, so it is subject to
+		// the same ordering hazard.
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixViolationInEarlierExpression_PreemptsLaterValueSuppliedFirst()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["other"] = landmine,
+				["bad"] = new[] { "x" },
+			};
+			var template = new UriTemplate("{bad:1}{other}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'bad'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixViolationInEarlierExpression_PreemptsLaterValueSuppliedSecond()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = new[] { "x" },
+				["other"] = landmine,
+			};
+			var template = new UriTemplate("{bad:1}{other}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'bad'*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// Materialization is the second pass and it, too, follows the template. A null
+		// key is only detectable by enumerating, so it is reported from the snapshot —
+		// which means the snapshot order has to be the template's, or a later variable's
+		// value could be read on the way to an earlier variable's failure.
+		[Fact]
+		public void Expand_ObjectTuple_NullKeyInEarlierExpression_PreemptsLaterValueSuppliedFirst()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{?keys*}{other}");
+
+			var act = () => template.Expand(
+				("other", (object?)landmine),
+				("keys", (object?)new NullKeyDictionary()));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'keys'*null key*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_NullKeyInEarlierExpression_PreemptsLaterValueSuppliedSecond()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{?keys*}{other}");
+
+			var act = () => template.Expand(
+				("keys", (object?)new NullKeyDictionary()),
+				("other", (object?)landmine));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'keys'*null key*");
+			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
 		// ----------------------------------------------------------------

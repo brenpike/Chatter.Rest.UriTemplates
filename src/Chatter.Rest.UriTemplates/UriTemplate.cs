@@ -1,25 +1,9 @@
-namespace Chatter.Rest.UriTemplates;
+﻿namespace Chatter.Rest.UriTemplates;
 
 public sealed class UriTemplate
 {
     private readonly IReadOnlyList<UriTemplateToken> _tokens;
     private readonly IUriTemplateExpander _expander;
-
-    /// <summary>
-    /// The set of variable names this template actually references, computed once at
-    /// construction. Only these names are snapshotted; a caller-supplied value the
-    /// template never mentions is passed through untouched, so an unused lazy, blocking,
-    /// or infinite sequence is never enumerated.
-    /// </summary>
-    private readonly HashSet<string> _referencedVariables;
-
-    /// <summary>
-    /// The subset of <see cref="_referencedVariables"/> that at least one expression
-    /// references with a prefix modifier (<c>:N</c>). RFC 6570 forbids a prefix modifier
-    /// on a composite value, so a composite bound to one of these names can be rejected
-    /// before it is read — preserving the expander's own pre-enumeration validation.
-    /// </summary>
-    private readonly HashSet<string> _prefixModifiedVariables;
 
     public UriTemplate(string template)
         : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
@@ -45,36 +29,6 @@ public sealed class UriTemplate
 
         _tokens = tokens;
         _expander = expander;
-        CollectVariableUsage(tokens, out _referencedVariables, out _prefixModifiedVariables);
-    }
-
-    /// <summary>
-    /// Walks the template's expressions once and records which variable names are
-    /// referenced at all, and which of them are referenced with a prefix modifier.
-    /// </summary>
-    private static void CollectVariableUsage(
-        IReadOnlyList<UriTemplateToken> tokens,
-        out HashSet<string> referenced,
-        out HashSet<string> prefixModified)
-    {
-        referenced = new HashSet<string>(StringComparer.Ordinal);
-        prefixModified = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var token in tokens)
-        {
-            if (token is UriTemplateExpressionToken expression)
-            {
-                foreach (var varSpec in expression.Variables)
-                {
-                    referenced.Add(varSpec.Name);
-
-                    if (varSpec.PrefixLength.HasValue)
-                    {
-                        prefixModified.Add(varSpec.Name);
-                    }
-                }
-            }
-        }
     }
 
     /// <summary>
@@ -144,8 +98,12 @@ public sealed class UriTemplate
 
         foreach (var kvp in variables)
         {
-            ordinal[kvp.Key] = SnapshotIfReferenced(kvp.Key, kvp.Value);
+            ordinal[kvp.Key] = kvp.Value;
         }
+
+        // Values are copied across as-is above; nothing is read from them until
+        // ValidateAndMaterialize has walked the template in order.
+        ValidateAndMaterialize(ordinal);
 
         return ExpandCore(ordinal);
     }
@@ -289,9 +247,13 @@ public sealed class UriTemplate
             // First-wins for duplicates
             if (!dict.ContainsKey(key))
             {
-                dict[key] = SnapshotIfReferenced(key, value);
+                dict[key] = value;
             }
         }
+
+        // The tuple array's order is the caller's, not the template's; nothing is read
+        // from a value until ValidateAndMaterialize has walked the template in order.
+        ValidateAndMaterialize(dict);
 
         return ExpandCore(dict);
     }
@@ -312,6 +274,96 @@ public sealed class UriTemplate
     }
 
     /// <summary>
+    /// Brings the caller's values into the state expansion requires, in two passes over
+    /// the template's tokens. Both passes run in template order, never in the order the
+    /// caller happened to supply the values.
+    /// <para>
+    /// The first pass reads nothing. It walks every expression's varspecs in order and
+    /// applies the validations that need only a runtime type test — currently RFC 6570's
+    /// prohibition on a prefix modifier over a composite value. Because no value has been
+    /// materialized yet, a violation belonging to an earlier expression is always reported
+    /// before a later expression's value is so much as touched.
+    /// </para>
+    /// <para>
+    /// The second pass runs only once the first has completed cleanly, and materializes
+    /// each referenced value at most once, again in template order. Values the template
+    /// never references are left untouched, so an unused lazy, blocking, or infinite
+    /// sequence is never enumerated.
+    /// </para>
+    /// </summary>
+    private void ValidateAndMaterialize(Dictionary<string, object?> variables)
+    {
+        // Pass 1 — validate in template order, reading nothing.
+        foreach (var token in _tokens)
+        {
+            if (token is not UriTemplateExpressionToken expression)
+            {
+                continue;
+            }
+
+            foreach (var varSpec in expression.Variables)
+            {
+                if (!varSpec.PrefixLength.HasValue)
+                {
+                    continue;
+                }
+
+                if (!variables.TryGetValue(varSpec.Name, out var value))
+                {
+                    continue;
+                }
+
+                // A composite bound to a prefix-modified name cannot expand successfully,
+                // whichever expression the expander reaches first, so raising the failure
+                // here produces the exception the caller would have seen anyway — without
+                // the enumeration that reaching it would otherwise have cost.
+                if (IsComposite(value))
+                {
+                    throw new FormatException(
+                        $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{varSpec.Name}').");
+                }
+            }
+        }
+
+        // Pass 2 — materialize in template order, once per referenced name.
+        var materialized = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var token in _tokens)
+        {
+            if (token is not UriTemplateExpressionToken expression)
+            {
+                continue;
+            }
+
+            foreach (var varSpec in expression.Variables)
+            {
+                if (!materialized.Add(varSpec.Name))
+                {
+                    continue;
+                }
+
+                if (variables.TryGetValue(varSpec.Name, out var value))
+                {
+                    variables[varSpec.Name] = Snapshot(varSpec.Name, value);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reports whether a value is one of the composite shapes RFC 6570 supports, using
+    /// only a runtime type test. Nothing is read from the value, so this is safe to call
+    /// during the validation pass. The order of the tests mirrors
+    /// <see cref="Snapshot(string, object?)"/> and <see cref="UriTemplateExpander"/>.
+    /// </summary>
+    private static bool IsComposite(object? value)
+        => value is not null
+            && value is not string
+            && (value is IDictionary<string, string>
+                || value is IEnumerable<KeyValuePair<string, string>>
+                || value is IEnumerable<string>);
+
+    /// <summary>
     /// Takes an owned snapshot of a caller-supplied composite value.
     /// <para>
     /// A template may reference the same variable from more than one expression, and each
@@ -327,27 +379,16 @@ public sealed class UriTemplate
     /// still reports them as a <see cref="FormatException"/>.
     /// </para>
     /// <para>
-    /// Taking the snapshot must not change what the caller observes. Two validations the
-    /// expander performs before it reads a value are therefore reproduced here, so that a
-    /// value which could only ever have failed is rejected without being enumerated: a
-    /// prefix modifier applied to a composite, and a null associative-array key.
+    /// A null associative-array key is reported here rather than by the expander.
+    /// Detecting one requires enumerating the dictionary, so it cannot move into the
+    /// validation pass without performing exactly the materialization that pass exists to
+    /// defer. Raising it during the snapshot is sound because the snapshot itself runs in
+    /// template order: a null key in a later-referenced variable can no longer pre-empt a
+    /// validation failure belonging to an earlier expression, and the caller's dictionary
+    /// is read once instead of twice.
     /// </para>
     /// </summary>
-    private object? SnapshotIfReferenced(string name, object? value)
-    {
-        // A value the template never mentions is never read by the expander, so
-        // materializing it here would be an observable side effect the caller did not
-        // ask for: an unused sequence that throws, blocks, or never ends would break or
-        // hang an expansion that has no use for it.
-        if (!_referencedVariables.Contains(name))
-        {
-            return value;
-        }
-
-        return Snapshot(name, value);
-    }
-
-    private object? Snapshot(string name, object? value)
+    private static object? Snapshot(string name, object? value)
     {
         if (value is null || value is string)
         {
@@ -355,15 +396,11 @@ public sealed class UriTemplate
         }
 
         // Every branch below is selected by a runtime type test, which reads nothing from
-        // the value. Both validations that the expander performs before it enumerates —
-        // rejecting a prefix modifier on a composite, and rejecting a null associative-array
-        // key — are reproduced here so that snapshotting cannot change which exception the
-        // caller sees, nor cause an enumeration the expander would never have performed.
+        // the value. Prefix-modifier validation has already run, in template order, before
+        // this method was reached for any variable.
 
         if (value is IDictionary<string, string> dictionaryValue)
         {
-            ThrowIfPrefixModified(name);
-
             // Copy into a dictionary, not a list: UriTemplateExpander dispatches on the
             // runtime type and applies its ordinal key ordering only to IDictionary values.
             // Flattening to IEnumerable<KeyValuePair<,>> here would silently opt these
@@ -398,43 +435,17 @@ public sealed class UriTemplate
 
         if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)
         {
-            ThrowIfPrefixModified(name);
-
             return new List<KeyValuePair<string, string>>(pairsValue);
         }
 
         if (value is IEnumerable<string> listValue)
         {
-            ThrowIfPrefixModified(name);
-
             return new List<string>(listValue);
         }
 
         // Not a composite at all. Leave it alone so the expander reports it as an
         // unsupported type rather than as a misapplied prefix modifier.
         return value;
-    }
-
-    /// <summary>
-    /// Rejects a prefix modifier applied to a composite value, reproducing the
-    /// <see cref="FormatException"/> <see cref="UriTemplateExpander"/> raises for the same
-    /// input. The expander performs this check before it reads the value, so the snapshot
-    /// must too: otherwise a sequence that throws, blocks, or never ends would be
-    /// enumerated on the way to an expansion that could only ever have failed.
-    /// </summary>
-    /// <remarks>
-    /// A composite bound to a prefix-modified name cannot expand successfully, whichever
-    /// expression the expander reaches first, so raising the failure here is equivalent.
-    /// The check is deliberately not applied to strings, for which a prefix modifier is
-    /// valid, nor to unsupported types, which carry their own diagnostic.
-    /// </remarks>
-    private void ThrowIfPrefixModified(string name)
-    {
-        if (_prefixModifiedVariables.Contains(name))
-        {
-            throw new FormatException(
-                $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{name}').");
-        }
     }
 
     /// <summary>
