@@ -37,8 +37,14 @@
         CA1510 (10): UriTemplate.cs:15,33,72,100,144,185;
                      UriTemplateFactory.cs:18; UriTemplateValue.cs:45,57,75
         CA1716 (2): IUriTemplateFactory.cs:5; IUriTemplateParser.cs:5
+      NU1900 is exempted permanently, not as a follow-up: NuGet emits it when
+      vulnerability data cannot be retrieved (audit-service outage, offline
+      restore from cache), and TreatWarningsAsErrors would otherwise turn that
+      availability blip into a restore/CI failure. Do not remove it from this
+      list. NU1901-NU1904 (actual vulnerability severities, promoted above)
+      must remain fatal.
     -->
-    <WarningsNotAsErrors>CA1305;CA1510;CA1716</WarningsNotAsErrors>
+    <WarningsNotAsErrors>CA1305;CA1510;CA1716;NU1900</WarningsNotAsErrors>
   </PropertyGroup>
 
 </Project>
