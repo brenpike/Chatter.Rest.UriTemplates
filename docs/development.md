@@ -103,7 +103,7 @@ dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Res
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.3.0.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.5.0.
 
 To pack the DI extension package:
 
@@ -175,7 +175,7 @@ All projects have `<Nullable>enable</Nullable>`.
 
 ## 8. Test Conventions
 
-- **Framework:** xunit 2.4.x
+- **Framework:** xunit 2.9.x
 - **Assertions:** FluentAssertions 6.x (preferred); xunit `Assert` also used
 - **Coverage:** coverlet.msbuild
 - **Test naming:** `Method_Scenario_Expected` — e.g., `Expand_WithUndefinedVariable_OmitsVariable`
