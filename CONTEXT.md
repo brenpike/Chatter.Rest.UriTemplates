@@ -68,7 +68,11 @@ value is emitted unchanged during expansion. _Avoid_: static text, constant.
 
 **Reserved Set**: The RFC 3986 gen-delims and sub-delims that reserved and fragment expansion pass through unencoded but simple expansion encodes.
 
-**Percent-Encoding**: The UTF-8-based `%XX` transformation applied to value characters that the active operator does not permit literally. _Avoid_: URL encoding, escaping, quoting.
+**Percent-Encoding**: The UTF-8-based `%XX` transformation, applied in two
+places: by the parser to accepted non-ASCII characters in **Literal** text, before
+any operator is involved, and during **Expansion** to **Template Value**
+characters that the active **Operator** does not permit literally. _Avoid_: URL
+encoding, escaping, quoting.
 
 **Compliance Suite**: The official RFC 6570 example, extended, and negative test data consumed by the compliance tests to prove spec conformance. _Avoid_: golden tests, conformance data, spec fixtures.
 
