@@ -290,7 +290,11 @@ public sealed class UriTemplate
 
         if (value is IDictionary<string, string> dictionaryValue)
         {
-            return new List<KeyValuePair<string, string>>(dictionaryValue);
+            // Copy into a dictionary, not a list: UriTemplateExpander dispatches on the
+            // runtime type and applies its ordinal key ordering only to IDictionary values.
+            // Flattening to IEnumerable<KeyValuePair<,>> here would silently opt these
+            // values out of that ordering.
+            return new Dictionary<string, string>(dictionaryValue, StringComparer.Ordinal);
         }
 
         if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)
