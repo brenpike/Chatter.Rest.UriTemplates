@@ -71,14 +71,25 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// --- Finding 2: literal characters outside the RFC 6570 section 2.1 literals set ---
 
 		/// <summary>
-		/// Independent oracle for the ASCII part of the RFC 6570 section 2.1 literals production:
-		/// %x21 / %x23-24 / %x26 / %x28-3B / %x3D / %x3F-5B / %x5D / %x5F / %x61-7A / %x7E.
+		/// Independent oracle for the ASCII characters accepted in literal text: the RFC 6570
+		/// section 2.1 literals production
+		/// (%x21 / %x23-24 / %x26 / %x28-3B / %x3D / %x3F-5B / %x5D / %x5F / %x61-7A / %x7E),
+		/// plus the apostrophe %x27.
 		/// </summary>
-		private static bool IsRfcLiteralAscii(int code)
+		/// <remarks>
+		/// The section 2.1 ABNF comment excludes "'", but that contradicts section 2.1's own prose
+		/// (characters "allowed in a URI (reserved / unreserved / pct-encoded)" are copied through)
+		/// and RFC 3986 section 2.2, which lists ' in sub-delims. The official uritemplate-test
+		/// Level 1 example '{var}' -&gt; 'value' requires it to pass through. Every other character
+		/// the ABNF excludes was audited against RFC 3986 and is genuinely forbidden in a URI, so
+		/// this oracle still rejects all of them.
+		/// </remarks>
+		private static bool IsAcceptedLiteralAscii(int code)
 		{
 			return code == 0x21 ||
 				(code >= 0x23 && code <= 0x24) ||
 				code == 0x26 ||
+				code == 0x27 ||
 				(code >= 0x28 && code <= 0x3B) ||
 				code == 0x3D ||
 				(code >= 0x3F && code <= 0x5B) ||
@@ -89,7 +100,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void Literal_EveryAsciiCharacter_MatchesRfc6570LiteralsSet()
+		public void Literal_EveryAsciiCharacter_MatchesAcceptedLiteralSet()
 		{
 			// 0x25 '%' starts a pct-encoded triplet and 0x7B '{' opens an expression;
 			// both have their own dedicated parser branches and tests.
@@ -103,13 +114,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 				var c = (char)code;
 				Action act = () => new UriTemplate("/a" + c + "b/{var}");
 
-				if (IsRfcLiteralAscii(code))
+				if (IsAcceptedLiteralAscii(code))
 				{
-					act.Should().NotThrow($"0x{code:X2} is in the RFC 6570 literals set");
+					act.Should().NotThrow($"0x{code:X2} is accepted in literal text");
 				}
 				else
 				{
-					act.Should().Throw<FormatException>($"0x{code:X2} is outside the RFC 6570 literals set")
+					act.Should().Throw<FormatException>($"0x{code:X2} is not accepted in literal text")
 						.And.Message.Should().Contain("Invalid literal character");
 				}
 			}
@@ -350,11 +361,17 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().NotThrow();
 		}
 
-		[Fact(Skip = "Known gap owned by UriTemplateExpander.ExpandString (PR #38 / lane 22): " +
-			"the prefix modifier truncates before the encoder runs, so an unpaired surrogate " +
-			"beyond the prefix boundary is discarded instead of rejected. Closing this needs a " +
-			"single UriTemplateEncoder.ValidateEncodable(value) call ahead of TruncateByCodePoints, " +
-			"in a file this PR does not own. Un-skip once that call lands.")]
+		[Fact(Skip = "Post-merge follow-up, tracked on issue #30. Call site: " +
+			"src/Chatter.Rest.UriTemplates/UriTemplateExpander.cs, method " +
+			"UriTemplateExpander.ExpandString(IOperatorStrategy, UriTemplateVarSpec, string, string, List<string>), " +
+			"inside the 'if (varSpec.PrefixLength.HasValue)' block, on the line immediately above " +
+			"'value = TruncateByCodePoints(value, varSpec.PrefixLength.Value);'. " +
+			"Insert exactly: UriTemplateEncoder.ValidateEncodable(value); " +
+			"Reason it is not done here: the prefix modifier truncates before the encoder runs, so an " +
+			"unpaired surrogate beyond the prefix boundary is discarded instead of rejected. " +
+			"UriTemplateExpander.cs belongs to PR #38 (lane 22), and that branch cannot add the call " +
+			"either because ValidateEncodable does not exist there until PR #40 merges. " +
+			"Un-skip this test in the same change that adds the call.")]
 		public void Expand_UnpairedSurrogateBeyondPrefixWindow_ThrowsInsteadOfTruncatingItAway()
 		{
 			var template = new UriTemplate("{v:1}");
@@ -394,6 +411,48 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var variables = new Dictionary<string, string> { ["v"] = "a\U0001F600b" };
 
 			template.Expand(variables).Should().Be("a%F0%9F%98%80");
+		}
+
+		// --- Coordinator decision: the apostrophe is permitted in literal text ---
+		//
+		// The RFC 6570 section 2.1 ABNF comment lists "'" among the excluded characters, but that
+		// contradicts section 2.1's own prose ("allowed in a URI (reserved / unreserved /
+		// pct-encoded)") and RFC 3986 section 2.2, which lists ' in sub-delims. The official
+		// uritemplate-test suite sides with the prose: its Level 1 example requires
+		// '{var}' to expand to 'value'. Every other ABNF-excluded character was audited against
+		// RFC 3986 and is genuinely forbidden in a URI, so all of them stay rejected.
+
+		[Fact]
+		public void Literal_Apostrophe_IsPassedThroughUnchanged()
+		{
+			// The official uritemplate-test Level 1 example verbatim.
+			var template = new UriTemplate("'{var}'");
+
+			template.Expand(Variables).Should().Be("'value'");
+		}
+
+		[Fact]
+		public void Literal_ApostropheOnly_IsPassedThroughUnchanged()
+		{
+			new UriTemplate("/it's/here").Expand(Variables).Should().Be("/it's/here");
+		}
+
+		[Theory]
+		[InlineData("a\"b", "\"")]
+		[InlineData("a<b", "<")]
+		[InlineData("a>b", ">")]
+		[InlineData("a\\b", "\\")]
+		[InlineData("a^b", "^")]
+		[InlineData("a`b", "`")]
+		[InlineData("a|b", "|")]
+		public void Literal_CharacterForbiddenByRfc3986_IsStillRejected(string template, string expected)
+		{
+			// Audited against RFC 3986: none of these are permitted in a URI, so unlike the
+			// apostrophe they remain rejected.
+			Action act = () => new UriTemplate(template);
+
+			act.Should().Throw<FormatException>()
+				.And.Message.Should().Contain($"Invalid literal character '{expected}'");
 		}
 	}
 }

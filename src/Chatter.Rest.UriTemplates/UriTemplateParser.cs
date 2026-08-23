@@ -260,10 +260,11 @@ internal sealed class UriTemplateParser : IUriTemplateParser
     /// <remarks>
     /// Policy: invalid input is rejected, never silently repaired.
     /// <list type="bullet">
-    /// <item><description>Every ASCII character outside the §2.1 <c>literals</c> production is
-    /// rejected with <see cref="FormatException"/>. That set includes the space, all C0 control
+    /// <item><description>Every ASCII character that is neither permitted by the §2.1
+    /// <c>literals</c> production nor permitted in a URI by RFC 3986 is rejected with
+    /// <see cref="FormatException"/>. That set includes the space, all C0 control
     /// characters (TAB, CR, LF, ...), DEL, a bare <c>{</c> or <c>}</c>, and
-    /// <c>"</c>, <c>'</c>, <c>&lt;</c>, <c>&gt;</c>, <c>\</c>, <c>^</c>, <c>`</c> and <c>|</c>.</description></item>
+    /// <c>"</c>, <c>&lt;</c>, <c>&gt;</c>, <c>\</c>, <c>^</c>, <c>`</c> and <c>|</c>.</description></item>
     /// <item><description>A <c>%</c> is accepted only as the start of a valid percent-encoded
     /// triplet, which is passed through unchanged; any other <c>%</c> is rejected.</description></item>
     /// <item><description>Non-ASCII characters are percent-encoded as UTF-8. An unpaired UTF-16
@@ -342,17 +343,38 @@ internal sealed class UriTemplateParser : IUriTemplateParser
     }
 
     /// <summary>
-    /// Returns true when <paramref name="c"/> is an ASCII character permitted by the RFC 6570 §2.1
-    /// <c>literals</c> production:
-    /// %x21 / %x23-24 / %x26 / %x28-3B / %x3D / %x3F-5B / %x5D / %x5F / %x61-7A / %x7E.
-    /// '%' (%x25) is deliberately excluded: it is only valid as the start of a pct-encoded triplet,
-    /// which <see cref="ProcessLiteral"/> handles before calling this method.
+    /// Returns true when <paramref name="c"/> is an ASCII character permitted in template literal
+    /// text: the RFC 6570 §2.1 <c>literals</c> production
+    /// (%x21 / %x23-24 / %x26 / %x28-3B / %x3D / %x3F-5B / %x5D / %x5F / %x61-7A / %x7E),
+    /// plus the apostrophe (%x27) — see the remarks below.
+    /// '%' (%x25) is deliberately excluded here: it is only valid as the start of a pct-encoded
+    /// triplet, which <see cref="ProcessLiteral"/> handles before calling this method.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The apostrophe is a deliberate, documented deviation from the §2.1 ABNF, whose comment
+    /// lists <c>"'"</c> among the excluded characters. That exclusion contradicts §2.1's own
+    /// prose, which says literal characters are copied through when the character "is allowed in
+    /// a URI (reserved / unreserved / pct-encoded)". RFC 3986 §2.2 lists <c>'</c> in
+    /// <c>sub-delims</c>, so it is a reserved character and is allowed in a URI. The official
+    /// uritemplate-test suite sides with the prose: its Level 1 example
+    /// <c>'{var}' -&gt; 'value'</c> requires the apostrophe to pass through unchanged.
+    /// </para>
+    /// <para>
+    /// Every other character the §2.1 ABNF excludes was audited against RFC 3986 and is
+    /// genuinely forbidden in a URI, so all of them stay rejected: SP (%x20), DQUOTE (%x22),
+    /// <c>&lt;</c> (%x3C), <c>&gt;</c> (%x3E), <c>\</c> (%x5C), <c>^</c> (%x5E), <c>`</c> (%x60),
+    /// <c>{</c> (%x7B), <c>|</c> (%x7C), <c>}</c> (%x7D), the C0 controls and DEL. <c>%</c> (%x25)
+    /// is the only other character permitted by RFC 3986 that this method rejects, and it is
+    /// accepted upstream as the start of a pct-encoded triplet.
+    /// </para>
+    /// </remarks>
     private static bool IsLiteralChar(char c)
     {
         return c == '\u0021' ||
                (c >= '\u0023' && c <= '\u0024') ||
                c == '\u0026' ||
+               c == '\u0027' ||
                (c >= '\u0028' && c <= '\u003B') ||
                c == '\u003D' ||
                (c >= '\u003F' && c <= '\u005B') ||
