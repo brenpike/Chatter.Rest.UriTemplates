@@ -4,7 +4,6 @@ public sealed class UriTemplate
 {
     private readonly IReadOnlyList<UriTemplateToken> _tokens;
     private readonly IUriTemplateExpander _expander;
-    private readonly HashSet<string> _prefixModifiedVariables;
 
     public UriTemplate(string template)
         : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
@@ -28,12 +27,11 @@ public sealed class UriTemplate
                 "A parser must return a non-null token list.");
         }
 
-        // Copy before deriving anything from the list, and derive from the copy: the
-        // metadata and the tokens that will be expanded are then the same tokens by
-        // construction, whatever the parser does with its own list afterwards.
+        // Copy before anything is derived from the list: the tokens that will be
+        // expanded are then fixed at construction, whatever the parser does with its own
+        // list afterwards.
         _tokens = CopyTokens(tokens);
         _expander = expander;
-        _prefixModifiedVariables = CollectPrefixModifiedVariables(_tokens);
     }
 
     /// <summary>
@@ -42,13 +40,13 @@ public sealed class UriTemplate
     /// <see cref="IUriTemplateParser"/> is a public extension point, so the returned list
     /// is caller-owned: it may be a mutable <see cref="List{T}"/> the parser keeps a
     /// reference to, or a read-only facade over one. Retaining it would leave the token
-    /// sequence free to change between construction and expansion, and the prefix-modifier
-    /// metadata cached in the constructor would then describe a template that no longer
-    /// exists — <see cref="PrepareVariables(Dictionary{string, object})"/> deciding whether
-    /// to snapshot a composite from one token list while <see cref="ExpandCore"/> expanded
-    /// another. A prefix appearing after construction would have the composite enumerated
-    /// on the way to a violation the expander reports anyway; a prefix disappearing would
-    /// skip the snapshot and leave a single-pass value to be drained twice.
+    /// sequence free to change between construction and expansion, so a template could
+    /// expand something other than what it was constructed from. A varspec's prefix
+    /// modifier is the sharpest case: <see cref="ExpandCore"/> reads it to decide whether
+    /// a reference will consume its variable's value, so a prefix appearing after
+    /// construction would have a composite enumerated on the way to a violation the
+    /// expander reports anyway, and a prefix disappearing would skip the snapshot and
+    /// leave a single-pass value to be drained twice.
     /// </para>
     /// <para>
     /// The list is enumerated exactly once, so a hostile implementation cannot report one
@@ -140,10 +138,8 @@ public sealed class UriTemplate
             ordinal[kvp.Key] = kvp.Value;
         }
 
-        // Values are copied across as-is above; nothing is read from them until
-        // PrepareVariables has walked the template in order.
-        PrepareVariables(ordinal);
-
+        // Values are copied across as-is above; nothing is read from any of them until
+        // ExpandCore reaches the expression that names it.
         return ExpandCore(ordinal);
     }
 
@@ -186,13 +182,45 @@ public sealed class UriTemplate
     }
 
     /// <summary>
-    /// Canonical expansion path. Accepts a pre-built ordinal dictionary and
-    /// iterates tokens, delegating expression expansion to
-    /// <see cref="UriTemplateExpander"/>.
+    /// Canonical expansion path. Walks the template's tokens once, preparing each
+    /// expression's variables immediately before that expression is expanded and
+    /// delegating the expansion itself to <see cref="UriTemplateExpander"/>.
+    /// <para>
+    /// Preparation is interleaved with expansion rather than run as a pass of its own.
+    /// One expression is completely expanded before the next expression's values are
+    /// looked at, so whichever failure the template reaches first is the one raised —
+    /// an unsupported type, a prefix modifier over a composite, a null member, a string
+    /// that cannot be encoded, an operator outside the defined set — without this method
+    /// needing to know what any of those failures are. A pass that touched every value
+    /// up front could only get the same ordering by re-implementing each of the
+    /// expander's checks, in the expander's order, for the whole template.
+    /// </para>
+    /// <para>
+    /// An expression's strategy is resolved before its variables, because an expression
+    /// carries one failure of its own: its operator may lie outside the defined set,
+    /// which a custom <see cref="IUriTemplateParser"/> is free to produce. That failure
+    /// belongs to the expression, so it is due at the expression's own position, ahead of
+    /// every value the expression names.
+    /// </para>
+    /// <para>
+    /// A variable is snapshotted at the first reference that will actually read it, which
+    /// is what makes a single-pass or lazily evaluated sequence enumerate exactly once
+    /// however many expressions name it, and what stops a mutable one giving two
+    /// expressions two different answers. Two kinds of reference are skipped: one whose
+    /// variable is already snapshotted, and one carrying a prefix modifier — the expander
+    /// rejects a prefix over a composite before reading the value, so materializing it
+    /// here would read a value on the way to a failure that is already certain, and a
+    /// prefix over a string needs no snapshot. A name the template never references is
+    /// never visited, so an unused lazy, blocking, or endless sequence is left alone.
+    /// </para>
     /// </summary>
     private string ExpandCore(Dictionary<string, object?> ordinalVariables)
     {
         var sb = new System.Text.StringBuilder();
+
+        // Allocated on first use: a template of literals, or one whose variables are all
+        // strings, never needs it.
+        HashSet<string>? snapshotted = null;
 
         foreach (var token in _tokens)
         {
@@ -202,6 +230,36 @@ public sealed class UriTemplate
             }
             else if (token is UriTemplateExpressionToken expression)
             {
+                _ = OperatorStrategyFactory.For(expression.Operator);
+
+                foreach (var varSpec in expression.Variables)
+                {
+                    var name = varSpec.Name;
+
+                    if (varSpec.PrefixLength.HasValue
+                        || (snapshotted is not null && snapshotted.Contains(name)))
+                    {
+                        continue;
+                    }
+
+                    if (!ordinalVariables.TryGetValue(name, out var value)
+                        || value is null
+                        || value is string)
+                    {
+                        // Undefined, null (undefined per RFC 6570 §2.3) and simple
+                        // strings are already in the state the expander needs.
+                        continue;
+                    }
+
+                    if (TrySnapshot(name, value, out var snapshot))
+                    {
+                        ordinalVariables[name] = snapshot;
+
+                        snapshotted ??= new HashSet<string>(StringComparer.Ordinal);
+                        snapshotted.Add(name);
+                    }
+                }
+
                 sb.Append(_expander.Expand(expression, ordinalVariables));
             }
         }
@@ -291,9 +349,7 @@ public sealed class UriTemplate
         }
 
         // The tuple array's order is the caller's, not the template's; nothing is read
-        // from a value until PrepareVariables has walked the template in order.
-        PrepareVariables(dict);
-
+        // from a value until ExpandCore reaches the expression that names it.
         return ExpandCore(dict);
     }
 
@@ -313,188 +369,8 @@ public sealed class UriTemplate
     }
 
     /// <summary>
-    /// Brings the caller's values into the state expansion requires, walking the
-    /// template's tokens once, in order, and completing all of one variable's work
-    /// before looking at the next.
-    /// <para>
-    /// The rule the walk follows: every failure is reported at the point in the
-    /// template where it becomes unavoidable, and no value is read on the way to a
-    /// failure that is already certain.
-    /// </para>
-    /// <para>
-    /// Each expression is checked before its variables, because an expression can fail on
-    /// its own account: its operator may lie outside the defined set, which a custom
-    /// <see cref="IUriTemplateParser"/> is free to produce. Resolving its strategy first
-    /// puts that failure at the expression's own position, ahead of the values it names,
-    /// so no composite is read on the way to it.
-    /// </para>
-    /// <para>
-    /// At a variable's first reference its value's type is checked against the
-    /// supported set, and the value is then snapshotted — with each member validated
-    /// as it is copied. A composite bound to a name the template prefixes anywhere is
-    /// the exception: it is marked pending instead, which skips the snapshot without
-    /// raising anything, because its failure does not become unavoidable until the
-    /// walk reaches the reference that carries the prefix. Every failure
-    /// <see cref="UriTemplateExpander"/> can raise for a value is raised here rather
-    /// than during expansion, with the expander's message verbatim.
-    /// </para>
-    /// <para>
-    /// Marking a variable pending cannot lose its failure. A name is pending only
-    /// because some varspec in this template carries a prefix over it, and the walk
-    /// visits every varspec of every expression in order, so it must arrive at that
-    /// varspec — where the prefix violation is raised — unless something earlier in
-    /// the template throws first, which is the outcome template order calls for
-    /// anyway. Deferring the throw is therefore a change of position, never of
-    /// whether the input is rejected.
-    /// </para>
-    /// <para>
-    /// The alternative — validating everything, then snapshotting everything, then
-    /// expanding — is what this replaces. Each of those phases was internally ordered
-    /// by the template, but a later variable's work still ran before an earlier
-    /// variable's failure surfaced. Ordering is now a property of the single walk
-    /// rather than of three independent ones.
-    /// </para>
-    /// <para>
-    /// Values the template never references are never visited, so an unused lazy,
-    /// blocking, or infinite sequence is left alone; a value referenced from several
-    /// expressions is prepared exactly once, and a pending one not at all.
-    /// </para>
-    /// </summary>
-    private void PrepareVariables(Dictionary<string, object?> variables)
-    {
-        var prepared = new HashSet<string>(StringComparer.Ordinal);
-        HashSet<string>? pendingPrefixViolations = null;
-
-        foreach (var token in _tokens)
-        {
-            if (token is not UriTemplateExpressionToken expression)
-            {
-                continue;
-            }
-
-            // Resolve the expression's strategy before any of its variables are touched.
-            // An expression carries one failure of its own — an operator outside the
-            // defined set, which only a custom IUriTemplateParser can produce — and it
-            // belongs to the expression, so it is due at the expression's position, ahead
-            // of every value the expression names. Without this the walk prepared those
-            // values first and an undefined operator was reported by the expander only
-            // afterwards, so a throwing, blocking, or endless composite masked it, or
-            // stopped it being reached at all.
-            //
-            // Resolving inside the existing walk rather than in a pass of its own is what
-            // keeps the ordering rule intact: a whole-template operator pass would let a
-            // bad operator anywhere pre-empt a failure the template names before it,
-            // which is precisely the phase-ordering defect this single walk replaced. It
-            // also holds the walk to one traversal instead of adding a third.
-            _ = OperatorStrategyFactory.For(expression.Operator);
-
-            foreach (var varSpec in expression.Variables)
-            {
-                var name = varSpec.Name;
-
-                // The first reference is where the variable's own work happens; later
-                // references add nothing beyond the prefix modifier they may carry,
-                // which is handled below. Guarding on `prepared` is also what keeps a
-                // value referenced three times from being snapshotted more than once.
-                if (prepared.Add(name)
-                    && variables.TryGetValue(name, out var value)
-                    && value is not null
-                    && value is not string)
-                {
-                    // Undefined values and simple strings need neither validation nor a
-                    // snapshot, and a prefix modifier over a string is legal.
-                    //
-                    // Order matters, and mirrors the expander: an unsupported type is
-                    // reported as such, here at the variable's own position, rather than
-                    // as a misapplied prefix modifier. That is why "{bad}{bad:3}" over an
-                    // unsupported value reports the type and not the prefix.
-                    ThrowIfUnsupportedType(name, value);
-
-                    if (_prefixModifiedVariables.Contains(name))
-                    {
-                        // A composite the template prefixes somewhere cannot expand, so
-                        // materializing it would read a value on the way to a certain
-                        // failure. Skip the snapshot, but leave the failure to the
-                        // reference that actually carries the prefix, so that variables
-                        // between here and there keep their precedence.
-                        pendingPrefixViolations ??= new HashSet<string>(StringComparer.Ordinal);
-                        pendingPrefixViolations.Add(name);
-                    }
-                    else
-                    {
-                        variables[name] = Snapshot(name, value);
-                    }
-                }
-
-                // Reached in template order, including on the very iteration that marked
-                // the variable pending — a prefix on the first reference fails there.
-                if (varSpec.PrefixLength.HasValue
-                    && pendingPrefixViolations is not null
-                    && pendingPrefixViolations.Contains(name))
-                {
-                    throw new FormatException(
-                        $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{name}').");
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Reports a value whose runtime type is none of the shapes RFC 6570 expansion
-    /// supports, with the message <see cref="UriTemplateExpander"/> would have produced
-    /// on reaching the variable. Only a type test is performed, so nothing is read from
-    /// the value.
-    /// <para>
-    /// Hoisting this check out of the expander is what makes an earlier variable's
-    /// unsupported value win over a later variable's enumeration: the expander could
-    /// only report it after every snapshot had already been taken.
-    /// </para>
-    /// </summary>
-    private static void ThrowIfUnsupportedType(string name, object value)
-    {
-        if (value is IDictionary<string, string>
-            || value is IEnumerable<KeyValuePair<string, string>>
-            || value is IEnumerable<string>)
-        {
-            return;
-        }
-
-        throw new FormatException(
-            $"Variable '{name}' has unsupported type '{value.GetType().FullName}'. " +
-            "Expected string, IEnumerable<string>, IDictionary<string, string>, or IEnumerable<KeyValuePair<string, string>>.");
-    }
-
-    /// <summary>
-    /// Collects the names the template references with a prefix modifier, so
-    /// the prefix check inside <see cref="PrepareVariables(Dictionary{string, object})"/>
-    /// costs a set lookup rather than a second walk per variable.
-    /// </summary>
-    private static HashSet<string> CollectPrefixModifiedVariables(IReadOnlyList<UriTemplateToken> tokens)
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var token in tokens)
-        {
-            if (token is not UriTemplateExpressionToken expression)
-            {
-                continue;
-            }
-
-            foreach (var varSpec in expression.Variables)
-            {
-                if (varSpec.PrefixLength.HasValue)
-                {
-                    names.Add(varSpec.Name);
-                }
-            }
-        }
-
-        return names;
-    }
-
-    /// <summary>
-    /// Takes an owned snapshot of a caller-supplied composite value, validating each
-    /// member as it is copied.
+    /// Tries to take an owned snapshot of a caller-supplied composite value, validating
+    /// each member as it is copied.
     /// <para>
     /// A template may reference the same variable from more than one expression, and each
     /// expression materializes the value independently. Without a snapshot, a single-pass or
@@ -516,13 +392,24 @@ public sealed class UriTemplate
     /// The type dispatch mirrors <see cref="UriTemplateExpander"/>, which selects its
     /// associative-array ordering by runtime type: each branch copies into a type that
     /// still satisfies the interface the expander tests for, so no snapshot can change
-    /// which branch a value takes. Unsupported types never reach this method.
+    /// which branch a value takes.
+    /// </para>
+    /// <para>
+    /// A value matching none of those shapes is handed back exactly as the caller supplied
+    /// it, and nothing is reported: raising the unsupported type here would put the failure
+    /// ahead of any expression the template names first. The expander names it on reaching
+    /// the variable, which is where template order puts it.
     /// </para>
     /// </summary>
-    private static object? Snapshot(string name, object value)
+    /// <returns>
+    /// <see langword="true"/> when <paramref name="value"/> was copied into an owned
+    /// snapshot, which the caller should substitute for it; <see langword="false"/> when
+    /// the value is not a shape RFC 6570 expansion supports.
+    /// </returns>
+    private static bool TrySnapshot(string name, object value, out object result)
     {
         // Every branch below is selected by a runtime type test, which reads nothing from
-        // the value. Type and prefix validation have already run for this variable.
+        // the value.
 
         if (value is IDictionary<string, string> dictionaryValue)
         {
@@ -552,7 +439,9 @@ public sealed class UriTemplate
                 snapshot.Append(entry);
             }
 
-            return snapshot;
+            result = snapshot;
+
+            return true;
         }
 
         if (value is ISet<KeyValuePair<string, string>> setValue)
@@ -581,7 +470,9 @@ public sealed class UriTemplate
                 snapshot.Append(entry);
             }
 
-            return snapshot;
+            result = snapshot;
+
+            return true;
         }
 
         if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)
@@ -595,24 +486,36 @@ public sealed class UriTemplate
                 snapshot.Add(entry);
             }
 
-            return snapshot;
+            result = snapshot;
+
+            return true;
         }
 
-        var listValue = (IEnumerable<string>)value;
-        var items = new List<string>();
-
-        foreach (var item in listValue)
+        if (value is IEnumerable<string> listValue)
         {
-            if (item is null)
+            var items = new List<string>();
+
+            foreach (var item in listValue)
             {
-                throw new FormatException(
-                    $"Variable '{name}' contains a null element. List elements must be non-null strings.");
+                if (item is null)
+                {
+                    throw new FormatException(
+                        $"Variable '{name}' contains a null element. List elements must be non-null strings.");
+                }
+
+                items.Add(item);
             }
 
-            items.Add(item);
+            result = items;
+
+            return true;
         }
 
-        return items;
+        // Not a shape expansion supports. Hand the value back untouched — nothing has
+        // been read from it, and nothing is reported here.
+        result = value;
+
+        return false;
     }
 
     /// <summary>

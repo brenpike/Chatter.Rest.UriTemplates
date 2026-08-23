@@ -5,7 +5,8 @@ namespace Chatter.Rest.UriTemplates.Tests
 {
 	/// <summary>
 	/// Argument-contract tests for <see cref="UriTemplate"/>'s public overloads:
-	/// snapshotting of caller-supplied sequences, consistent null handling, explicit
+	/// snapshotting of caller-supplied sequences, the order in which failures surface
+	/// relative to the values a template names, consistent null handling, explicit
 	/// null-key reporting, and validation of a custom parser's result.
 	/// </summary>
 	public class UriTemplateArgumentContractTests
@@ -213,20 +214,20 @@ namespace Chatter.Rest.UriTemplates.Tests
 			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
-		// The prefix modifier need not be on the first expression: any prefixed
-		// reference to a composite makes the expansion fail, so the value must not be
-		// enumerated on account of the unprefixed reference either.
+		// The prefix modifier need not be on the first expression, and a prefixed
+		// reference reads nothing wherever it sits: the composite behind it is left
+		// alone even though a later expression names it without a prefix.
 		[Fact]
-		public void Expand_ObjectDictionary_PrefixOnLaterReference_ThrowsFormatExceptionWithoutEnumerating()
+		public void Expand_ObjectDictionary_PrefixOnEarlierReference_ThrowsFormatExceptionWithoutEnumerating()
 		{
 			var landmine = new ThrowingSequence();
 			var vars = new Dictionary<string, object?> { ["items"] = landmine };
-			var template = new UriTemplate("{items}{items:3}");
+			var template = new UriTemplate("{items:3}{items}");
 
 			var act = () => template.Expand(vars);
 
 			act.Should().Throw<FormatException>()
-				.WithMessage("*'items'*");
+				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
 			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
@@ -952,18 +953,16 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// 1c-4. A prefix violation waits for the reference that carries it
+		// 1c-4. A prefix violation belongs to the reference that carries it
 		// ----------------------------------------------------------------
 
-		// A composite the template prefixes anywhere cannot expand, so it must never be
-		// materialized — but that is a reason not to read it, not a reason to fail early.
-		// Reporting the violation at the variable's first reference let it jump ahead of
-		// variables the template names in between: "{items}{bad}{items:3}" reported
-		// 'items' when 'bad' fails first in template order. The violation is now marked
-		// pending at the first reference and raised only when the walk reaches the
-		// prefixed one, so both properties hold at once.
+		// A prefix modifier over a composite is the prefixed reference's failure, and it
+		// is raised where that reference sits — not hoisted to the variable's first
+		// mention. Hoisting it let it jump ahead of variables the template names in
+		// between: "{items}{bad}{items:3}" reported 'items' when 'bad' fails first in
+		// template order.
 		[Fact]
-		public void Expand_ObjectDictionary_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedFirst()
+		public void Expand_ObjectDictionary_PrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedFirst()
 		{
 			var vars = new Dictionary<string, object?>
 			{
@@ -979,7 +978,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void Expand_ObjectDictionary_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedSecond()
+		public void Expand_ObjectDictionary_PrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedSecond()
 		{
 			var vars = new Dictionary<string, object?>
 			{
@@ -995,7 +994,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void Expand_ObjectTuple_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedFirst()
+		public void Expand_ObjectTuple_PrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedFirst()
 		{
 			var template = new UriTemplate("{items}{bad}{items:3}");
 
@@ -1008,7 +1007,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		[Fact]
-		public void Expand_ObjectTuple_PendingPrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedSecond()
+		public void Expand_ObjectTuple_PrefixViolation_DoesNotPreemptInterveningUnsupportedValueSuppliedSecond()
 		{
 			var template = new UriTemplate("{items}{bad}{items:3}");
 
@@ -1020,67 +1019,53 @@ namespace Chatter.Rest.UriTemplates.Tests
 				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
 		}
 
-		// Deferring the violation must not cost the composite its exemption from being
-		// read: the pending mark skips the snapshot, it does not postpone it.
+		// "{items}{items:3}" reads the value once and then reports the prefix violation.
+		// The first reference is a legal, unprefixed one that genuinely needs the value in
+		// order to expand, so expanding it is not a defect — it is what the template asks
+		// for, and it is what the library did before the preparation pass existed. Only
+		// the pass made the enumeration observable ahead of expansion and so made zero
+		// enumerations look like the invariant. What is guaranteed is that the prefixed
+		// reference itself reads nothing: the count is one, the enumeration the first
+		// expression performed, and the single-pass value is not drained a second time on
+		// the way to the failure.
 		[Fact]
-		public void Expand_ObjectDictionary_PendingPrefixViolation_LeavesTheCompositeUnenumerated()
+		public void Expand_ObjectDictionary_PrefixOnLaterReference_ReportsPrefixErrorAfterTheUnprefixedReferenceReadsTheValue()
 		{
-			var landmine = new ThrowingSequence();
-			var vars = new Dictionary<string, object?>
-			{
-				["items"] = landmine,
-				["bad"] = 42,
-			};
-			var template = new UriTemplate("{items}{bad}{items:3}");
-
-			var act = () => template.Expand(vars);
-
-			act.Should().Throw<FormatException>()
-				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
-			landmine.EnumerationAttempts.Should().Be(0);
-		}
-
-		// The round-2 invariant, pinned against the deferral: with nothing failing in
-		// between, the walk reaches "{items:3}" and reports the prefix violation there,
-		// and the unprefixed reference still enumerates nothing on the way.
-		[Fact]
-		public void Expand_ObjectDictionary_PrefixOnLaterReference_ReportsPrefixErrorWithZeroEnumerations()
-		{
-			var landmine = new ThrowingSequence();
-			var vars = new Dictionary<string, object?> { ["items"] = landmine };
+			var oneShot = new SinglePassList("red", "green");
+			var vars = new Dictionary<string, object?> { ["items"] = oneShot };
 			var template = new UriTemplate("{items}{items:3}");
 
 			var act = () => template.Expand(vars);
 
 			act.Should().Throw<FormatException>()
 				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
-			landmine.EnumerationAttempts.Should().Be(0);
+			oneShot.EnumerationCount.Should().Be(1);
 		}
 
 		[Fact]
-		public void Expand_ObjectTuple_PrefixOnLaterReference_ReportsPrefixErrorWithZeroEnumerations()
+		public void Expand_ObjectTuple_PrefixOnLaterReference_ReportsPrefixErrorAfterTheUnprefixedReferenceReadsTheValue()
 		{
-			var landmine = new ThrowingSequence();
+			var oneShot = new SinglePassList("red", "green");
 			var template = new UriTemplate("{items}{items:3}");
 
-			var act = () => template.Expand(("items", (object?)landmine));
+			var act = () => template.Expand(("items", (object?)oneShot));
 
 			act.Should().Throw<FormatException>()
 				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
-			landmine.EnumerationAttempts.Should().Be(0);
+			oneShot.EnumerationCount.Should().Be(1);
 		}
 
-		// A pending violation cannot be lost: the name is pending only because some
-		// varspec carries a prefix over it, and the walk visits every varspec, so it must
-		// arrive there unless something earlier throws first. An intervening variable
-		// that expands cleanly does not absolve it.
+		// A prefix violation cannot be lost: the walk visits every varspec of every
+		// expression, so it must arrive at the prefixed one unless something earlier
+		// throws first. An intervening variable that expands cleanly does not absolve it,
+		// and it does not cost the value a second enumeration either.
 		[Fact]
-		public void Expand_ObjectDictionary_PendingPrefixViolation_IsStillReportedAfterAValidInterveningVariable()
+		public void Expand_ObjectDictionary_PrefixViolation_IsStillReportedAfterAValidInterveningVariable()
 		{
-			var landmine = new ThrowingSequence();
+			var oneShot = new SinglePassList("red", "green");
 			var vars = new Dictionary<string, object?>
 			{
-				["items"] = landmine,
+				["items"] = oneShot,
 				["other"] = "ok",
 			};
 			var template = new UriTemplate("{items}{other}{items:3}");
@@ -1089,7 +1074,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 
 			act.Should().Throw<FormatException>()
 				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
-			landmine.EnumerationAttempts.Should().Be(0);
+			oneShot.EnumerationCount.Should().Be(1);
 		}
 
 		// The type check precedes the prefix rule for one and the same variable, so an
@@ -1118,8 +1103,8 @@ namespace Chatter.Rest.UriTemplates.Tests
 				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
 		}
 
-		// The pending mark and the once-only snapshot are independent: a variable named
-		// three times is still materialized exactly once.
+		// The snapshot is taken at the first reference that reads the value and reused by
+		// every later one: a variable named three times is still materialized exactly once.
 		[Fact]
 		public void Expand_ObjectDictionary_ThreeReferences_MaterializeTheValueOnce()
 		{
@@ -1129,6 +1114,70 @@ namespace Chatter.Rest.UriTemplates.Tests
 
 			template.Expand(vars).Should().Be("red,green/red,green?list=red&list=green");
 			oneShot.EnumerationCount.Should().Be(1);
+		}
+
+		// ----------------------------------------------------------------
+		// 1c-5. A failure raised inside the encoder pre-empts later values too
+		// ----------------------------------------------------------------
+
+		// An unpaired UTF-16 surrogate in a scalar is rejected by the encoder, which runs
+		// during expansion and nowhere else. Preparing every value before expanding
+		// anything therefore put a later composite's enumeration ahead of it, and no
+		// amount of validation added to the preparation pass would have covered the next
+		// such failure. Preparing one expression at a time removes the class: the encoder
+		// fires while the first expression is being expanded, before the second
+		// expression's values are looked at.
+		[Fact]
+		public void Expand_ObjectDictionary_UnencodableStringInEarlierExpression_PreemptsLaterValue()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = "\uD800",
+				["later"] = landmine,
+			};
+			var template = new UriTemplate("{bad}{later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*unpaired UTF-16 surrogate*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_UnencodableStringInEarlierExpression_PreemptsLaterValue()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{bad}{later}");
+
+			var act = () => template.Expand(
+				("later", (object?)landmine),
+				("bad", (object?)"\uD800"));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*unpaired UTF-16 surrogate*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The same holds for the prefixed form, which validates the whole value before
+		// truncating it, and for a surrogate that a naive truncation would have discarded.
+		[Fact]
+		public void Expand_ObjectDictionary_UnencodableStringUnderAPrefixInEarlierExpression_PreemptsLaterValue()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = "a\uD800",
+				["later"] = landmine,
+			};
+			var template = new UriTemplate("{bad:1}{later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*unpaired UTF-16 surrogate*");
+			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
 		// ----------------------------------------------------------------
@@ -1276,17 +1325,18 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// 6. The tokens observed at construction are the tokens expanded
 		// ----------------------------------------------------------------
 
-		// UriTemplate derives its prefix-modifier metadata from the parser's token list
-		// once, in the constructor. IUriTemplateParser is a public extension point, so
-		// that list is caller-owned and may keep changing afterwards: retaining it would
-		// let the cached metadata and the tokens actually walked disagree. The constructor
-		// therefore takes its own copy, and the two can no longer come apart.
+		// UriTemplate copies the parser's token list in the constructor. IUriTemplateParser
+		// is a public extension point, so that list is caller-owned and may keep changing
+		// afterwards: retaining it would let a template expand something other than what it
+		// was constructed from. Each varspec's prefix modifier is read during expansion to
+		// decide whether that reference will consume its variable's value, so a mutation
+		// between construction and expansion is directly observable.
 
-		// Adding a prefix after construction. Against the retained list, the stale
-		// metadata said 'items' was unprefixed, so PrepareVariables snapshotted it —
-		// enumerating the composite — and only then did the expander, walking the same
-		// mutated list, report the prefix violation. Against the copy the mutation is
-		// simply not visible: the template stays "{items}".
+		// Adding a prefix after construction. Against the retained list, 'items' would be
+		// snapshotted for the unprefixed varspec seen at construction — enumerating the
+		// composite — and the expander, reading the mutated list, would then report the
+		// prefix violation. Against the copy the mutation is simply not visible: the
+		// template stays "{items}".
 		[Fact]
 		public void Expand_ParserAddsPrefixAfterConstruction_ExpandsTheTokensObservedAtConstruction()
 		{
@@ -1302,11 +1352,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 			oneShot.EnumerationCount.Should().Be(1);
 		}
 
-		// Removing a prefix after construction. Against the retained list, the stale
-		// metadata marked 'items' pending — skipping the snapshot — while neither mutated
-		// reference carried the prefix that would have reported it, so both expressions
-		// enumerated the caller's single-pass value directly and the second pass threw.
-		// Against the copy the template stays "{items:3}", which is a prefix over a
+		// Removing a prefix after construction. Against the retained list the prefixed
+		// varspec seen at construction would suppress the snapshot, while neither mutated
+		// reference carries the prefix that would have reported it, so both expressions
+		// would enumerate the caller's single-pass value directly and the second pass would
+		// throw. Against the copy the template stays "{items:3}", which is a prefix over a
 		// composite: reported without reading the value at all.
 		[Fact]
 		public void Expand_ParserRemovesPrefixAfterConstruction_StillReportsItWithoutEnumerating()
@@ -1329,11 +1379,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// An expression's operator is a failure the expression owns, and only a custom
-		// IUriTemplateParser can produce an undefined one. It used to be reported by
-		// OperatorStrategyFactory during expansion — which is after the preparation pass,
-		// so a throwing, blocking, or endless composite the expression named was read
-		// first and masked it. The walk now resolves each expression's strategy before
-		// touching any of its variables.
+		// IUriTemplateParser can produce an undefined one. Leaving it to
+		// OperatorStrategyFactory inside the expander put it after the expression's values
+		// had been prepared, so a throwing, blocking, or endless composite the expression
+		// named was read first and masked it. The strategy is now resolved before any of
+		// the expression's variables are touched.
 		[Fact]
 		public void Expand_ParserReturnsUndefinedOperator_IsReportedBeforeAnyValueIsRead()
 		{
@@ -1367,7 +1417,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
-		// Resolving the operator inside the walk, rather than in a pass of its own, is what
+		// Resolving the operator per expression, rather than in a pass of its own, is what
 		// keeps the established rule: the first problem in template order is the one
 		// reported. A whole-template operator pass would report the bad operator here even
 		// though the template names the unsupported value before it.
