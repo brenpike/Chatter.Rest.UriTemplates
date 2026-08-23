@@ -526,7 +526,17 @@ Data-driven harness around https://github.com/uri-templates/uritemplate-test.
 | Level 4 edge cases | 24 | 0 | 0 |
 | Official compliance harness | 130 | 0 | 0 |
 
-The highest-priority remaining implementation fixes are:
+No implementation fixes from this plan remain outstanding. Both items previously
+listed here are complete:
 
-1. Correct reserved expansion handling for bare `%`.
-2. Decide and implement literal validation/encoding behavior.
+1. Reserved expansion handling for bare `%` was already correct — `IsReservedChar`
+   deliberately excludes `%`, so a bare `%` is encoded as `%25` while a valid
+   pct-encoded triplet passes through. The row above records the verified behaviour.
+2. Literal validation and encoding was implemented in PR #40: every ASCII character
+   outside the Section 2.1 `literals` production that RFC 3986 does not permit in a
+   URI is rejected, non-ASCII input is accepted only from the `ucschar` and
+   `iprivate` ranges, and unpaired surrogates are rejected. See the literal
+   expansion row above.
+
+Remaining work is tracked in the repository's issues rather than here, so that this
+document describes the implementation as it stands rather than a plan.
