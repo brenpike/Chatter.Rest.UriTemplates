@@ -827,6 +827,59 @@ namespace Chatter.Rest.UriTemplates.Tests
 				.Which.Message.Should().Be(NullValueMessage("keys", "ok"));
 		}
 
+		// A caller's set may be built with an equality comparer finer than
+		// EqualityComparer<KeyValuePair<string, string>>.Default — reference identity,
+		// for instance — and may therefore legally hold two entries the default relation
+		// considers equal. The snapshot has to keep every entry it observed: copying into
+		// a HashSet<KeyValuePair<string, string>> imposes the default relation and
+		// silently drops one of them, changing the expanded URI.
+		[Fact]
+		public void Expand_ObjectDictionary_SetWithFinerEquality_KeepsEveryObservedEntry()
+		{
+			// Distinct instances with equal content: a reference-identity comparer keeps
+			// both, the default comparer merges them.
+			var first = new string('.', 1);
+			var second = new string('.', 1);
+
+			// The premise the test rests on, asserted rather than assumed.
+			ReferenceEquals(first, second).Should().BeFalse();
+			EqualityComparer<KeyValuePair<string, string>>.Default.Equals(
+					new KeyValuePair<string, string>("dot", first),
+					new KeyValuePair<string, string>("dot", second))
+				.Should().BeTrue();
+
+			var set = new SingleEntryPairSet(
+				new KeyValuePair<string, string>("semi", ";"),
+				new KeyValuePair<string, string>("dot", first),
+				new KeyValuePair<string, string>("dot", second));
+			var vars = new Dictionary<string, object?> { ["keys"] = set };
+			var template = new UriTemplate("{?keys*}");
+
+			// Both 'dot' entries survive, and the pairs arrive in the canonical order the
+			// expander imposes on a set — ordinal by key — not the set's own.
+			template.Expand(vars).Should().Be("?dot=.&dot=.&semi=%3B");
+		}
+
+		// The snapshot keeps every observed entry, but it must still present as a set, or
+		// the expander's ordered-sequence branch would take over and the result would
+		// depend on the caller's set implementation after all.
+		[Fact]
+		public void Expand_ObjectDictionary_SetWithFinerEquality_StillReachesExpanderAsSet()
+		{
+			var recorder = new RecordingExpander();
+			var set = new SingleEntryPairSet(
+				new KeyValuePair<string, string>("dot", new string('.', 1)),
+				new KeyValuePair<string, string>("dot", new string('.', 1)));
+			var vars = new Dictionary<string, object?> { ["keys"] = set };
+			var template = new UriTemplate("{?keys*}", UriTemplateParser.Default, recorder);
+
+			template.Expand(vars);
+
+			recorder.Captured.Should().BeAssignableTo<ISet<KeyValuePair<string, string>>>();
+			recorder.Captured.Should().NotBeSameAs(set);
+			((ISet<KeyValuePair<string, string>>)recorder.Captured!).Count.Should().Be(2);
+		}
+
 		// A dictionary is checked before a set, so a type that is somehow both still
 		// takes the expander's IDictionary branch.
 		[Fact]
@@ -1166,6 +1219,65 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
+		// 6. The tokens observed at construction are the tokens expanded
+		// ----------------------------------------------------------------
+
+		// UriTemplate derives its prefix-modifier metadata from the parser's token list
+		// once, in the constructor. IUriTemplateParser is a public extension point, so
+		// that list is caller-owned and may keep changing afterwards: retaining it would
+		// let the cached metadata and the tokens actually walked disagree. The constructor
+		// therefore takes its own copy, and the two can no longer come apart.
+
+		// Adding a prefix after construction. Against the retained list, the stale
+		// metadata said 'items' was unprefixed, so PrepareVariables snapshotted it —
+		// enumerating the composite — and only then did the expander, walking the same
+		// mutated list, report the prefix violation. Against the copy the mutation is
+		// simply not visible: the template stays "{items}".
+		[Fact]
+		public void Expand_ParserAddsPrefixAfterConstruction_ExpandsTheTokensObservedAtConstruction()
+		{
+			var parser = new MutableTokenParser(
+				Expression(new UriTemplateVarSpec("items", null, false)));
+			var template = new UriTemplate("{items}", parser, UriTemplateExpander.Default);
+			var oneShot = new SinglePassList("red", "green");
+			var vars = new Dictionary<string, object?> { ["items"] = oneShot };
+
+			parser.Tokens[0] = Expression(new UriTemplateVarSpec("items", 3, false));
+
+			template.Expand(vars).Should().Be("red,green");
+			oneShot.EnumerationCount.Should().Be(1);
+		}
+
+		// Removing a prefix after construction. Against the retained list, the stale
+		// metadata marked 'items' pending — skipping the snapshot — while neither mutated
+		// reference carried the prefix that would have reported it, so both expressions
+		// enumerated the caller's single-pass value directly and the second pass threw.
+		// Against the copy the template stays "{items:3}", which is a prefix over a
+		// composite: reported without reading the value at all.
+		[Fact]
+		public void Expand_ParserRemovesPrefixAfterConstruction_StillReportsItWithoutEnumerating()
+		{
+			var parser = new MutableTokenParser(
+				Expression(new UriTemplateVarSpec("items", 3, false)));
+			var template = new UriTemplate("{items:3}", parser, UriTemplateExpander.Default);
+			var oneShot = new SinglePassList("red", "green");
+			var vars = new Dictionary<string, object?> { ["items"] = oneShot };
+
+			parser.Tokens.Clear();
+			parser.Tokens.Add(Expression(new UriTemplateVarSpec("items", null, false)));
+			parser.Tokens.Add(Expression(new UriTemplateVarSpec("items", null, false)));
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
+			oneShot.EnumerationCount.Should().Be(0);
+		}
+
+		private static UriTemplateExpressionToken Expression(params UriTemplateVarSpec[] variables) =>
+			new UriTemplateExpressionToken(UriTemplateOperator.None, variables);
+
+		// ----------------------------------------------------------------
 		// Test doubles
 		// ----------------------------------------------------------------
 
@@ -1499,6 +1611,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		/// A minimal custom <see cref="ISet{T}"/> of pairs, so the snapshot's set branch
 		/// is proven to be selected by the interface rather than by
 		/// <see cref="HashSet{T}"/> in particular.
+		/// <para>
+		/// It stores exactly the entries it is given, which also lets it stand in for a set
+		/// whose comparer is finer than <see cref="EqualityComparer{T}.Default"/>: it can
+		/// hold two entries the default relation would merge.
+		/// </para>
 		/// </summary>
 		private sealed class SingleEntryPairSet : ISet<KeyValuePair<string, string>>
 		{
@@ -1575,6 +1692,21 @@ namespace Chatter.Rest.UriTemplates.Tests
 		private sealed class NullReturningParser : IUriTemplateParser
 		{
 			public IReadOnlyList<UriTemplateToken> Parse(string template) => null!;
+		}
+
+		/// <summary>
+		/// A hostile-but-legal <see cref="IUriTemplateParser"/>: it hands back a mutable
+		/// list and keeps hold of it, so a test can change the "parsed" template after a
+		/// <see cref="UriTemplate"/> has already been built from it.
+		/// </summary>
+		private sealed class MutableTokenParser : IUriTemplateParser
+		{
+			internal List<UriTemplateToken> Tokens { get; }
+
+			internal MutableTokenParser(params UriTemplateToken[] tokens) =>
+				Tokens = new List<UriTemplateToken>(tokens);
+
+			public IReadOnlyList<UriTemplateToken> Parse(string template) => Tokens;
 		}
 	}
 }

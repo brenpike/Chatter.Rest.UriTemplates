@@ -28,9 +28,46 @@ public sealed class UriTemplate
                 "A parser must return a non-null token list.");
         }
 
-        _tokens = tokens;
+        // Copy before deriving anything from the list, and derive from the copy: the
+        // metadata and the tokens that will be expanded are then the same tokens by
+        // construction, whatever the parser does with its own list afterwards.
+        _tokens = CopyTokens(tokens);
         _expander = expander;
-        _prefixModifiedVariables = CollectPrefixModifiedVariables(tokens);
+        _prefixModifiedVariables = CollectPrefixModifiedVariables(_tokens);
+    }
+
+    /// <summary>
+    /// Takes the template's own copy of the parser's result.
+    /// <para>
+    /// <see cref="IUriTemplateParser"/> is a public extension point, so the returned list
+    /// is caller-owned: it may be a mutable <see cref="List{T}"/> the parser keeps a
+    /// reference to, or a read-only facade over one. Retaining it would leave the token
+    /// sequence free to change between construction and expansion, and the prefix-modifier
+    /// metadata cached in the constructor would then describe a template that no longer
+    /// exists — <see cref="PrepareVariables(Dictionary{string, object})"/> deciding whether
+    /// to snapshot a composite from one token list while <see cref="ExpandCore"/> expanded
+    /// another. A prefix appearing after construction would have the composite enumerated
+    /// on the way to a violation the expander reports anyway; a prefix disappearing would
+    /// skip the snapshot and leave a single-pass value to be drained twice.
+    /// </para>
+    /// <para>
+    /// The list is enumerated exactly once, so a hostile implementation cannot report one
+    /// sequence here and a different one to any later walk. The copy is wrapped rather
+    /// than held as a bare array for the reason <see cref="UriTemplateExpressionToken"/>
+    /// wraps its own variable list: an array is an <see cref="IList{T}"/>, so anything
+    /// that got hold of it could cast it back and write through it.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<UriTemplateToken> CopyTokens(IReadOnlyList<UriTemplateToken> tokens)
+    {
+        var copy = new List<UriTemplateToken>();
+
+        foreach (var token in tokens)
+        {
+            copy.Add(token);
+        }
+
+        return Array.AsReadOnly(copy.ToArray());
     }
 
     /// <summary>
@@ -492,16 +529,24 @@ public sealed class UriTemplate
             // one by ordinal key order — but only for a value that still presents as an
             // ISet<KeyValuePair<string, string>>. Copying into a List here, as the pairs
             // branch below does, would hand the expander an ordered sequence and make the
-            // result depend on the caller's set implementation. The HashSet's own
-            // enumeration order does not matter for the same reason: it is canonicalized
-            // downstream, not here.
-            var snapshot = new HashSet<KeyValuePair<string, string>>();
+            // result depend on the caller's set implementation.
+            //
+            // A HashSet is equally wrong, for the opposite reason: it would impose
+            // EqualityComparer<KeyValuePair<string, string>>.Default on the entries. A
+            // caller's set may be built with a finer comparer and so legally hold two
+            // entries the default relation calls equal, which the copy would silently
+            // merge into one. The expander enumerated the caller's set and canonicalized
+            // whatever came out of it, so the snapshot must keep every entry it observed.
+            // UriTemplateSetSnapshot does both: it stores what it is given, in order, and
+            // is still an ISet<KeyValuePair<string, string>>. Its own enumeration order
+            // does not matter — that is canonicalized downstream, not here.
+            var snapshot = new UriTemplateSetSnapshot();
 
             foreach (var entry in setValue)
             {
                 ThrowIfNullPair(name, entry);
 
-                snapshot.Add(entry);
+                snapshot.Append(entry);
             }
 
             return snapshot;
