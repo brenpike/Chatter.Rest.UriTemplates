@@ -180,9 +180,32 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		/// <summary>
-		/// RFC 6570 §2.2 places no uniqueness constraint on the variable list
-		/// inside one expression, so <c>{?x,x}</c> expands the variable twice
-		/// and emits both pairs. This intentionally diverges from
+		/// A variable repeated inside a single expression — <c>{?x,x}</c> — is
+		/// valid RFC 6570 and expands twice, emitting both pairs.
+		///
+		/// DO NOT change this assertion to expect rejection. RFC 6570 §3.2.1
+		/// states, verbatim: "If a variable appears more than once in an
+		/// expression or within multiple expressions of a URI Template, the
+		/// value of that variable MUST remain static throughout the expansion
+		/// process (i.e., the variable must have the same value for the purpose
+		/// of calculating each expansion)." The clause "more than once in an
+		/// expression" shows the specification explicitly contemplates
+		/// repetition within one expression and imposes only a value-stability
+		/// requirement on it, never a prohibition. A spec that forbade the
+		/// construct would not go on to define how its value must behave.
+		///
+		/// §2.3 (Variables), which is sometimes cited as forbidding this,
+		/// contains no such prohibition. It gives the varspec grammar
+		/// (<c>variable-list = varspec *( "," varspec )</c>, which imposes no
+		/// uniqueness constraint), states that names are case-sensitive, allows
+		/// pct-encoded triplets in a varname, and defines when a variable counts
+		/// as undefined. Nothing there — nor in §2.2 — restricts a name to a
+		/// single occurrence per expression.
+		///
+		/// The value-stability property the RFC does impose is pinned
+		/// separately by <see cref="RepeatedVariable_ExpandsToSameValueEverywhere"/>.
+		///
+		/// The count of emitted pairs intentionally diverges from
 		/// <see cref="UriTemplate.GetVariables"/>, which deduplicates names.
 		/// Recorded here so the divergence is documented as deliberate rather
 		/// than discovered as a bug.
@@ -193,6 +216,25 @@ namespace Chatter.Rest.UriTemplates.Tests
 			var template = new UriTemplate("{?x,x}");
 			template.Expand(("x", "1")).Should().Be("?x=1&x=1");
 			template.GetVariables().Should().Equal("x");
+		}
+
+		/// <summary>
+		/// RFC 6570 §3.2.1 requires that a variable appearing more than once —
+		/// whether within one expression or across multiple expressions of the
+		/// same template — "MUST remain static throughout the expansion
+		/// process". This pins that property directly: <c>x</c> appears twice in
+		/// one expression and again in two later expressions, and every
+		/// occurrence must expand from the same supplied value.
+		///
+		/// This is the requirement the specification actually places on repeated
+		/// variables; repetition itself is permitted (see
+		/// <see cref="Query_DuplicateVarName_EmitsBoth"/>).
+		/// </summary>
+		[Fact]
+		public void RepeatedVariable_ExpandsToSameValueEverywhere()
+		{
+			var template = new UriTemplate("/{x}{?x,x}{&x}");
+			template.Expand(("x", "v")).Should().Be("/v?x=v&x=v&x=v");
 		}
 
 		// ---------------------------------------------------------------
