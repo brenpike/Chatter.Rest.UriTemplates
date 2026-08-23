@@ -5,14 +5,14 @@ namespace Chatter.Rest.UriTemplates.Tests
 {
 	/// <summary>
 	/// Argument-contract tests for <see cref="UriTemplate"/>'s public overloads:
-	/// snapshotting of caller-supplied sequences, the order in which failures surface
-	/// relative to the values a template names, consistent null handling, explicit
+	/// at-most-once reading of caller-supplied sequences, the order in which failures
+	/// surface relative to the values a template names, consistent null handling, explicit
 	/// null-key reporting, and validation of a custom parser's result.
 	/// </summary>
 	public class UriTemplateArgumentContractTests
 	{
 		// ----------------------------------------------------------------
-		// 1. Caller-supplied enumerables are materialized once
+		// 1. Caller-supplied enumerables are read at most once
 		// ----------------------------------------------------------------
 
 		[Fact]
@@ -90,9 +90,10 @@ namespace Chatter.Rest.UriTemplates.Tests
 			after.Should().Be("a,b");
 		}
 
-		// A value the template never references must not be materialized at all:
-		// snapshotting it would turn an unused lazy, blocking, or infinite sequence
-		// into a failure or a hang for an expansion that has no use for it.
+		// A value the template never references must not be read at all: reading it
+		// would turn an unused lazy, blocking, or infinite sequence into a failure or a
+		// hang for an expansion that has no use for it. Wrapping it is free — the wrapper
+		// materializes on its first enumeration, and no enumeration ever comes.
 		[Fact]
 		public void Expand_ObjectDictionary_UnreferencedThrowingSequence_IsNeverEnumerated()
 		{
@@ -115,10 +116,10 @@ namespace Chatter.Rest.UriTemplates.Tests
 			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
-		// Skipping unreferenced values must not weaken the snapshot guarantee for the
-		// values the template does reference.
+		// Leaving unreferenced values unread must not weaken the at-most-once guarantee
+		// for the values the template does reference.
 		[Fact]
-		public void Expand_ObjectDictionary_ReferencedSequenceStillSnapshotted_WhenUnreferencedValuePresent()
+		public void Expand_ObjectDictionary_ReferencedSequenceStillReadOnce_WhenUnreferencedValuePresent()
 		{
 			var oneShot = new SinglePassList("red", "green");
 			var landmine = new ThrowingSequence();
@@ -135,10 +136,10 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// 1b. Snapshotting must not pre-empt the expander's own validation
+		// 1b. Materializing must not pre-empt the expander's own validation
 		// ----------------------------------------------------------------
 
-		// Dictionary<,> rejects a null key with ArgumentNullException. Snapshotting a
+		// Dictionary<,> rejects a null key with ArgumentNullException. Recording a
 		// caller's IDictionary through the copy constructor would therefore replace the
 		// documented, variable-specific FormatException with a different exception type.
 		[Fact]
@@ -165,11 +166,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// 1c. Snapshotting must not pre-empt the expander's prefix validation
+		// 1c. Materializing must not pre-empt the expander's prefix validation
 		// ----------------------------------------------------------------
 
 		// RFC 6570 forbids a prefix modifier on a composite value, and the expander
-		// rejects it before it ever reads the value. Snapshotting a referenced value
+		// rejects it before it ever reads the value. Materializing a referenced value
 		// eagerly would enumerate the sequence first, turning that documented
 		// FormatException into whatever the sequence happens to do — an arbitrary
 		// exception, a block, or a non-terminating enumeration.
@@ -326,10 +327,10 @@ namespace Chatter.Rest.UriTemplates.Tests
 			landmine.EnumerationAttempts.Should().Be(0);
 		}
 
-		// Materialization is the second pass and it, too, follows the template. A null
-		// key is only detectable by enumerating, so it is reported from the snapshot —
-		// which means the snapshot order has to be the template's, or a later variable's
-		// value could be read on the way to an earlier variable's failure.
+		// A null key is only detectable by enumerating, so it is reported when the value is
+		// materialized — which means materialization has to happen in template order, or a
+		// later variable's value could be read on the way to an earlier variable's failure.
+		// It does, because the enumeration that materializes a value is the expander's own.
 		[Fact]
 		public void Expand_ObjectTuple_NullKeyInEarlierExpression_PreemptsLaterValueSuppliedFirst()
 		{
@@ -364,10 +365,10 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// 1d. A null key must not cost the caller a second enumeration
 		// ----------------------------------------------------------------
 
-		// Falling back to the caller's instance after the snapshot loop already
-		// consumed it would hand the expander a drained sequence: a single-pass
-		// dictionary would then surface InvalidOperationException from its second
-		// enumeration instead of the documented variable-specific FormatException.
+		// Falling back to the caller's instance after the value was already read once
+		// would hand the expander a drained sequence: a single-pass dictionary would then
+		// surface InvalidOperationException from its second enumeration instead of the
+		// documented variable-specific FormatException.
 		[Fact]
 		public void Expand_ObjectDictionary_SinglePassDictionaryWithNullKey_ThrowsFormatExceptionNamingVariable()
 		{
@@ -396,7 +397,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// A null value carries its own variable-specific FormatException, which the
-		// snapshot preserves by copying null values through untouched.
+		// memoizing view preserves by recording null values untouched.
 		[Fact]
 		public void Expand_ObjectDictionary_SinglePassDictionaryWithNullValue_ThrowsFormatExceptionNamingVariable()
 		{
@@ -412,7 +413,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 			oneShot.EnumerationCount.Should().Be(1);
 		}
 
-		// The snapshot must keep dictionary values dispatching down the expander's
+		// The view must keep dictionary values dispatching down the expander's
 		// IDictionary<string, string> branch rather than the insertion-ordered
 		// IEnumerable<KeyValuePair<,>> branch.
 		[Fact]
@@ -434,12 +435,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// 1c-3. An earlier variable's failure pre-empts every later variable
 		// ----------------------------------------------------------------
 
-		// The expander is the only place that knows a value's type is unsupported, so
-		// with validation split into phases the check ran after every snapshot had been
-		// taken: "{bad}{later}" reported whatever 'later' did on enumeration instead of
-		// the documented FormatException for 'bad'. Walking the template variable by
-		// variable, and type-checking each value at its own turn, puts the failure back
-		// where the template says it belongs.
+		// The expander is the only place that knows a value's type is unsupported, so with
+		// validation split into phases the check ran after every value had been read:
+		// "{bad}{later}" reported whatever 'later' did on enumeration instead of the
+		// documented FormatException for 'bad'. Leaving every value unread until the
+		// expander enumerates it puts the failure back where the template says it belongs.
 		[Fact]
 		public void Expand_ObjectTuple_UnsupportedValueInEarlierExpression_PreemptsLaterValueSuppliedFirst()
 		{
@@ -508,8 +508,8 @@ namespace Chatter.Rest.UriTemplates.Tests
 
 		// The same precedence has to hold against a validation that reads nothing at all.
 		// A prefix-validation pass over the whole template reported 'items' for
-		// "{bad}{items:3}" even though 'bad' fails first in template order; the prefix
-		// rule is now applied at the prefixed variable's own turn, which is after 'bad'.
+		// "{bad}{items:3}" even though 'bad' fails first in template order; the prefix rule
+		// is applied by the expander at the prefixed variable's own turn, after 'bad'.
 		[Fact]
 		public void Expand_ObjectTuple_UnsupportedValueInEarlierExpression_PreemptsLaterPrefixViolationSuppliedFirst()
 		{
@@ -617,7 +617,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// 1e. Composite members are validated as they are copied
 		// ----------------------------------------------------------------
 
-		// Copying a composite first and validating it afterwards keeps reading past the
+		// Recording a composite first and validating it afterwards keeps reading past the
 		// first invalid member, so a null followed by a throwing, blocking, or endless
 		// remainder never produced the documented FormatException. Each of the four cases
 		// below stops at the offending member; the double records whether the remainder
@@ -742,10 +742,10 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// ----------------------------------------------------------------
 
 		// UriTemplateExpander decides associative-array ordering by runtime type, and a
-		// set has no order of its own to preserve. Snapshotting a set into a List — as
-		// the general pairs branch does — would present it as an ordered sequence and
-		// make the expansion depend on the caller's set implementation. The snapshot
-		// therefore has to arrive still implementing ISet<KeyValuePair<string, string>>.
+		// set has no order of its own to preserve. Wrapping a set in a bare pair sequence —
+		// as the general pairs branch does — would present it as an ordered sequence and
+		// make the expansion depend on the caller's set implementation. The view therefore
+		// has to arrive still implementing ISet<KeyValuePair<string, string>>.
 		[Fact]
 		public void Expand_ObjectDictionary_SetOfPairs_ReachesExpanderAsSet()
 		{
@@ -798,7 +798,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// The set branch owes the same guarantees as every other composite branch: it is
-		// snapshotted once, and its members are validated as they are copied.
+		// read once, and its members are validated as they are recorded.
 		[Fact]
 		public void Expand_ObjectDictionary_SetOfPairs_ExpandsThroughTheRealExpander()
 		{
@@ -831,7 +831,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// A caller's set may be built with an equality comparer finer than
 		// EqualityComparer<KeyValuePair<string, string>>.Default — reference identity,
 		// for instance — and may therefore legally hold two entries the default relation
-		// considers equal. The snapshot has to keep every entry it observed: copying into
+		// considers equal. The view has to keep every entry it observed: recording into
 		// a HashSet<KeyValuePair<string, string>> imposes the default relation and
 		// silently drops one of them, changing the expanded URI.
 		[Fact]
@@ -861,9 +861,9 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(vars).Should().Be("?dot=.&dot=.&semi=%3B");
 		}
 
-		// The snapshot keeps every observed entry, but it must still present as a set, or
-		// the expander's ordered-sequence branch would take over and the result would
-		// depend on the caller's set implementation after all.
+		// The view keeps every observed entry, but it must still present as a set, or the
+		// expander's ordered-sequence branch would take over and the result would depend on
+		// the caller's set implementation after all.
 		[Fact]
 		public void Expand_ObjectDictionary_SetWithFinerEquality_StillReachesExpanderAsSet()
 		{
@@ -884,7 +884,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// The same defect as the set case, one type over. A caller's dictionary may be
 		// built with a comparer finer than StringComparer.Ordinal — reference identity,
 		// for instance — and may then legally hold two entries whose keys have equal text
-		// but are distinct instances. Copying into an ordinal Dictionary<string, string>
+		// but are distinct instances. Recording into an ordinal Dictionary<string, string>
 		// collapses them and the expanded URI loses a member, where the expander had
 		// enumerated and canonicalized both.
 		[Fact]
@@ -915,9 +915,9 @@ namespace Chatter.Rest.UriTemplates.Tests
 			template.Expand(vars).Should().Be("?dot=.&dot=.&semi=%3B");
 		}
 
-		// Keeping every entry must not cost the dictionary its dispatch: the snapshot has
-		// to stay on the expander's IDictionary branch, or the canonical ordering the
-		// branch exists to apply is lost.
+		// Keeping every entry must not cost the dictionary its dispatch: the view has to
+		// stay on the expander's IDictionary branch, or the canonical ordering the branch
+		// exists to apply is lost.
 		[Fact]
 		public void Expand_ObjectDictionary_DictionaryWithFinerKeyEquality_StillReachesExpanderAsDictionary()
 		{
@@ -1022,12 +1022,9 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// "{items}{items:3}" reads the value once and then reports the prefix violation.
 		// The first reference is a legal, unprefixed one that genuinely needs the value in
 		// order to expand, so expanding it is not a defect — it is what the template asks
-		// for, and it is what the library did before the preparation pass existed. Only
-		// the pass made the enumeration observable ahead of expansion and so made zero
-		// enumerations look like the invariant. What is guaranteed is that the prefixed
-		// reference itself reads nothing: the count is one, the enumeration the first
-		// expression performed, and the single-pass value is not drained a second time on
-		// the way to the failure.
+		// for. What is guaranteed is that the prefixed reference itself reads nothing: the
+		// count is one, the enumeration the first expression performed, and the single-pass
+		// value is not drained a second time on the way to the failure.
 		[Fact]
 		public void Expand_ObjectDictionary_PrefixOnLaterReference_ReportsPrefixErrorAfterTheUnprefixedReferenceReadsTheValue()
 		{
@@ -1055,7 +1052,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 			oneShot.EnumerationCount.Should().Be(1);
 		}
 
-		// A prefix violation cannot be lost: the walk visits every varspec of every
+		// A prefix violation cannot be lost: the expander visits every varspec of every
 		// expression, so it must arrive at the prefixed one unless something earlier
 		// throws first. An intervening variable that expands cleanly does not absolve it,
 		// and it does not cost the value a second enumeration either.
@@ -1103,8 +1100,8 @@ namespace Chatter.Rest.UriTemplates.Tests
 				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
 		}
 
-		// The snapshot is taken at the first reference that reads the value and reused by
-		// every later one: a variable named three times is still materialized exactly once.
+		// The value is materialized by the first reference that reads it and replayed for
+		// every later one: a variable named three times is still read exactly once.
 		[Fact]
 		public void Expand_ObjectDictionary_ThreeReferences_MaterializeTheValueOnce()
 		{
@@ -1123,10 +1120,10 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// An unpaired UTF-16 surrogate in a scalar is rejected by the encoder, which runs
 		// during expansion and nowhere else. Preparing every value before expanding
 		// anything therefore put a later composite's enumeration ahead of it, and no
-		// amount of validation added to the preparation pass would have covered the next
-		// such failure. Preparing one expression at a time removes the class: the encoder
-		// fires while the first expression is being expanded, before the second
-		// expression's values are looked at.
+		// amount of validation added to a preparation pass would have covered the next such
+		// failure. Preparing nothing removes the class outright: the encoder fires while
+		// the first expression is being expanded, and the second expression's values are
+		// still unread because nothing has enumerated them.
 		[Fact]
 		public void Expand_ObjectDictionary_UnencodableStringInEarlierExpression_PreemptsLaterValue()
 		{
@@ -1178,6 +1175,186 @@ namespace Chatter.Rest.UriTemplates.Tests
 			act.Should().Throw<FormatException>()
 				.WithMessage("*unpaired UTF-16 surrogate*");
 			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// ----------------------------------------------------------------
+		// 1c-6. A failure pre-empts every later varspec of its own expression
+		// ----------------------------------------------------------------
+
+		// The guarantee is unconditional, not expression-granular. Preparing one
+		// expression's variables immediately before expanding it closed the gap between
+		// expressions but not the one inside them: in "{bad,later}" both varspecs belong to
+		// the same expression, so 'later' was still read on the way to reporting 'bad'.
+		// Nothing prepares anything now. A composite value is wrapped, unread, in a view
+		// that materializes on its first enumeration, and the only thing that enumerates it
+		// is the expander reaching the varspec that names it — so a varspec the expander
+		// never reaches leaves its value untouched, wherever that varspec sits.
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValueInSameExpression_PreemptsLaterVarSpecSuppliedFirst()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["later"] = landmine,
+				["bad"] = 42,
+			};
+			var template = new UriTemplate("{bad,later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValueInSameExpression_PreemptsLaterVarSpecSuppliedSecond()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = 42,
+				["later"] = landmine,
+			};
+			var template = new UriTemplate("{bad,later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_UnsupportedValueInSameExpression_PreemptsLaterVarSpec()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{bad,later}");
+
+			var act = () => template.Expand(
+				("later", (object?)landmine),
+				("bad", (object?)42));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The encoder case, one expression over. The encoder runs inside the expander while
+		// the first varspec is being expanded, which is still ahead of the second varspec's
+		// value being enumerated.
+		[Fact]
+		public void Expand_ObjectDictionary_UnencodableStringInSameExpression_PreemptsLaterVarSpec()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = "\uD800",
+				["later"] = landmine,
+			};
+			var template = new UriTemplate("{bad,later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*unpaired UTF-16 surrogate*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_UnencodableStringInSameExpression_PreemptsLaterVarSpec()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{bad,later}");
+
+			var act = () => template.Expand(
+				("later", (object?)landmine),
+				("bad", (object?)"\uD800"));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*unpaired UTF-16 surrogate*");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// A failure raised while materializing an earlier varspec's own value stops there
+		// too: the read of 'keys' aborts at the null key and 'later' is never begun.
+		[Fact]
+		public void Expand_ObjectDictionary_NullKeyInSameExpression_PreemptsLaterVarSpec()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["keys"] = new NullKeyDictionary(),
+				["later"] = landmine,
+			};
+			var template = new UriTemplate("{?keys*,later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullKeyMessage("keys"));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// And the failure that reads nothing at all: a prefix over a composite in the first
+		// varspec leaves both its own value and the next varspec's untouched.
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixViolationInSameExpression_PreemptsLaterVarSpec()
+		{
+			var prefixed = new ThrowingSequence();
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["items"] = prefixed,
+				["later"] = landmine,
+			};
+			var template = new UriTemplate("{items:3,later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(PrefixOnCompositeMessage("items"));
+			prefixed.EnumerationAttempts.Should().Be(0);
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// An undefined operator belongs to the expression, so it pre-empts every varspec of
+		// that expression including the first — the expander resolves its strategy before it
+		// looks at a single variable.
+		[Fact]
+		public void Expand_UndefinedOperator_PreemptsEveryVarSpecOfItsOwnExpression()
+		{
+			var first = new ThrowingSequence();
+			var second = new ThrowingSequence();
+			var parser = new MutableTokenParser(
+				new UriTemplateExpressionToken(
+					(UriTemplateOperator)99,
+					new[]
+					{
+						new UriTemplateVarSpec("items", null, false),
+						new UriTemplateVarSpec("later", null, false),
+					}));
+			var template = new UriTemplate("{items,later}", parser, UriTemplateExpander.Default);
+			var vars = new Dictionary<string, object?> { ["items"] = first, ["later"] = second };
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<ArgumentOutOfRangeException>();
+			first.EnumerationAttempts.Should().Be(0);
+			second.EnumerationAttempts.Should().Be(0);
+		}
+
+		// Two varspecs of one expression naming the same variable share the one read, the
+		// same way two expressions do.
+		[Fact]
+		public void Expand_ObjectDictionary_TwoVarSpecsInOneExpression_ReadTheValueOnce()
+		{
+			var oneShot = new SinglePassList("red", "green");
+			var vars = new Dictionary<string, object?> { ["list"] = oneShot };
+			var template = new UriTemplate("{list,list}");
+
+			template.Expand(vars).Should().Be("red,green,red,green");
+			oneShot.EnumerationCount.Should().Be(1);
 		}
 
 		// ----------------------------------------------------------------
@@ -1328,14 +1505,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 		// UriTemplate copies the parser's token list in the constructor. IUriTemplateParser
 		// is a public extension point, so that list is caller-owned and may keep changing
 		// afterwards: retaining it would let a template expand something other than what it
-		// was constructed from. Each varspec's prefix modifier is read during expansion to
-		// decide whether that reference will consume its variable's value, so a mutation
-		// between construction and expansion is directly observable.
+		// was constructed from. Each varspec's prefix modifier decides whether that
+		// reference is legal at all over a composite value, so a mutation between
+		// construction and expansion is directly observable.
 
-		// Adding a prefix after construction. Against the retained list, 'items' would be
-		// snapshotted for the unprefixed varspec seen at construction — enumerating the
-		// composite — and the expander, reading the mutated list, would then report the
-		// prefix violation. Against the copy the mutation is simply not visible: the
+		// Adding a prefix after construction. Against the retained list the expander would
+		// read the mutated varspec and report a prefix violation for a template that was
+		// constructed without one. Against the copy the mutation is simply not visible: the
 		// template stays "{items}".
 		[Fact]
 		public void Expand_ParserAddsPrefixAfterConstruction_ExpandsTheTokensObservedAtConstruction()
@@ -1352,12 +1528,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 			oneShot.EnumerationCount.Should().Be(1);
 		}
 
-		// Removing a prefix after construction. Against the retained list the prefixed
-		// varspec seen at construction would suppress the snapshot, while neither mutated
-		// reference carries the prefix that would have reported it, so both expressions
-		// would enumerate the caller's single-pass value directly and the second pass would
-		// throw. Against the copy the template stays "{items:3}", which is a prefix over a
-		// composite: reported without reading the value at all.
+		// Removing a prefix after construction. Against the retained list neither mutated
+		// reference carries the prefix the constructed template does, so the expansion would
+		// succeed — draining the caller's single-pass value twice on the way — where the
+		// constructed form fails. Against the copy the template stays "{items:3}", which is
+		// a prefix over a composite: reported without reading the value at all.
 		[Fact]
 		public void Expand_ParserRemovesPrefixAfterConstruction_StillReportsItWithoutEnumerating()
 		{
@@ -1379,11 +1554,11 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// An expression's operator is a failure the expression owns, and only a custom
-		// IUriTemplateParser can produce an undefined one. Leaving it to
-		// OperatorStrategyFactory inside the expander put it after the expression's values
-		// had been prepared, so a throwing, blocking, or endless composite the expression
-		// named was read first and masked it. The strategy is now resolved before any of
-		// the expression's variables are touched.
+		// IUriTemplateParser can produce an undefined one. A preparation pass ahead of the
+		// expander put it after the expression's values had been read, so a throwing,
+		// blocking, or endless composite the expression named masked it. With nothing
+		// running ahead of the expander, the strategy it resolves as its first act is
+		// resolved before any of the expression's variables are touched.
 		[Fact]
 		public void Expand_ParserReturnsUndefinedOperator_IsReportedBeforeAnyValueIsRead()
 		{
@@ -1468,7 +1643,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		/// <summary>
 		/// A genuinely single-pass sequence: the second call to
 		/// <see cref="GetEnumerator"/> throws, so any code path that re-enumerates
-		/// the caller's value instead of an owned snapshot fails loudly.
+		/// the caller's value instead of the recorded members fails loudly.
 		/// </summary>
 		private sealed class SinglePassList : IEnumerable<string>
 		{
@@ -1852,8 +2027,8 @@ namespace Chatter.Rest.UriTemplates.Tests
 
 		/// <summary>
 		/// Captures the value a variable holds by the time expansion begins, which is how
-		/// a test can assert what runtime type the snapshot handed to the expander — the
-		/// type the expander's associative-array dispatch keys on.
+		/// a test can assert what runtime type reached the expander — the type the
+		/// expander's associative-array dispatch keys on.
 		/// </summary>
 		private sealed class RecordingExpander : IUriTemplateExpander
 		{
@@ -1882,7 +2057,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		/// An <see cref="IDictionary{TKey, TValue}"/> whose key equality is reference
 		/// identity rather than ordinal text, so it can legally hold two entries whose keys
 		/// read the same. Only enumeration and <see cref="Count"/> are implemented, which is
-		/// all the snapshot and the expander need.
+		/// all the memoizing view and the expander need.
 		/// </summary>
 		private sealed class ReferenceKeyedDictionary : IDictionary<string, string>
 		{

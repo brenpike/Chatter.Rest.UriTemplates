@@ -42,11 +42,11 @@ public sealed class UriTemplate
     /// reference to, or a read-only facade over one. Retaining it would leave the token
     /// sequence free to change between construction and expansion, so a template could
     /// expand something other than what it was constructed from. A varspec's prefix
-    /// modifier is the sharpest case: <see cref="ExpandCore"/> reads it to decide whether
-    /// a reference will consume its variable's value, so a prefix appearing after
-    /// construction would have a composite enumerated on the way to a violation the
-    /// expander reports anyway, and a prefix disappearing would skip the snapshot and
-    /// leave a single-pass value to be drained twice.
+    /// modifier is the sharpest case: it decides whether a reference is legal at all over
+    /// a composite value, so a prefix appearing after construction would turn a template
+    /// that expands into one that fails, and a prefix disappearing would turn a template
+    /// that fails without reading anything into one that reads a value the constructed
+    /// form never asked for.
     /// </para>
     /// <para>
     /// The list is enumerated exactly once, so a hostile implementation cannot report one
@@ -135,11 +135,11 @@ public sealed class UriTemplate
 
         foreach (var kvp in variables)
         {
-            ordinal[kvp.Key] = kvp.Value;
+            ordinal[kvp.Key] = Memoize(kvp.Key, kvp.Value);
         }
 
-        // Values are copied across as-is above; nothing is read from any of them until
-        // ExpandCore reaches the expression that names it.
+        // Memoizing is a runtime type test and nothing more; no value is read here, and
+        // none is read at all until the expression that names it is expanded.
         return ExpandCore(ordinal);
     }
 
@@ -175,52 +175,36 @@ public sealed class UriTemplate
             // ArgumentException whose paramName does not exist on it.
             mapped[kvp.Key] = kvp.Value is null
                 ? null
-                : UriTemplateExpander.MapValue(kvp.Key, kvp.Value);
+                : Memoize(kvp.Key, UriTemplateExpander.MapValue(kvp.Key, kvp.Value));
         }
 
         return ExpandCore(mapped);
     }
 
     /// <summary>
-    /// Canonical expansion path. Walks the template's tokens once, preparing each
-    /// expression's variables immediately before that expression is expanded and
-    /// delegating the expansion itself to <see cref="UriTemplateExpander"/>.
+    /// Canonical expansion path. Walks the template's tokens once, appending each literal
+    /// and delegating each expression to <see cref="UriTemplateExpander"/>.
     /// <para>
-    /// Preparation is interleaved with expansion rather than run as a pass of its own.
-    /// One expression is completely expanded before the next expression's values are
-    /// looked at, so whichever failure the template reaches first is the one raised —
-    /// an unsupported type, a prefix modifier over a composite, a null member, a string
-    /// that cannot be encoded, an operator outside the defined set — without this method
-    /// needing to know what any of those failures are. A pass that touched every value
-    /// up front could only get the same ordering by re-implementing each of the
-    /// expander's checks, in the expander's order, for the whole template.
+    /// It reads no variable and prepares nothing. Every composite value was wrapped in a
+    /// memoizing view of itself on the way in (see <see cref="Memoize"/>), and such a view
+    /// materializes on its first enumeration — which is the expander enumerating it, at
+    /// the expression that names it. So whichever failure the template reaches first is
+    /// the one raised: an operator outside the defined set, an unsupported type, a prefix
+    /// modifier over a composite, a null member, a string that cannot be encoded. None of
+    /// them is anticipated here, and none needs to be, because nothing runs ahead of the
+    /// expander to get in front of them.
     /// </para>
     /// <para>
-    /// An expression's strategy is resolved before its variables, because an expression
-    /// carries one failure of its own: its operator may lie outside the defined set,
-    /// which a custom <see cref="IUriTemplateParser"/> is free to produce. That failure
-    /// belongs to the expression, so it is due at the expression's own position, ahead of
-    /// every value the expression names.
-    /// </para>
-    /// <para>
-    /// A variable is snapshotted at the first reference that will actually read it, which
-    /// is what makes a single-pass or lazily evaluated sequence enumerate exactly once
-    /// however many expressions name it, and what stops a mutable one giving two
-    /// expressions two different answers. Two kinds of reference are skipped: one whose
-    /// variable is already snapshotted, and one carrying a prefix modifier — the expander
-    /// rejects a prefix over a composite before reading the value, so materializing it
-    /// here would read a value on the way to a failure that is already certain, and a
-    /// prefix over a string needs no snapshot. A name the template never references is
-    /// never visited, so an unused lazy, blocking, or endless sequence is left alone.
+    /// That makes the guarantee unconditional rather than expression-granular. A value the
+    /// expander never reaches is never read, whether it sits in a later expression or
+    /// alongside the failing variable in the same one: <c>{bad,later}</c> reports
+    /// <c>bad</c> and leaves <c>later</c> untouched, because materializing <c>later</c>
+    /// would take an enumeration that never happens.
     /// </para>
     /// </summary>
-    private string ExpandCore(Dictionary<string, object?> ordinalVariables)
+    private string ExpandCore(Dictionary<string, object?> variables)
     {
         var sb = new System.Text.StringBuilder();
-
-        // Allocated on first use: a template of literals, or one whose variables are all
-        // strings, never needs it.
-        HashSet<string>? snapshotted = null;
 
         foreach (var token in _tokens)
         {
@@ -230,37 +214,7 @@ public sealed class UriTemplate
             }
             else if (token is UriTemplateExpressionToken expression)
             {
-                _ = OperatorStrategyFactory.For(expression.Operator);
-
-                foreach (var varSpec in expression.Variables)
-                {
-                    var name = varSpec.Name;
-
-                    if (varSpec.PrefixLength.HasValue
-                        || (snapshotted is not null && snapshotted.Contains(name)))
-                    {
-                        continue;
-                    }
-
-                    if (!ordinalVariables.TryGetValue(name, out var value)
-                        || value is null
-                        || value is string)
-                    {
-                        // Undefined, null (undefined per RFC 6570 §2.3) and simple
-                        // strings are already in the state the expander needs.
-                        continue;
-                    }
-
-                    if (TrySnapshot(name, value, out var snapshot))
-                    {
-                        ordinalVariables[name] = snapshot;
-
-                        snapshotted ??= new HashSet<string>(StringComparer.Ordinal);
-                        snapshotted.Add(name);
-                    }
-                }
-
-                sb.Append(_expander.Expand(expression, ordinalVariables));
+                sb.Append(_expander.Expand(expression, variables));
             }
         }
 
@@ -344,12 +298,12 @@ public sealed class UriTemplate
             // First-wins for duplicates
             if (!dict.ContainsKey(key))
             {
-                dict[key] = value;
+                dict[key] = Memoize(key, value);
             }
         }
 
-        // The tuple array's order is the caller's, not the template's; nothing is read
-        // from a value until ExpandCore reaches the expression that names it.
+        // The tuple array's order is the caller's, not the template's; memoizing reads
+        // nothing, so no value is touched until the expression that names it is expanded.
         return ExpandCore(dict);
     }
 
@@ -369,30 +323,37 @@ public sealed class UriTemplate
     }
 
     /// <summary>
-    /// Tries to take an owned snapshot of a caller-supplied composite value, validating
-    /// each member as it is copied.
+    /// Wraps a caller-supplied composite value in a memoizing view of itself: one that
+    /// reads the caller's sequence on its first enumeration, validating each member as it
+    /// goes, and replays the recorded members on every enumeration after that.
     /// <para>
-    /// A template may reference the same variable from more than one expression, and each
-    /// expression materializes the value independently. Without a snapshot, a single-pass or
-    /// lazily evaluated sequence would be drained by the first expression, and a mutable
-    /// collection could change (or throw) between expressions. Copying once here guarantees that
-    /// every expression observes the same values and that the caller's sequence is enumerated
-    /// exactly once.
+    /// Deferring the read is what makes the value's first enumeration coincide with the
+    /// expander's, and so puts every failure in template order without this method knowing
+    /// what any of those failures are. Wrapping itself is a runtime type test and nothing
+    /// else, so it is safe to do for every value the caller supplies, including the ones
+    /// the template never mentions: an unused lazy, blocking, or endless sequence is
+    /// wrapped and then simply never enumerated.
     /// </para>
     /// <para>
-    /// Members are validated during the copy rather than after it. Copying first and
-    /// leaving validation to the expander would keep reading a sequence past its first
-    /// invalid member, so a null key, null value, or null element followed by a throwing,
-    /// blocking, or endless remainder would never be reported. Validating in step makes
-    /// the first invalid member the observable failure and stops the enumeration there.
-    /// Every message below is the one <see cref="UriTemplateExpander"/> produces for the
-    /// same input, naming the same variable.
+    /// Memoizing is what stops a single-pass or lazily evaluated sequence being drained by
+    /// the first expression that names it, and what stops a mutable one giving two
+    /// expressions two different answers. The view is built once per expansion, so however
+    /// many expressions name the variable, the caller's sequence is read exactly once.
+    /// </para>
+    /// <para>
+    /// Members are validated during the read rather than after it. Reading first and
+    /// leaving validation to the expander would carry on past the first invalid member, so
+    /// a null key, null value, or null element followed by a throwing, blocking, or
+    /// endless remainder would never be reported. Validating in step makes the first
+    /// invalid member the observable failure and stops the read there. Every message below
+    /// is the one <see cref="UriTemplateExpander"/> produces for the same input, naming the
+    /// same variable.
     /// </para>
     /// <para>
     /// The type dispatch mirrors <see cref="UriTemplateExpander"/>, which selects its
-    /// associative-array ordering by runtime type: each branch copies into a type that
-    /// still satisfies the interface the expander tests for, so no snapshot can change
-    /// which branch a value takes.
+    /// associative-array ordering by runtime type: each branch produces a view that still
+    /// satisfies the interface the expander tests for, so no wrapper can change which
+    /// branch a value takes.
     /// </para>
     /// <para>
     /// A value matching none of those shapes is handed back exactly as the caller supplied
@@ -402,120 +363,97 @@ public sealed class UriTemplate
     /// </para>
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> when <paramref name="value"/> was copied into an owned
-    /// snapshot, which the caller should substitute for it; <see langword="false"/> when
-    /// the value is not a shape RFC 6570 expansion supports.
+    /// A memoizing view of <paramref name="value"/> when it is a composite shape RFC 6570
+    /// expansion supports, and <paramref name="value"/> itself otherwise.
     /// </returns>
-    private static bool TrySnapshot(string name, object value, out object result)
+    private static object? Memoize(string name, object? value)
     {
+        // Undefined values, nulls (undefined per RFC 6570 2.3) and simple strings are
+        // already in the state the expander needs, and none of them can be read twice.
+        if (value is null || value is string)
+        {
+            return value;
+        }
+
         // Every branch below is selected by a runtime type test, which reads nothing from
         // the value.
 
         if (value is IDictionary<string, string> dictionaryValue)
         {
-            // Copy into a dictionary shape, not a list: UriTemplateExpander dispatches on
+            // Wrap in a dictionary shape, not a list: UriTemplateExpander dispatches on
             // the runtime type, and its ordinal key ordering is selected by that type
-            // rather than by the contents of the sequence. Flattening to
+            // rather than by the contents of the sequence. Handing over a bare
             // IEnumerable<KeyValuePair<,>> here would silently opt these values out of
             // that ordering.
             //
-            // Not into a Dictionary<string, string>, though, for the reason the set
-            // branch below cannot use a HashSet: that would impose the copy's own key
-            // equality on entries that were never subject to it. A caller's dictionary
-            // may be built with a comparer finer than ordinal and so legally hold two
-            // entries whose keys have equal text but are distinct instances, which an
-            // ordinal copy collapses into one — dropping a member the expander used to
-            // enumerate and canonicalize. UriTemplateDictionarySnapshot keeps every
-            // entry it observes, in order, and is still an IDictionary<string, string>.
-            // Copying by hand also keeps a null key reported as this overload's
-            // documented FormatException rather than the ArgumentNullException a
-            // Dictionary<,> copy constructor would raise.
-            var snapshot = new UriTemplateDictionarySnapshot();
-
-            foreach (var entry in dictionaryValue)
-            {
-                ThrowIfNullPair(name, entry);
-
-                snapshot.Append(entry);
-            }
-
-            result = snapshot;
-
-            return true;
+            // Not a Dictionary<string, string>, though, for the reason the set branch
+            // below cannot use a HashSet: that would impose the copy's own key equality on
+            // entries that were never subject to it. A caller's dictionary may be built
+            // with a comparer finer than ordinal and so legally hold two entries whose keys
+            // have equal text but are distinct instances, which an ordinal copy collapses
+            // into one — dropping a member the expander used to enumerate and canonicalize.
+            // UriTemplateMemoizedDictionary keeps every entry it observes, in order, and is
+            // still an IDictionary<string, string>.
+            return new UriTemplateMemoizedDictionary(MemoizePairs(name, dictionaryValue));
         }
 
         if (value is ISet<KeyValuePair<string, string>> setValue)
         {
-            // A set has no meaningful order of its own, and the expander canonicalizes
-            // one by ordinal key order — but only for a value that still presents as an
-            // ISet<KeyValuePair<string, string>>. Copying into a List here, as the pairs
-            // branch below does, would hand the expander an ordered sequence and make the
-            // result depend on the caller's set implementation.
+            // A set has no meaningful order of its own, and the expander canonicalizes one
+            // by ordinal key order — but only for a value that still presents as an
+            // ISet<KeyValuePair<string, string>>. Handing over the bare pair sequence, as
+            // the branch below does, would give the expander an ordered sequence and make
+            // the result depend on the caller's set implementation.
             //
             // A HashSet is equally wrong, for the opposite reason: it would impose
             // EqualityComparer<KeyValuePair<string, string>>.Default on the entries. A
             // caller's set may be built with a finer comparer and so legally hold two
-            // entries the default relation calls equal, which the copy would silently
-            // merge into one. The expander enumerated the caller's set and canonicalized
-            // whatever came out of it, so the snapshot must keep every entry it observed.
-            // UriTemplateSetSnapshot does both: it stores what it is given, in order, and
+            // entries the default relation calls equal, which the copy would silently merge
+            // into one. The expander enumerated the caller's set and canonicalized whatever
+            // came out of it, so the view must keep every entry it observed.
+            // UriTemplateMemoizedSet does both: it records what it is given, in order, and
             // is still an ISet<KeyValuePair<string, string>>. Its own enumeration order
             // does not matter — that is canonicalized downstream, not here.
-            var snapshot = new UriTemplateSetSnapshot();
-
-            foreach (var entry in setValue)
-            {
-                ThrowIfNullPair(name, entry);
-
-                snapshot.Append(entry);
-            }
-
-            result = snapshot;
-
-            return true;
+            return new UriTemplateMemoizedSet(MemoizePairs(name, setValue));
         }
 
         if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)
         {
-            var snapshot = new List<KeyValuePair<string, string>>();
-
-            foreach (var entry in pairsValue)
-            {
-                ThrowIfNullPair(name, entry);
-
-                snapshot.Add(entry);
-            }
-
-            result = snapshot;
-
-            return true;
+            // Any other pair sequence: the caller's order is the contract, so the view
+            // presents as nothing more than the IEnumerable<KeyValuePair<,>> it wraps.
+            return MemoizePairs(name, pairsValue);
         }
 
         if (value is IEnumerable<string> listValue)
         {
-            var items = new List<string>();
-
-            foreach (var item in listValue)
-            {
-                if (item is null)
-                {
-                    throw new FormatException(
-                        $"Variable '{name}' contains a null element. List elements must be non-null strings.");
-                }
-
-                items.Add(item);
-            }
-
-            result = items;
-
-            return true;
+            return new UriTemplateMemoizedSequence<string>(name, listValue, ThrowIfNullElement);
         }
 
         // Not a shape expansion supports. Hand the value back untouched — nothing has
         // been read from it, and nothing is reported here.
-        result = value;
+        return value;
+    }
 
-        return false;
+    /// <summary>
+    /// Builds the memoizing view shared by all three associative-array shapes, which
+    /// differ only in the interface they must still present to the expander.
+    /// </summary>
+    private static UriTemplateMemoizedSequence<KeyValuePair<string, string>> MemoizePairs(
+        string name,
+        IEnumerable<KeyValuePair<string, string>> pairs) =>
+        new UriTemplateMemoizedSequence<KeyValuePair<string, string>>(name, pairs, ThrowIfNullPair);
+
+    /// <summary>
+    /// Rejects a null element of a list value, with the message
+    /// <c>UriTemplateExpander.ExpandList</c> uses for the same element.
+    /// </summary>
+    private static void ThrowIfNullElement(string name, string item)
+    {
+        if (item is null)
+        {
+            throw new FormatException(
+                $"Variable '{name}' contains a null element. List elements must be non-null strings.");
+        }
     }
 
     /// <summary>
