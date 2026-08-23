@@ -316,8 +316,8 @@ var uri = new UriTemplate("/search{?q,lang}")
 Expands the template using a dictionary that supports composite value types for
 Level 4 expansion. Supported value types: `string`, `IEnumerable<string>`,
 `IDictionary<string, string>`, `IEnumerable<KeyValuePair<string, string>>`, and
-`null` (treated as undefined). Associative-array pair order depends on which of
-the two associative types is supplied — see
+`null` (treated as undefined). Associative-array pair order depends on whether
+the supplied value is an index-addressable list of pairs — see
 [Associative-Array Pair Order](#associative-array-pair-order).
 
 ```csharp
@@ -522,13 +522,20 @@ the value the caller supplies:
 
 | Supplied value | Pair order |
 |---|---|
-| `IDictionary<string, string>` (e.g. `Dictionary<string, string>`), including `UriTemplateValue.From(IDictionary<string, string>)` | Keys sorted by `string.CompareOrdinal` |
-| An `IEnumerable<KeyValuePair<string, string>>` that is **not** an `IDictionary` (e.g. `List<KeyValuePair<string, string>>`) | The supplied enumeration order, preserved verbatim, duplicate keys included |
+| An index-addressable sequence: `IList<KeyValuePair<string, string>>` or `IReadOnlyList<KeyValuePair<string, string>>` (e.g. `List<KeyValuePair<string, string>>`, `KeyValuePair<string, string>[]`, `ImmutableArray<...>`, `ImmutableList<...>`, `ReadOnlyCollection<...>`) | The supplied order, preserved verbatim, duplicate keys included |
+| Any other `IEnumerable<KeyValuePair<string, string>>` — every `IDictionary<string, string>` (`Dictionary<string, string>`, `FrozenDictionary<string, string>`, `ImmutableDictionary<string, string>`, the sorted dictionaries), including `UriTemplateValue.From(IDictionary<string, string>)`, plus `HashSet<KeyValuePair<string, string>>`, LINQ iterators, and custom enumerables | Canonicalized: sorted ordinally by key (`string.CompareOrdinal`), with an ordinal comparison of the value as tie-break |
 
-A `Dictionary<string, string>` has no order the caller can control — two
-logically identical dictionaries can enumerate differently depending on
-insertion and removal history — so its keys are sorted to make the expansion
-reproducible. The sort is ordinal, not culture-aware.
+Only an index-addressable sequence gives the caller an order to preserve.
+Every other enumerable has no ordering contract — two logically identical
+dictionaries can enumerate differently depending on insertion and removal
+history, and a hash-based set can reorder between processes — so those pairs
+are sorted to make the expansion reproducible. The sort is ordinal, not
+culture-aware. The value tie-break exists because an unordered container can
+hold repeated keys and the sort by key alone would leave their relative order
+input-dependent; dictionary keys are unique, so for a dictionary the tie-break
+never fires and the order is purely ordinal by key. Note that
+`FrozenDictionary<string, string>` implements `IDictionary<string, string>`,
+so it is canonicalized rather than order-preserving.
 
 ```csharp
 // Dictionary input: keys sorted ordinally, whatever order they were added in
