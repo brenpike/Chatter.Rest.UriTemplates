@@ -526,8 +526,7 @@ Data-driven harness around https://github.com/uri-templates/uritemplate-test.
 | Level 4 edge cases | 24 | 0 | 0 |
 | Official compliance harness | 130 | 0 | 0 |
 
-No implementation fixes from this plan remain outstanding. Both items previously
-listed here are complete:
+Both items previously listed here as highest priority are complete:
 
 1. Reserved expansion handling for bare `%` was already correct — `IsReservedChar`
    deliberately excludes `%`, so a bare `%` is encoded as `%25` while a valid
@@ -538,5 +537,12 @@ listed here are complete:
    `iprivate` ranges, and unpaired surrogates are rejected. See the literal
    expansion row above.
 
-Remaining work is tracked in the repository's issues rather than here, so that this
-document describes the implementation as it stands rather than a plan.
+One implementation fix from this plan is still outstanding, recorded in the
+undefined-null-values row above: the `IDictionary<string, UriTemplateValue>`
+overload throws `ArgumentException` for a null value (`UriTemplateExpander.MapValue`)
+rather than treating it as undefined, so the three overloads disagree. That change
+and its coverage are pending in PR #41.
+
+Beyond that, remaining work is tracked in the repository's issues rather than here,
+so that this document describes the implementation as it stands rather than
+doubling as a to-do list that goes stale as work lands.
