@@ -2,7 +2,7 @@
 
 ## 1. Prerequisites
 
-- **.NET 8.0 SDK (8.0.x)** — pinned in `global.json` with `rollForward: latestMinor`
+- **.NET 8.0 SDK (8.0.x)** — pinned in `global.json` (version `8.0.100`, `rollForward: latestFeature` — any 8.0.x SDK at or above 8.0.100 satisfies the pin)
 - **Language:** C# 10.0 (set per project via `<LangVersion>10.0</LangVersion>`)
 - No external tools required beyond the .NET SDK
 
@@ -103,7 +103,7 @@ dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Res
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.3.0.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.8.0.
 
 To pack the DI extension package:
 
@@ -111,7 +111,7 @@ To pack the DI extension package:
 dotnet pack src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj -c Release -o publish/nuget
 ```
 
-Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.1.1.
+Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.2.0.
 
 ## 6. CI/CD Parity
 
