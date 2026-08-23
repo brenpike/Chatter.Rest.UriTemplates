@@ -17,13 +17,30 @@ public sealed class UriTemplate
             throw new ArgumentNullException(nameof(template));
         }
 
-        _tokens = parser.Parse(template);
+        var tokens = parser.Parse(template);
+
+        if (tokens is null)
+        {
+            throw new InvalidOperationException(
+                $"The URI template parser '{parser.GetType().FullName}' returned null from " +
+                $"{nameof(IUriTemplateParser)}.{nameof(IUriTemplateParser.Parse)}. " +
+                "A parser must return a non-null token list.");
+        }
+
+        _tokens = tokens;
         _expander = expander;
     }
 
     /// <summary>
     /// Expands the URI template using the provided variable dictionary.
     /// All values are treated as simple strings (Levels 1–3).
+    /// <para>
+    /// A <see langword="null"/> value is treated as undefined per RFC 6570 §2.3 (the variable
+    /// is omitted), matching <see cref="Expand(IDictionary{string, object})"/>. The value type is
+    /// declared non-nullable, so a null can only arrive from a caller that bypasses nullable
+    /// reference type analysis (for example a <c>netstandard2.0</c> consumer); such a caller gets
+    /// an omitted variable rather than an exception.
+    /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to string values.</param>
     /// <returns>The expanded URI string.</returns>
@@ -81,7 +98,7 @@ public sealed class UriTemplate
 
         foreach (var kvp in variables)
         {
-            ordinal[kvp.Key] = kvp.Value;
+            ordinal[kvp.Key] = Snapshot(kvp.Value);
         }
 
         return ExpandCore(ordinal);
@@ -91,6 +108,10 @@ public sealed class UriTemplate
     /// Expands the URI template using the provided dictionary of
     /// <see cref="UriTemplateValue"/> instances, supporting all RFC 6570
     /// Level 1–4 value types through a strongly-typed API.
+    /// <para>
+    /// A <see langword="null"/> entry is treated as undefined per RFC 6570 §2.3 (the variable is
+    /// omitted), matching <see cref="Expand(IDictionary{string, object})"/>.
+    /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to <see cref="UriTemplateValue"/> instances.</param>
     /// <returns>The expanded URI string.</returns>
@@ -109,7 +130,13 @@ public sealed class UriTemplate
 
         foreach (var kvp in variables)
         {
-            mapped[kvp.Key] = UriTemplateExpander.MapValue(kvp.Key, kvp.Value);
+            // A null entry is undefined per RFC 6570 §2.3, consistent with the object?
+            // overload.  Mapping it here, rather than letting it reach
+            // UriTemplateExpander.MapValue, also keeps this method from surfacing an
+            // ArgumentException whose paramName does not exist on it.
+            mapped[kvp.Key] = kvp.Value is null
+                ? null
+                : UriTemplateExpander.MapValue(kvp.Key, kvp.Value);
         }
 
         return ExpandCore(mapped);
@@ -139,6 +166,19 @@ public sealed class UriTemplate
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Expands the URI template using the provided variable tuples. All values are treated as
+    /// simple strings (Levels 1–3).
+    /// <para>When duplicate keys are present, the first occurrence wins.</para>
+    /// <para>
+    /// A <see langword="null"/> value is treated as undefined per RFC 6570 §2.3 (the variable
+    /// is omitted), matching <see cref="Expand(IDictionary{string, string})"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="variables">Name/value tuples. Neither the array nor any key may be null.</param>
+    /// <returns>The expanded URI string.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
     public string Expand(params (string Key, string Value)[] variables)
     {
         if (variables is null)
@@ -146,10 +186,14 @@ public sealed class UriTemplate
             throw new ArgumentNullException(nameof(variables));
         }
 
-        var dict = new Dictionary<string, string>();
+        var dict = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        foreach (var (key, value) in variables)
+        for (var i = 0; i < variables.Length; i++)
         {
+            var (key, value) = variables[i];
+
+            ThrowIfKeyIsNull(key, i, nameof(variables));
+
             // First-wins for duplicates
             if (!dict.ContainsKey(key))
             {
@@ -179,6 +223,7 @@ public sealed class UriTemplate
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
     /// <exception cref="FormatException">Thrown when a value is not a supported type.</exception>
     public string Expand(params (string Key, object? Value)[] variables)
     {
@@ -189,16 +234,76 @@ public sealed class UriTemplate
 
         var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
 
-        foreach (var (key, value) in variables)
+        for (var i = 0; i < variables.Length; i++)
         {
+            var (key, value) = variables[i];
+
+            ThrowIfKeyIsNull(key, i, nameof(variables));
+
             // First-wins for duplicates
             if (!dict.ContainsKey(key))
             {
-                dict[key] = value;
+                dict[key] = Snapshot(value);
             }
         }
 
         return ExpandCore(dict);
+    }
+
+    /// <summary>
+    /// Rejects a null variable name with a message that identifies the offending entry,
+    /// instead of letting <see cref="Dictionary{TKey, TValue}"/> report a <c>key</c> parameter
+    /// that does not exist on the called overload.
+    /// </summary>
+    private static void ThrowIfKeyIsNull(string key, int index, string paramName)
+    {
+        if (key is null)
+        {
+            throw new ArgumentException(
+                $"The variable name of the entry at index {index} is null. Variable names must be non-null strings.",
+                paramName);
+        }
+    }
+
+    /// <summary>
+    /// Takes an owned snapshot of a caller-supplied composite value.
+    /// <para>
+    /// A template may reference the same variable from more than one expression, and each
+    /// expression materializes the value independently. Without a snapshot, a single-pass or
+    /// lazily evaluated sequence would be drained by the first expression, and a mutable
+    /// collection could change (or throw) between expressions. Copying once here guarantees that
+    /// every expression observes the same values and that the caller's sequence is enumerated
+    /// exactly once.
+    /// </para>
+    /// <para>
+    /// The type dispatch mirrors <see cref="UriTemplateExpander"/>: associative arrays are
+    /// recognized before lists. Unsupported types are passed through unchanged so the expander
+    /// still reports them as a <see cref="FormatException"/>.
+    /// </para>
+    /// </summary>
+    private static object? Snapshot(object? value)
+    {
+        if (value is null || value is string)
+        {
+            return value;
+        }
+
+        if (value is IDictionary<string, string> dictionaryValue)
+        {
+            return new List<KeyValuePair<string, string>>(dictionaryValue);
+        }
+
+        if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)
+        {
+            return new List<KeyValuePair<string, string>>(pairsValue);
+        }
+
+        if (value is IEnumerable<string> listValue)
+        {
+            return new List<string>(listValue);
+        }
+
+        return value;
     }
 
     /// <summary>
