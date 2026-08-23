@@ -163,7 +163,7 @@ All projects have `<Nullable>enable</Nullable>`.
 
 ## 8. Test Conventions
 
-- **Framework:** xunit 2.4.x
+- **Framework:** xunit 2.9.x
 - **Assertions:** FluentAssertions 6.x (preferred); xunit `Assert` also used
 - **Coverage:** coverlet.msbuild
 - **Test naming:** `Method_Scenario_Expected` — e.g., `Expand_WithUndefinedVariable_OmitsVariable`
