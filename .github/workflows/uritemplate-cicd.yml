@@ -48,13 +48,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
           submodules: true
+          persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: ${{ env.dotnet-version }}
           cache: true
@@ -74,7 +75,7 @@ jobs:
         run: dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release --no-build -o publish/nuget
 
       - name: Upload NuGet
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: nuget-uritemplate
           path: publish/nuget/**
@@ -94,7 +95,7 @@ jobs:
     name: deploy
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' # main branch is protected, so this will only be true after successful PR merge
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # only the push produced by merging to protected main; never workflow_dispatch
 
     environment:
       name: Production
@@ -108,7 +109,7 @@ jobs:
 
     steps:
       - name: Download NuGet
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with:
           name: nuget-uritemplate
           path: ./dist/nuget
@@ -117,9 +118,8 @@ jobs:
         shell: bash
         run: |
           dotnet nuget push "./dist/nuget/*.nupkg" \
-            -k '${{ env.NUGET_AUTH_TOKEN }}' \
-            -s '${{ env.NUGET_URL }}' \
-            --skip-duplicate
+            -k "$NUGET_AUTH_TOKEN" \
+            -s "$NUGET_URL"
 
   tag:
     name: tag
