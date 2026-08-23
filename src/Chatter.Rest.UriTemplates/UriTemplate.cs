@@ -4,6 +4,7 @@ public sealed class UriTemplate
 {
     private readonly IReadOnlyList<UriTemplateToken> _tokens;
     private readonly IUriTemplateExpander _expander;
+    private readonly HashSet<string> _prefixModifiedVariables;
 
     public UriTemplate(string template)
         : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
@@ -29,6 +30,7 @@ public sealed class UriTemplate
 
         _tokens = tokens;
         _expander = expander;
+        _prefixModifiedVariables = CollectPrefixModifiedVariables(tokens);
     }
 
     /// <summary>
@@ -102,8 +104,8 @@ public sealed class UriTemplate
         }
 
         // Values are copied across as-is above; nothing is read from them until
-        // ValidateAndMaterialize has walked the template in order.
-        ValidateAndMaterialize(ordinal);
+        // PrepareVariables has walked the template in order.
+        PrepareVariables(ordinal);
 
         return ExpandCore(ordinal);
     }
@@ -252,8 +254,8 @@ public sealed class UriTemplate
         }
 
         // The tuple array's order is the caller's, not the template's; nothing is read
-        // from a value until ValidateAndMaterialize has walked the template in order.
-        ValidateAndMaterialize(dict);
+        // from a value until PrepareVariables has walked the template in order.
+        PrepareVariables(dict);
 
         return ExpandCore(dict);
     }
@@ -274,59 +276,34 @@ public sealed class UriTemplate
     }
 
     /// <summary>
-    /// Brings the caller's values into the state expansion requires, in two passes over
-    /// the template's tokens. Both passes run in template order, never in the order the
-    /// caller happened to supply the values.
+    /// Brings the caller's values into the state expansion requires, walking the
+    /// template's tokens once, in order, and completing all of one variable's work
+    /// before looking at the next.
     /// <para>
-    /// The first pass reads nothing. It walks every expression's varspecs in order and
-    /// applies the validations that need only a runtime type test — currently RFC 6570's
-    /// prohibition on a prefix modifier over a composite value. Because no value has been
-    /// materialized yet, a violation belonging to an earlier expression is always reported
-    /// before a later expression's value is so much as touched.
+    /// For each variable the template references, at the position of its first
+    /// reference: its value's type is checked against the supported set, the RFC 6570
+    /// prohibition on a prefix modifier over a composite is applied, and only then is
+    /// the value snapshotted — with each member validated as it is copied. Every
+    /// failure <see cref="UriTemplateExpander"/> can raise for a value is therefore
+    /// raised here instead, at the variable that owns it, before any later variable's
+    /// value has been so much as touched.
     /// </para>
     /// <para>
-    /// The second pass runs only once the first has completed cleanly, and materializes
-    /// each referenced value at most once, again in template order. Values the template
-    /// never references are left untouched, so an unused lazy, blocking, or infinite
-    /// sequence is never enumerated.
+    /// The alternative — validating everything, then snapshotting everything, then
+    /// expanding — is what this replaces. Each of those phases was internally ordered
+    /// by the template, but a later variable's work still ran before an earlier
+    /// variable's failure surfaced. Ordering is now a property of the single walk
+    /// rather than of three independent ones.
+    /// </para>
+    /// <para>
+    /// Values the template never references are never visited, so an unused lazy,
+    /// blocking, or infinite sequence is left alone; a value referenced from several
+    /// expressions is prepared exactly once.
     /// </para>
     /// </summary>
-    private void ValidateAndMaterialize(Dictionary<string, object?> variables)
+    private void PrepareVariables(Dictionary<string, object?> variables)
     {
-        // Pass 1 — validate in template order, reading nothing.
-        foreach (var token in _tokens)
-        {
-            if (token is not UriTemplateExpressionToken expression)
-            {
-                continue;
-            }
-
-            foreach (var varSpec in expression.Variables)
-            {
-                if (!varSpec.PrefixLength.HasValue)
-                {
-                    continue;
-                }
-
-                if (!variables.TryGetValue(varSpec.Name, out var value))
-                {
-                    continue;
-                }
-
-                // A composite bound to a prefix-modified name cannot expand successfully,
-                // whichever expression the expander reaches first, so raising the failure
-                // here produces the exception the caller would have seen anyway — without
-                // the enumeration that reaching it would otherwise have cost.
-                if (IsComposite(value))
-                {
-                    throw new FormatException(
-                        $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{varSpec.Name}').");
-                }
-            }
-        }
-
-        // Pass 2 — materialize in template order, once per referenced name.
-        var materialized = new HashSet<string>(StringComparer.Ordinal);
+        var prepared = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var token in _tokens)
         {
@@ -337,34 +314,116 @@ public sealed class UriTemplate
 
             foreach (var varSpec in expression.Variables)
             {
-                if (!materialized.Add(varSpec.Name))
+                var name = varSpec.Name;
+
+                // The first reference decides the variable's position in the walk;
+                // later references add nothing that is not already accounted for.
+                if (!prepared.Add(name))
                 {
                     continue;
                 }
 
-                if (variables.TryGetValue(varSpec.Name, out var value))
+                if (!variables.TryGetValue(name, out var value))
                 {
-                    variables[varSpec.Name] = Snapshot(varSpec.Name, value);
+                    // Undefined per RFC 6570 §2.3.
+                    continue;
                 }
+
+                if (value is null || value is string)
+                {
+                    // Undefined, or a simple string: nothing to validate and nothing
+                    // to snapshot. A prefix modifier over a string is legal.
+                    continue;
+                }
+
+                // Order matters, and mirrors the expander: an unsupported type is
+                // reported as such rather than as a misapplied prefix modifier.
+                ThrowIfUnsupportedType(name, value);
+                ThrowIfPrefixModified(name);
+
+                variables[name] = Snapshot(name, value);
             }
         }
     }
 
     /// <summary>
-    /// Reports whether a value is one of the composite shapes RFC 6570 supports, using
-    /// only a runtime type test. Nothing is read from the value, so this is safe to call
-    /// during the validation pass. The order of the tests mirrors
-    /// <see cref="Snapshot(string, object?)"/> and <see cref="UriTemplateExpander"/>.
+    /// Reports a value whose runtime type is none of the shapes RFC 6570 expansion
+    /// supports, with the message <see cref="UriTemplateExpander"/> would have produced
+    /// on reaching the variable. Only a type test is performed, so nothing is read from
+    /// the value.
+    /// <para>
+    /// Hoisting this check out of the expander is what makes an earlier variable's
+    /// unsupported value win over a later variable's enumeration: the expander could
+    /// only report it after every snapshot had already been taken.
+    /// </para>
     /// </summary>
-    private static bool IsComposite(object? value)
-        => value is not null
-            && value is not string
-            && (value is IDictionary<string, string>
-                || value is IEnumerable<KeyValuePair<string, string>>
-                || value is IEnumerable<string>);
+    private static void ThrowIfUnsupportedType(string name, object value)
+    {
+        if (value is IDictionary<string, string>
+            || value is IEnumerable<KeyValuePair<string, string>>
+            || value is IEnumerable<string>)
+        {
+            return;
+        }
+
+        throw new FormatException(
+            $"Variable '{name}' has unsupported type '{value.GetType().FullName}'. " +
+            "Expected string, IEnumerable<string>, IDictionary<string, string>, or IEnumerable<KeyValuePair<string, string>>.");
+    }
 
     /// <summary>
-    /// Takes an owned snapshot of a caller-supplied composite value.
+    /// Applies RFC 6570's prohibition on a prefix modifier over a composite value.
+    /// Called only once the value is known to be a composite, and only from the
+    /// variable's own turn in the walk, so it can never pre-empt the failure of a
+    /// variable referenced earlier in the template.
+    /// <para>
+    /// The check is against every reference to the variable, not just the one currently
+    /// being walked: a composite bound to a name the template prefixes anywhere cannot
+    /// expand successfully, so the expansion's outcome is already decided at the
+    /// variable's first reference, and enumerating the value on the way to that outcome
+    /// buys nothing.
+    /// </para>
+    /// </summary>
+    private void ThrowIfPrefixModified(string name)
+    {
+        if (_prefixModifiedVariables.Contains(name))
+        {
+            throw new FormatException(
+                $"Prefix modifier is not applicable to composite values per RFC 6570 (variable '{name}').");
+        }
+    }
+
+    /// <summary>
+    /// Collects the names the template references with a prefix modifier, so
+    /// <see cref="ThrowIfPrefixModified(string)"/> costs a set lookup rather than a
+    /// second walk per variable.
+    /// </summary>
+    private static HashSet<string> CollectPrefixModifiedVariables(IReadOnlyList<UriTemplateToken> tokens)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var token in tokens)
+        {
+            if (token is not UriTemplateExpressionToken expression)
+            {
+                continue;
+            }
+
+            foreach (var varSpec in expression.Variables)
+            {
+                if (varSpec.PrefixLength.HasValue)
+                {
+                    names.Add(varSpec.Name);
+                }
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Takes an owned snapshot of a caller-supplied composite value, validating each
+    /// member as it is copied.
     /// <para>
     /// A template may reference the same variable from more than one expression, and each
     /// expression materializes the value independently. Without a snapshot, a single-pass or
@@ -374,30 +433,25 @@ public sealed class UriTemplate
     /// exactly once.
     /// </para>
     /// <para>
-    /// The type dispatch mirrors <see cref="UriTemplateExpander"/>: associative arrays are
-    /// recognized before lists. Unsupported types are passed through unchanged so the expander
-    /// still reports them as a <see cref="FormatException"/>.
+    /// Members are validated during the copy rather than after it. Copying first and
+    /// leaving validation to the expander would keep reading a sequence past its first
+    /// invalid member, so a null key, null value, or null element followed by a throwing,
+    /// blocking, or endless remainder would never be reported. Validating in step makes
+    /// the first invalid member the observable failure and stops the enumeration there.
+    /// Every message below is the one <see cref="UriTemplateExpander"/> produces for the
+    /// same input, naming the same variable.
     /// </para>
     /// <para>
-    /// A null associative-array key is reported here rather than by the expander.
-    /// Detecting one requires enumerating the dictionary, so it cannot move into the
-    /// validation pass without performing exactly the materialization that pass exists to
-    /// defer. Raising it during the snapshot is sound because the snapshot itself runs in
-    /// template order: a null key in a later-referenced variable can no longer pre-empt a
-    /// validation failure belonging to an earlier expression, and the caller's dictionary
-    /// is read once instead of twice.
+    /// The type dispatch mirrors <see cref="UriTemplateExpander"/>, which selects its
+    /// associative-array ordering by runtime type: each branch copies into a type that
+    /// still satisfies the interface the expander tests for, so no snapshot can change
+    /// which branch a value takes. Unsupported types never reach this method.
     /// </para>
     /// </summary>
-    private static object? Snapshot(string name, object? value)
+    private static object? Snapshot(string name, object value)
     {
-        if (value is null || value is string)
-        {
-            return value;
-        }
-
         // Every branch below is selected by a runtime type test, which reads nothing from
-        // the value. Prefix-modifier validation has already run, in template order, before
-        // this method was reached for any variable.
+        // the value. Type and prefix validation have already run for this variable.
 
         if (value is IDictionary<string, string> dictionaryValue)
         {
@@ -413,21 +467,30 @@ public sealed class UriTemplate
 
             foreach (var entry in dictionaryValue)
             {
-                if (entry.Key is null)
-                {
-                    // Report the failure the expander would have reported, word for word,
-                    // instead of handing it back the caller's instance. The source has
-                    // already given up its one enumeration by this point, so re-reading it
-                    // would surface a single-pass sequence's InvalidOperationException in
-                    // place of this variable-specific FormatException.
-                    throw new FormatException(
-                        $"Variable '{name}' contains a null key. " +
-                        "Associative array keys must be non-null strings.");
-                }
+                ThrowIfNullPair(name, entry);
 
-                // Null values are copied through untouched: Dictionary<,> accepts them, so
-                // the expander still reports its own null-value FormatException.
                 snapshot[entry.Key] = entry.Value;
+            }
+
+            return snapshot;
+        }
+
+        if (value is ISet<KeyValuePair<string, string>> setValue)
+        {
+            // A set has no meaningful order of its own, and the expander canonicalizes
+            // one by ordinal key order — but only for a value that still presents as an
+            // ISet<KeyValuePair<string, string>>. Copying into a List here, as the pairs
+            // branch below does, would hand the expander an ordered sequence and make the
+            // result depend on the caller's set implementation. The HashSet's own
+            // enumeration order does not matter for the same reason: it is canonicalized
+            // downstream, not here.
+            var snapshot = new HashSet<KeyValuePair<string, string>>();
+
+            foreach (var entry in setValue)
+            {
+                ThrowIfNullPair(name, entry);
+
+                snapshot.Add(entry);
             }
 
             return snapshot;
@@ -435,17 +498,55 @@ public sealed class UriTemplate
 
         if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)
         {
-            return new List<KeyValuePair<string, string>>(pairsValue);
+            var snapshot = new List<KeyValuePair<string, string>>();
+
+            foreach (var entry in pairsValue)
+            {
+                ThrowIfNullPair(name, entry);
+
+                snapshot.Add(entry);
+            }
+
+            return snapshot;
         }
 
-        if (value is IEnumerable<string> listValue)
+        var listValue = (IEnumerable<string>)value;
+        var items = new List<string>();
+
+        foreach (var item in listValue)
         {
-            return new List<string>(listValue);
+            if (item is null)
+            {
+                throw new FormatException(
+                    $"Variable '{name}' contains a null element. List elements must be non-null strings.");
+            }
+
+            items.Add(item);
         }
 
-        // Not a composite at all. Leave it alone so the expander reports it as an
-        // unsupported type rather than as a misapplied prefix modifier.
-        return value;
+        return items;
+    }
+
+    /// <summary>
+    /// Rejects a null key or a null value in an associative-array member, with the
+    /// message and the key/value precedence <c>UriTemplateExpander.ExpandAssociativeArray</c>
+    /// uses for the same member.
+    /// </summary>
+    private static void ThrowIfNullPair(string name, KeyValuePair<string, string> entry)
+    {
+        if (entry.Key is null)
+        {
+            throw new FormatException(
+                $"Variable '{name}' contains a null key. " +
+                "Associative array keys must be non-null strings.");
+        }
+
+        if (entry.Value is null)
+        {
+            throw new FormatException(
+                $"Variable '{name}' contains a null value for key '{entry.Key}'. " +
+                "Associative array values must be non-null strings.");
+        }
     }
 
     /// <summary>

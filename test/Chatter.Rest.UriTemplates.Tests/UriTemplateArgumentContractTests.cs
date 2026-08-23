@@ -430,6 +430,440 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
+		// 1c-3. An earlier variable's failure pre-empts every later variable
+		// ----------------------------------------------------------------
+
+		// The expander is the only place that knows a value's type is unsupported, so
+		// with validation split into phases the check ran after every snapshot had been
+		// taken: "{bad}{later}" reported whatever 'later' did on enumeration instead of
+		// the documented FormatException for 'bad'. Walking the template variable by
+		// variable, and type-checking each value at its own turn, puts the failure back
+		// where the template says it belongs.
+		[Fact]
+		public void Expand_ObjectTuple_UnsupportedValueInEarlierExpression_PreemptsLaterValueSuppliedFirst()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{bad}{later}");
+
+			var act = () => template.Expand(
+				("later", (object?)landmine),
+				("bad", (object?)42));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_UnsupportedValueInEarlierExpression_PreemptsLaterValueSuppliedSecond()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{bad}{later}");
+
+			var act = () => template.Expand(
+				("bad", (object?)42),
+				("later", (object?)landmine));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValueInEarlierExpression_PreemptsLaterValueSuppliedFirst()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["later"] = landmine,
+				["bad"] = 42,
+			};
+			var template = new UriTemplate("{bad}{later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValueInEarlierExpression_PreemptsLaterValueSuppliedSecond()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = 42,
+				["later"] = landmine,
+			};
+			var template = new UriTemplate("{bad}{later}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// The same precedence has to hold against a validation that reads nothing at all.
+		// A prefix-validation pass over the whole template reported 'items' for
+		// "{bad}{items:3}" even though 'bad' fails first in template order; the prefix
+		// rule is now applied at the prefixed variable's own turn, which is after 'bad'.
+		[Fact]
+		public void Expand_ObjectTuple_UnsupportedValueInEarlierExpression_PreemptsLaterPrefixViolationSuppliedFirst()
+		{
+			var template = new UriTemplate("{bad}{items:3}");
+
+			var act = () => template.Expand(
+				("items", (object?)new[] { "x" }),
+				("bad", (object?)42));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_UnsupportedValueInEarlierExpression_PreemptsLaterPrefixViolationSuppliedSecond()
+		{
+			var template = new UriTemplate("{bad}{items:3}");
+
+			var act = () => template.Expand(
+				("bad", (object?)42),
+				("items", (object?)new[] { "x" }));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValueInEarlierExpression_PreemptsLaterPrefixViolationSuppliedFirst()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["items"] = new[] { "x" },
+				["bad"] = 42,
+			};
+			var template = new UriTemplate("{bad}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValueInEarlierExpression_PreemptsLaterPrefixViolationSuppliedSecond()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = 42,
+				["items"] = new[] { "x" },
+			};
+			var template = new UriTemplate("{bad}{items:3}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		// The mirror image: when the prefixed variable is the one the template names
+		// first, it is the one reported, and the unsupported value behind it is never
+		// reached.
+		[Fact]
+		public void Expand_ObjectDictionary_PrefixViolationBeforeUnsupportedValue_ReportsThePrefixedVariable()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["bad"] = 42,
+				["items"] = new[] { "x" },
+			};
+			var template = new UriTemplate("{items:3}{bad}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(
+					"Prefix modifier is not applicable to composite values per RFC 6570 (variable 'items').");
+		}
+
+		// An unsupported type must still be reported when it is the only problem, with
+		// the expander's message — the check simply happens earlier now.
+		[Fact]
+		public void Expand_ObjectDictionary_UnsupportedValue_ThrowsExpandersFormatException()
+		{
+			var vars = new Dictionary<string, object?> { ["bad"] = 42 };
+			var template = new UriTemplate("{bad}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(UnsupportedTypeMessage("bad", typeof(int)));
+		}
+
+		// An unsupported value bound to a name the template never mentions is not a
+		// failure: nothing is validated for a variable that is never referenced.
+		[Fact]
+		public void Expand_ObjectDictionary_UnreferencedUnsupportedValue_IsIgnored()
+		{
+			var vars = new Dictionary<string, object?> { ["unused"] = 42 };
+			var template = new UriTemplate("/status");
+
+			template.Expand(vars).Should().Be("/status");
+		}
+
+		// ----------------------------------------------------------------
+		// 1e. Composite members are validated as they are copied
+		// ----------------------------------------------------------------
+
+		// Copying a composite first and validating it afterwards keeps reading past the
+		// first invalid member, so a null followed by a throwing, blocking, or endless
+		// remainder never produced the documented FormatException. Each of the four cases
+		// below stops at the offending member; the double records whether the remainder
+		// was ever reached.
+		[Fact]
+		public void Expand_ObjectDictionary_DictionaryWithNullValueThenHostileRemainder_ThrowsFormatExceptionAtTheNull()
+		{
+			var hostile = HostileDictionary.After(new KeyValuePair<string, string>("ok", null!));
+			var vars = new Dictionary<string, object?> { ["keys"] = hostile };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullValueMessage("keys", "ok"));
+			hostile.ReachedRemainder.Should().BeFalse();
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_DictionaryWithNullKeyThenHostileRemainder_ThrowsFormatExceptionAtTheNull()
+		{
+			var hostile = HostileDictionary.After(new KeyValuePair<string, string>(null!, "1"));
+			var vars = new Dictionary<string, object?> { ["keys"] = hostile };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullKeyMessage("keys"));
+			hostile.ReachedRemainder.Should().BeFalse();
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_PairsWithNullKeyThenHostileRemainder_ThrowsFormatExceptionAtTheNull()
+		{
+			var hostile = new HostilePairs(new KeyValuePair<string, string>(null!, "1"));
+			var vars = new Dictionary<string, object?> { ["keys"] = hostile };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullKeyMessage("keys"));
+			hostile.ReachedRemainder.Should().BeFalse();
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_PairsWithNullValueThenHostileRemainder_ThrowsFormatExceptionAtTheNull()
+		{
+			var hostile = new HostilePairs(new KeyValuePair<string, string>("ok", null!));
+			var vars = new Dictionary<string, object?> { ["keys"] = hostile };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullValueMessage("keys", "ok"));
+			hostile.ReachedRemainder.Should().BeFalse();
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_ListWithNullElementThenHostileRemainder_ThrowsFormatExceptionAtTheNull()
+		{
+			var hostile = new HostileList("red", null!);
+			var vars = new Dictionary<string, object?> { ["items"] = hostile };
+			var template = new UriTemplate("{items}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullElementMessage("items"));
+			hostile.ReachedRemainder.Should().BeFalse();
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_ListWithNullElementThenHostileRemainder_ThrowsFormatExceptionAtTheNull()
+		{
+			var hostile = new HostileList("red", null!);
+			var template = new UriTemplate("{items}");
+
+			var act = () => template.Expand(("items", (object?)hostile));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullElementMessage("items"));
+			hostile.ReachedRemainder.Should().BeFalse();
+		}
+
+		// The member validation is part of the variable's own turn in the walk, so it is
+		// still ordered by the template rather than by the caller's argument list.
+		[Fact]
+		public void Expand_ObjectTuple_NullElementInEarlierExpression_PreemptsLaterValueSuppliedFirst()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{items}{other}");
+
+			var act = () => template.Expand(
+				("other", (object?)landmine),
+				("items", (object?)new HostileList("red", null!)));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullElementMessage("items"));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_NullElementInEarlierExpression_PreemptsLaterValueSuppliedSecond()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("{items}{other}");
+
+			var act = () => template.Expand(
+				("items", (object?)new HostileList("red", null!)),
+				("other", (object?)landmine));
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullElementMessage("items"));
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// ----------------------------------------------------------------
+		// 1f. A set of pairs stays a set on its way to the expander
+		// ----------------------------------------------------------------
+
+		// UriTemplateExpander decides associative-array ordering by runtime type, and a
+		// set has no order of its own to preserve. Snapshotting a set into a List — as
+		// the general pairs branch does — would present it as an ordered sequence and
+		// make the expansion depend on the caller's set implementation. The snapshot
+		// therefore has to arrive still implementing ISet<KeyValuePair<string, string>>.
+		[Fact]
+		public void Expand_ObjectDictionary_SetOfPairs_ReachesExpanderAsSet()
+		{
+			var recorder = new RecordingExpander();
+			var set = new HashSet<KeyValuePair<string, string>>
+			{
+				new KeyValuePair<string, string>("semi", ";"),
+				new KeyValuePair<string, string>("dot", "."),
+			};
+			var vars = new Dictionary<string, object?> { ["keys"] = set };
+			var template = new UriTemplate("{?keys*}", UriTemplateParser.Default, recorder);
+
+			template.Expand(vars);
+
+			recorder.Captured.Should().BeAssignableTo<ISet<KeyValuePair<string, string>>>();
+			recorder.Captured.Should().NotBeSameAs(set);
+			((ISet<KeyValuePair<string, string>>)recorder.Captured!).Should().BeEquivalentTo(set);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_SetOfPairs_ReachesExpanderAsSet()
+		{
+			var recorder = new RecordingExpander();
+			var set = new HashSet<KeyValuePair<string, string>>
+			{
+				new KeyValuePair<string, string>("semi", ";"),
+			};
+			var template = new UriTemplate("{?keys*}", UriTemplateParser.Default, recorder);
+
+			template.Expand(("keys", (object?)set));
+
+			recorder.Captured.Should().BeAssignableTo<ISet<KeyValuePair<string, string>>>();
+			recorder.Captured.Should().NotBeSameAs(set);
+		}
+
+		// A custom ISet implementation must be recognized by its interface, not by being
+		// a HashSet.
+		[Fact]
+		public void Expand_ObjectDictionary_CustomSetOfPairs_ReachesExpanderAsSet()
+		{
+			var recorder = new RecordingExpander();
+			var set = new SingleEntryPairSet(new KeyValuePair<string, string>("semi", ";"));
+			var vars = new Dictionary<string, object?> { ["keys"] = set };
+			var template = new UriTemplate("{?keys*}", UriTemplateParser.Default, recorder);
+
+			template.Expand(vars);
+
+			recorder.Captured.Should().BeAssignableTo<ISet<KeyValuePair<string, string>>>();
+			recorder.Captured.Should().NotBeSameAs(set);
+		}
+
+		// The set branch owes the same guarantees as every other composite branch: it is
+		// snapshotted once, and its members are validated as they are copied.
+		[Fact]
+		public void Expand_ObjectDictionary_SetOfPairs_ExpandsThroughTheRealExpander()
+		{
+			var set = new HashSet<KeyValuePair<string, string>>
+			{
+				new KeyValuePair<string, string>("semi", ";"),
+			};
+			var vars = new Dictionary<string, object?> { ["keys"] = set };
+			var template = new UriTemplate("{?keys*}");
+
+			template.Expand(vars).Should().Be("?semi=%3B");
+		}
+
+		[Fact]
+		public void Expand_ObjectDictionary_SetOfPairsWithNullValue_ThrowsFormatExceptionNamingVariable()
+		{
+			var set = new HashSet<KeyValuePair<string, string>>
+			{
+				new KeyValuePair<string, string>("ok", null!),
+			};
+			var vars = new Dictionary<string, object?> { ["keys"] = set };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.Which.Message.Should().Be(NullValueMessage("keys", "ok"));
+		}
+
+		// A dictionary is checked before a set, so a type that is somehow both still
+		// takes the expander's IDictionary branch.
+		[Fact]
+		public void Expand_ObjectDictionary_Dictionary_StillReachesExpanderAsDictionary()
+		{
+			var recorder = new RecordingExpander();
+			var vars = new Dictionary<string, object?>
+			{
+				["keys"] = new Dictionary<string, string> { ["semi"] = ";" },
+			};
+			var template = new UriTemplate("{?keys*}", UriTemplateParser.Default, recorder);
+
+			template.Expand(vars);
+
+			recorder.Captured.Should().BeAssignableTo<IDictionary<string, string>>();
+		}
+
+		// ----------------------------------------------------------------
+		// Expected messages, quoted from UriTemplateExpander
+		// ----------------------------------------------------------------
+
+		private static string UnsupportedTypeMessage(string name, Type type) =>
+			$"Variable '{name}' has unsupported type '{type.FullName}'. " +
+			"Expected string, IEnumerable<string>, IDictionary<string, string>, or IEnumerable<KeyValuePair<string, string>>.";
+
+		private static string NullKeyMessage(string name) =>
+			$"Variable '{name}' contains a null key. " +
+			"Associative array keys must be non-null strings.";
+
+		private static string NullValueMessage(string name, string key) =>
+			$"Variable '{name}' contains a null value for key '{key}'. " +
+			"Associative array values must be non-null strings.";
+
+		private static string NullElementMessage(string name) =>
+			$"Variable '{name}' contains a null element. List elements must be non-null strings.";
+
+		// ----------------------------------------------------------------
 		// 2. Null UriTemplateValue entries are undefined, not an exception
 		// ----------------------------------------------------------------
 
@@ -794,6 +1228,164 @@ namespace Chatter.Rest.UriTemplates.Tests
 			{
 				EnumerationAttempts++;
 				throw new InvalidOperationException("This dictionary must never be enumerated.");
+			}
+		}
+
+		/// <summary>
+		/// A list whose enumeration cannot safely be continued past the items it yields:
+		/// asking for one more element throws. It stands in for a lazy sequence that
+		/// throws, blocks, or never ends after the member that should have stopped the
+		/// copy, and records whether anything ever read that far.
+		/// </summary>
+		private sealed class HostileList : IEnumerable<string>
+		{
+			private readonly string[] _items;
+
+			internal HostileList(params string[] items) => _items = items;
+
+			internal bool ReachedRemainder { get; private set; }
+
+			public IEnumerator<string> GetEnumerator()
+			{
+				foreach (var item in _items)
+				{
+					yield return item;
+				}
+
+				ReachedRemainder = true;
+				throw new InvalidOperationException("The remainder of this sequence must never be read.");
+			}
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+		}
+
+		/// <summary>
+		/// The associative-array counterpart of <see cref="HostileList"/>.
+		/// </summary>
+		private sealed class HostilePairs : IEnumerable<KeyValuePair<string, string>>
+		{
+			private readonly KeyValuePair<string, string>[] _entries;
+
+			internal HostilePairs(params KeyValuePair<string, string>[] entries) => _entries = entries;
+
+			internal bool ReachedRemainder { get; private set; }
+
+			public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+			{
+				foreach (var entry in _entries)
+				{
+					yield return entry;
+				}
+
+				ReachedRemainder = true;
+				throw new InvalidOperationException("The remainder of this sequence must never be read.");
+			}
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+		}
+
+		/// <summary>
+		/// The <see cref="IDictionary{TKey, TValue}"/> counterpart of
+		/// <see cref="HostileList"/>, so the dictionary branch of the snapshot is held to
+		/// the same standard as the sequence branches.
+		/// </summary>
+		private sealed class HostileDictionary : EnumerationOnlyDictionary
+		{
+			private readonly KeyValuePair<string, string>[] _entries;
+
+			private HostileDictionary(KeyValuePair<string, string>[] entries) => _entries = entries;
+
+			internal static HostileDictionary After(params KeyValuePair<string, string>[] entries) =>
+				new HostileDictionary(entries);
+
+			internal bool ReachedRemainder { get; private set; }
+
+			public override IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+			{
+				foreach (var entry in _entries)
+				{
+					yield return entry;
+				}
+
+				ReachedRemainder = true;
+				throw new InvalidOperationException("The remainder of this dictionary must never be read.");
+			}
+		}
+
+		/// <summary>
+		/// A minimal custom <see cref="ISet{T}"/> of pairs, so the snapshot's set branch
+		/// is proven to be selected by the interface rather than by
+		/// <see cref="HashSet{T}"/> in particular.
+		/// </summary>
+		private sealed class SingleEntryPairSet : ISet<KeyValuePair<string, string>>
+		{
+			private readonly KeyValuePair<string, string>[] _entries;
+
+			internal SingleEntryPairSet(params KeyValuePair<string, string>[] entries) => _entries = entries;
+
+			public IEnumerator<KeyValuePair<string, string>> GetEnumerator() =>
+				((IEnumerable<KeyValuePair<string, string>>)_entries).GetEnumerator();
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+			public int Count => _entries.Length;
+
+			public bool IsReadOnly => true;
+
+			public bool Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			void ICollection<KeyValuePair<string, string>>.Add(KeyValuePair<string, string> item) =>
+				throw new NotSupportedException();
+
+			public void Clear() => throw new NotSupportedException();
+
+			public bool Contains(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+
+			public void ExceptWith(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public void IntersectWith(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public bool IsProperSubsetOf(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public bool IsProperSupersetOf(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public bool IsSubsetOf(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public bool IsSupersetOf(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public bool Overlaps(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public bool SetEquals(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public void SymmetricExceptWith(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+
+			public void UnionWith(IEnumerable<KeyValuePair<string, string>> other) => throw new NotSupportedException();
+		}
+
+		/// <summary>
+		/// Captures the value a variable holds by the time expansion begins, which is how
+		/// a test can assert what runtime type the snapshot handed to the expander — the
+		/// type the expander's associative-array dispatch keys on.
+		/// </summary>
+		private sealed class RecordingExpander : IUriTemplateExpander
+		{
+			internal object? Captured { get; private set; }
+
+			public string Expand(UriTemplateExpressionToken expression, IDictionary<string, object?> variables)
+			{
+				foreach (var varSpec in expression.Variables)
+				{
+					if (variables.TryGetValue(varSpec.Name, out var value))
+					{
+						Captured = value;
+					}
+				}
+
+				return "";
 			}
 		}
 
