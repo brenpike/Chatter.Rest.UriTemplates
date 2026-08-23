@@ -21,11 +21,16 @@ Prerequisites:
 Clone and build:
 
 ```bash
-git clone https://github.com/brenpike/Chatter.Rest.UriTemplates.git
+git clone --recurse-submodules https://github.com/brenpike/Chatter.Rest.UriTemplates.git
 cd Chatter.Rest.UriTemplates
 dotnet restore
 dotnet build
 ```
+
+If you already cloned without `--recurse-submodules`, run `git submodule update
+--init` before running the tests. The `uritemplate-test` submodule carries the
+official RFC 6570 suite that `UriTemplateComplianceTests` reads, and those tests
+fail rather than skip when it is missing.
 
 Run tests:
 
@@ -78,10 +83,24 @@ By contributing, you agree your contributions will be licensed under the project
 
 ## Claude Code Plugins
 
-The repository's checked-in `.claude/settings.json` enables two third-party Claude Code plugins for every contributor who trusts the workspace:
+The repository's checked-in `.claude/settings.json` enables four third-party Claude Code plugins for every contributor who trusts the workspace:
 
 - `claude-mem@thedotmack`
-- `agent-framework@brenpike`
+- `hivemind@brenpike`
+- `caveman@caveman`
+- `codex@openai-codex`
+
+The same file also sets `agent` to `hivemind:overlord`, making that plugin's
+orchestrator the default agent for sessions opened in this workspace, and
+registers a `SubagentStart` hook from `.claude/hooks/`.
+
+Its `permissions.allow` list is deliberately limited to `Edit` rules scoped to
+the gitignored `.hivemind/` directory. Pre-approved `Bash` rules are kept out of
+the checked-in settings: a prefix rule such as `Bash(printf *)` also matches the
+same command with shell redirection appended, so it would authorize writes
+anywhere on a contributor's machine. Approve read-only commands per session, or
+add them to your own gitignored `.claude/settings.local.json` if you want them
+pre-approved on your machine only.
 
 Plugins run hooks and agents at your local privilege level, so an update published by a plugin author executes on contributor machines that may hold NuGet and GitHub credentials.
 
@@ -106,11 +125,12 @@ Treat plugin updates like dependency updates:
   {
     "enabledPlugins": {
       "claude-mem@thedotmack": false,
-      "agent-framework@brenpike": false
+      "hivemind@brenpike": false,
+      "caveman@caveman": false,
+      "codex@openai-codex": false
     }
   }
   ```
 
   Local project settings take precedence over the repository's `.claude/settings.json`, and `enabledPlugins` entries apply per individual plugin, so a local `false` overrides the shared `true` for that plugin without restating anything else. This is the opt-out mechanism the [Claude Code settings reference](https://code.claude.com/docs/en/settings-reference#enabledplugins) documents: "To opt out of a project-enabled plugin on your machine, set it to `false` in `.claude/settings.local.json`." The library builds and tests without the plugins.
 
-  Note: the `agent-framework` plugin's source repository has been renamed to [brenpike/hivemind](https://github.com/brenpike/hivemind), whose marketplace publishes the successor plugin under the name `hivemind`. If your machine has that successor installed, its identifier is `hivemind@brenpike` — add `"hivemind@brenpike": false` to the same object to disable it.

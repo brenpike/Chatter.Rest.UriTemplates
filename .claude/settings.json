@@ -1,7 +1,38 @@
 {
   "enabledPlugins": {
     "claude-mem@thedotmack": true,
-    "agent-framework@brenpike": true
+    "hivemind@brenpike": true,
+    "caveman@caveman": true,
+    "codex@openai-codex": true
   },
-  "agent": "agent-framework:orchestrator"
+  "agent": "hivemind:overlord",
+  "pluginConfigs": {
+    "caveman@caveman": {
+      "options": {
+        "defaultLevel": "ultra"
+      }
+    }
+  },
+  "hooks": {
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/caveman-ultra-subagent.sh\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Edit(.hivemind/review-loop/*)",
+      "Edit(.hivemind/runs/.init-inputs-*.json)",
+      "Edit(.hivemind/runs/.record-inputs-*.json)",
+      "Edit(.hivemind/runs/.markfb-inputs-*.json)",
+      "Edit(.hivemind/spawn-inputs.*.json)",
+      "Edit(.hivemind/seed-inputs-*.json)"
+    ]
+  }
 }
