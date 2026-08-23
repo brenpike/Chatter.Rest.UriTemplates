@@ -24,22 +24,26 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
 
       - name: Create version tag
         shell: bash
+        env:
+          CSPROJ_PATH: ${{ inputs.csproj-path }}
+          TAG_PREFIX: ${{ inputs.tag-prefix }}
+          PACKAGE_NAME: ${{ inputs.package-name }}
         run: |
-          VERSION=$(grep -m1 '<Version>' '${{ inputs.csproj-path }}' | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | tr -d ' \r')
-          TAG="${{ inputs.tag-prefix }}/v${VERSION}"
+          VERSION=$(grep -m1 '<Version>' "$CSPROJ_PATH" | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | tr -d ' \r')
+          TAG="${TAG_PREFIX}/v${VERSION}"
 
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists. Skipping."
           else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag -a "$TAG" -m "${{ inputs.package-name }} v${VERSION}"
+            git tag -a "$TAG" -m "${PACKAGE_NAME} v${VERSION}"
             git push origin "$TAG"
             echo "Created and pushed tag $TAG"
           fi

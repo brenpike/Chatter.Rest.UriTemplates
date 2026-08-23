@@ -29,9 +29,45 @@ public sealed class UriTemplateExpressionToken : UriTemplateToken
     public UriTemplateOperator Operator { get; }
     public IReadOnlyList<UriTemplateVarSpec> Variables { get; }
 
+    /// <summary>
+    /// Creates an expression token. The supplied variable specifications are copied into a
+    /// read-only wrapper, so neither later mutation of <paramref name="variables"/> nor casting
+    /// <see cref="Variables"/> to a mutable collection interface can alter the token.
+    /// </summary>
+    /// <param name="operator">The expression operator.</param>
+    /// <param name="variables">One or more non-null variable specifications.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="variables"/> is empty or contains a null element.
+    /// </exception>
     public UriTemplateExpressionToken(UriTemplateOperator @operator, IReadOnlyList<UriTemplateVarSpec> variables)
     {
+        if (variables is null)
+        {
+            throw new ArgumentNullException(nameof(variables));
+        }
+
+        if (variables.Count == 0)
+        {
+            throw new ArgumentException(
+                "An expression must declare at least one variable specification.", nameof(variables));
+        }
+
+        // Defensive copy: the token must not alias a caller-owned collection.
+        var copy = new UriTemplateVarSpec[variables.Count];
+
+        for (var i = 0; i < variables.Count; i++)
+        {
+            copy[i] = variables[i] ?? throw new ArgumentException(
+                $"Variable specification at index {i} is null.", nameof(variables));
+        }
+
         Operator = @operator;
-        Variables = variables ?? throw new ArgumentNullException(nameof(variables));
+
+        // Wrap the copy: a bare array is an IList<T>, so exposing it would let a caller cast
+        // Variables back to IList<UriTemplateVarSpec> (or UriTemplateVarSpec[]) and replace
+        // entries, including with null. ReadOnlyCollection<T> throws from every IList<T>
+        // mutator, and is available on both net8.0 and netstandard2.0.
+        Variables = Array.AsReadOnly(copy);
     }
 }
