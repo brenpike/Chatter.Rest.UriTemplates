@@ -20,11 +20,11 @@ The current implementation covers RFC 6570 Level 1-4 expansion operators for sim
 | Reserved operators | Section 2.2 reserves `=`, `,`, `!`, `@`, and `|` as operators for future extensions. | Detected and rejected with `NotSupportedException`. | None. |
 | Reserved expansion `%` handling | Section 3.2.1 allows `%` through only as part of pct-encoded triplets for `+` and `#`; bare `%` must become `%25`. | Correct. `IsReservedChar` deliberately excludes `%`, so a bare `%` is encoded as `%25` while a valid pct-encoded triplet passes through unchanged. | None. Behaviour verified: `{+v}` with `50%` gives `50%25`, with `%2F` gives `%2F`, with `a%zz` gives `a%25zz`. |
 | Undefined null values | Section 2.3 allows unknown or null values to be treated as undefined; Section 3.2.1 says undefined variables are ignored. | The `IDictionary<string, object?>` overload treats a null value as undefined and omits the variable (`UriTemplateExpander.Expand`); `UriTemplateSecurityTests.NullValue_TreatedAsUndefined` locks that behavior. The `IDictionary<string, string>` overload preserves the same behavior when wrapping values into the canonical overload; `UriTemplateLevel1Tests.NullDictionaryValue_TreatedAsUndefined` locks that. The `IDictionary<string, UriTemplateValue>` overload currently throws `ArgumentException` for a null value (`UriTemplateExpander.MapValue`). | Outstanding: change the `IDictionary<string, UriTemplateValue>` overload to treat a null value as undefined so all overloads agree (issue #21). That fix and its coverage (`UriTemplateArgumentContractTests`) are pending in PR #41 and are not part of this tree. |
-| Case-sensitive lookup | Section 2.3 says variable names are case-sensitive. | Lookup depends on the caller's `IDictionary` comparer; a case-insensitive dictionary can expand `{Var}` from `var`. | Copy input to an ordinal dictionary or otherwise enforce ordinal lookup. |
-| Query/path parameter names | Sections 3.2.7-3.2.9 append the variable name encoded as a literal string. | Current behavior is correct for simple valid ASCII names, but invalid names are not rejected and pct-encoded names are not covered by tests. | Add tests for dotted names, pct-encoded names, and invalid names. |
-| Canonical RFC examples | RFC Sections 3.2.2-3.2.9 include examples using `who`, `half`, `base`, `dub`, `v`, `list`, `keys`, and `empty_keys`. | Level 1-3 simple-string examples and Level 4 prefix/list/dictionary examples are covered. | Add remaining canonical examples not yet tested. |
-| Official test suite | The URI Templates community test suite covers broader syntax and edge cases. | The plan links it, but the project does not consume it. | Add a data-driven compliance test harness for Level 1-4 cases and expected failures. |
-| Docs accuracy | `docs/architecture.md` and `docs/usage.md` describe literal text as unchanged and list `%` as reserved passthrough. | Resolved. `docs/architecture.md` now states that literal text is validated and percent-encoded per Section 2.1, including the non-ASCII scalar rule (only `ucschar` and `iprivate` scalars are encoded; everything else, unpaired surrogates included, is rejected). `docs/usage.md` already states that `%` is not in the pass-through set and that a bare `%` becomes `%25`. | None. |
+| Case-sensitive lookup | Section 2.3 says variable names are case-sensitive. | Resolved. Every public overload copies the caller's variables into a `Dictionary<string, object?>` built with `StringComparer.Ordinal` before expansion, so a case-insensitive input dictionary can no longer satisfy `{Var}` from `var`. | None. |
+| Query/path parameter names | Sections 3.2.7-3.2.9 append the variable name encoded as a literal string. | Resolved. `UriTemplateParser.ValidateVarName` enforces the Section 2.3 `varname` production — rejecting leading, trailing and consecutive dots, invalid characters, and malformed pct-encoded triplets — and `UriTemplateParserValidationTests` covers dotted and invalid names. | None. |
+| Canonical RFC examples | RFC Sections 3.2.2-3.2.9 include examples using `who`, `half`, `base`, `dub`, `v`, `list`, `keys`, and `empty_keys`. | Resolved. The official suite is consumed by `UriTemplateComplianceTests`, which covers the canonical Level 1-4 examples in addition to the hand-written per-level tests. | None. |
+| Official test suite | The URI Templates community test suite covers broader syntax and edge cases. | Resolved. `UriTemplateComplianceTests` is a data-driven harness over the official `uri-templates/uritemplate-test` suite, covering `spec-examples.json`, `extended-tests.json` and `negative-tests.json`. | None. Note the suite data arrives via a git submodule that cannot always be cloned; when it is absent these tests fail rather than skip. |
+| Docs accuracy | `docs/architecture.md` previously described literal text as returned unchanged, and `docs/usage.md` previously listed `%` in the reserved pass-through set. | Resolved. `docs/architecture.md` now states that literal text is validated and percent-encoded per Section 2.1, including the non-ASCII scalar rule (only `ucschar` and `iprivate` scalars are encoded; everything else, unpaired surrogates included, is rejected). `docs/usage.md` already states that `%` is not in the pass-through set and that a bare `%` becomes `%25`. | None. |
 
 ## Shared Fixtures
 
@@ -537,12 +537,11 @@ Both items previously listed here as highest priority are complete:
    `iprivate` ranges, and unpaired surrogates are rejected. See the literal
    expansion row above.
 
-One implementation fix from this plan is still outstanding, recorded in the
-undefined-null-values row above: the `IDictionary<string, UriTemplateValue>`
-overload throws `ArgumentException` for a null value (`UriTemplateExpander.MapValue`)
-rather than treating it as undefined, so the three overloads disagree. That change
-and its coverage are pending in PR #41.
+Two rows in the table above still carry follow-ups, and they are the only ones:
 
-Beyond that, remaining work is tracked in the repository's issues rather than here,
-so that this document describes the implementation as it stands rather than
-doubling as a to-do list that goes stale as work lands.
+- **Undefined null values** — an implementation fix. The `IDictionary<string, UriTemplateValue>`
+  overload throws `ArgumentException` for a null value (`UriTemplateExpander.MapValue`) rather
+  than treating it as undefined, so the three overloads disagree. Pending in PR #41.
+- **Variable-name grammar** — a test-coverage gap around uncommon pct-encoded variable names.
+  The parser validates them; the edge cases are not exercised.
+
