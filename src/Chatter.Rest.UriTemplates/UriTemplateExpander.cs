@@ -102,6 +102,13 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
         // Apply prefix truncation if specified
         if (varSpec.PrefixLength.HasValue)
         {
+            // Validate the WHOLE value first. Truncation runs before the encoder, so an
+            // unpaired surrogate sitting beyond the prefix boundary would otherwise be
+            // discarded by TruncateByCodePoints and never reach the strict encoder, letting a
+            // malformed value expand successfully. Rejection must not depend on where the
+            // invalid code unit sits relative to the prefix boundary.
+            UriTemplateEncoder.ValidateEncodable(value);
+
             value = TruncateByCodePoints(value, varSpec.PrefixLength.Value);
         }
 

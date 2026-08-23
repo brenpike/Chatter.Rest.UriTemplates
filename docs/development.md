@@ -103,7 +103,7 @@ dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Res
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.8.0.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.9.0.
 
 To pack the DI extension package:
 
