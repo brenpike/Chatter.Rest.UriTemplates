@@ -102,11 +102,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push' # only the push produced by merging to protected main; never workflow_dispatch
 
-    # Serialize the publish gate and NuGet push per package: two overlapping
-    # main pushes must not both observe a version as unpublished and race the
-    # upload. Job-level (not workflow-level) so unrelated branch/PR builds keep
-    # running in parallel; cancel-in-progress stays false because cancelling a
-    # run mid-`dotnet nuget push` is worse than letting it queue.
+    # Mutual exclusion for the publish gate and NuGet push per package: two
+    # overlapping main pushes must not both observe a version as unpublished
+    # and race the upload. This is NOT a FIFO queue: GitHub documents that
+    # pending-job ordering is arbitrary and a newly arrived pending job
+    # replaces an existing one, so merge ordering and version correctness are
+    # enforced by version-check.yml and the publish gate below, not by this
+    # block. Job-level (not workflow-level) so unrelated branch/PR builds keep
+    # running in parallel; cancel-in-progress stays false so a run is never
+    # cancelled mid-`dotnet nuget push`.
     concurrency:
       group: nuget-deploy-uritemplate-${{ github.ref }}
       cancel-in-progress: false
@@ -170,6 +174,36 @@ jobs:
           fi
 
           if [ "$PUBLISHED" = "false" ]; then
+            # Downgrade guard mirroring version-check.yml: never publish a
+            # version at or below the highest stable version already on
+            # nuget.org. version-check.yml should have blocked such a merge;
+            # this is the post-merge last line of defense (e.g. against a PR
+            # validated before a newer merge became visible).
+            version_gt() {
+              local v1 v2
+              v1=$(echo "$1" | sed 's/-.*//')
+              v2=$(echo "$2" | sed 's/-.*//')
+              local IFS=.
+              local i
+              local parts1=($v1) parts2=($v2)
+              local len=${#parts2[@]}
+              [ ${#parts1[@]} -gt "$len" ] && len=${#parts1[@]}
+              for ((i=0; i<len; i++)); do
+                local p1=${parts1[i]:-0}
+                local p2=${parts2[i]:-0}
+                if ((10#$p1 > 10#$p2)); then return 0; fi
+                if ((10#$p1 < 10#$p2)); then return 1; fi
+              done
+              return 1
+            }
+            MAX_PUBLISHED=""
+            if [ "$HTTP_STATUS" = "200" ]; then
+              MAX_PUBLISHED=$(jq -r '[.versions[] | select(test("-") | not)] | sort_by(split(".") | map(tonumber)) | last // empty' "$INDEX_FILE")
+            fi
+            if [ -n "$MAX_PUBLISHED" ] && ! version_gt "$VERSION" "$MAX_PUBLISHED"; then
+              echo "::error::$PACKAGE_ID $VERSION is unpublished but not greater than the highest published version $MAX_PUBLISHED; refusing to publish a version downgrade. Bump <Version> in $CSPROJ_PATH."
+              exit 1
+            fi
             echo "$PACKAGE_ID $VERSION is not on nuget.org; it will be pushed."
             echo "push=true" >> "$GITHUB_OUTPUT"
             exit 0
