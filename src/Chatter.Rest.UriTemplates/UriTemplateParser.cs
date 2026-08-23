@@ -267,8 +267,11 @@ internal sealed class UriTemplateParser : IUriTemplateParser
     /// <c>"</c>, <c>&lt;</c>, <c>&gt;</c>, <c>\</c>, <c>^</c>, <c>`</c> and <c>|</c>.</description></item>
     /// <item><description>A <c>%</c> is accepted only as the start of a valid percent-encoded
     /// triplet, which is passed through unchanged; any other <c>%</c> is rejected.</description></item>
-    /// <item><description>Non-ASCII characters are percent-encoded as UTF-8. An unpaired UTF-16
-    /// surrogate is rejected rather than replaced with U+FFFD.</description></item>
+    /// <item><description>A non-ASCII character is percent-encoded as UTF-8 only when its Unicode
+    /// scalar value falls inside the §1.5 <c>ucschar</c> or <c>iprivate</c> ranges; every other
+    /// scalar (the C1 controls, the noncharacters, the plane-14 tag/variation-selector block)
+    /// is rejected with <see cref="FormatException"/>. An unpaired UTF-16 surrogate is likewise
+    /// rejected rather than replaced with U+FFFD.</description></item>
     /// <item><description>All remaining ASCII characters (the RFC 3986 unreserved and reserved
     /// characters that are members of the <c>literals</c> set) pass through unchanged.</description></item>
     /// </list>
@@ -329,6 +332,16 @@ internal sealed class UriTemplateParser : IUriTemplateParser
                     $"Unpaired low surrogate '{DescribeChar(c)}' at index {i} in URI template literal.");
             }
 
+            var codePoint = charCount == 2 ? char.ConvertToUtf32(c, raw[i + 1]) : c;
+
+            if (!IsUcsCharOrIPrivate(codePoint))
+            {
+                throw new FormatException(
+                    $"Invalid literal character '{DescribeCodePoint(codePoint)}' at index {i} in URI template: " +
+                    "the scalar value is outside the ucschar and iprivate ranges that the RFC 6570 §2.1 " +
+                    "literals production admits.");
+            }
+
             var chars = raw.ToCharArray(i, charCount);
             var bytes = Encoding.UTF8.GetBytes(chars, 0, charCount);
             foreach (var b in bytes)
@@ -382,6 +395,86 @@ internal sealed class UriTemplateParser : IUriTemplateParser
                c == '\u005F' ||
                (c >= '\u0061' && c <= '\u007A') ||
                c == '\u007E';
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="codePoint"/> is a non-ASCII Unicode scalar that the
+    /// RFC 6570 §2.1 <c>literals</c> production admits, i.e. one that matches <c>ucschar</c> or
+    /// <c>iprivate</c>. Every other non-ASCII scalar makes the template malformed and must be
+    /// rejected rather than percent-encoded.
+    /// </summary>
+    /// <remarks>
+    /// <para>The two productions are quoted verbatim from RFC 6570 §1.5:</para>
+    /// <code>
+    /// ucschar   = %xA0-D7FF / %xF900-FDCF / %xFDF0-FFEF
+    ///           / %x10000-1FFFD / %x20000-2FFFD / %x30000-3FFFD
+    ///           / %x40000-4FFFD / %x50000-5FFFD / %x60000-6FFFD
+    ///           / %x70000-7FFFD / %x80000-8FFFD / %x90000-9FFFD
+    ///           / %xA0000-AFFFD / %xB0000-BFFFD / %xC0000-CFFFD
+    ///           / %xD0000-DFFFD / %xE1000-EFFFD
+    /// iprivate  = %xE000-F8FF / %xF0000-FFFFD / %x100000-10FFFD
+    /// </code>
+    /// <para>
+    /// Taken together they exclude, above U+007F: the C1 controls U+0080-U+009F; the surrogate
+    /// range U+D800-U+DFFF (already rejected upstream as unpaired code units, and unreachable
+    /// here because a paired surrogate decodes to a supplementary scalar); the noncharacters
+    /// U+FDD0-U+FDEF; U+FFF0-U+FFFF, which covers the specials block and the noncharacters
+    /// U+FFFE/U+FFFF; the last two code points of every supplementary plane (U+1FFFE/U+1FFFF
+    /// through U+10FFFE/U+10FFFF), all of which are noncharacters; and U+E0000-U+E0FFF, the
+    /// plane-14 block holding the deprecated language tag characters and the variation
+    /// selectors supplement.
+    /// </para>
+    /// <para>
+    /// Note that <c>iprivate</c> makes all three private use areas legal literal text
+    /// (U+E000-U+F8FF and planes 15 and 16), so those are accepted and percent-encoded.
+    /// </para>
+    /// </remarks>
+    private static bool IsUcsCharOrIPrivate(int codePoint)
+    {
+        // ucschar, BMP: %xA0-D7FF
+        if (codePoint >= 0x00A0 && codePoint <= 0xD7FF)
+        {
+            return true;
+        }
+
+        // iprivate, BMP private use area (%xE000-F8FF) joined to ucschar %xF900-FDCF —
+        // the two ranges are contiguous, so they are tested as one.
+        if (codePoint >= 0xE000 && codePoint <= 0xFDCF)
+        {
+            return true;
+        }
+
+        // ucschar, BMP: %xFDF0-FFEF
+        if (codePoint >= 0xFDF0 && codePoint <= 0xFFEF)
+        {
+            return true;
+        }
+
+        // ucschar, planes 1-13: %xN0000-NFFFD for N = 1..D, i.e. every scalar in the plane
+        // except the two trailing noncharacters.
+        if (codePoint >= 0x10000 && codePoint <= 0xDFFFD)
+        {
+            return (codePoint & 0xFFFF) <= 0xFFFD;
+        }
+
+        // ucschar, plane 14: %xE1000-EFFFD (U+E0000-U+E0FFF is deliberately excluded).
+        if (codePoint >= 0xE1000 && codePoint <= 0xEFFFD)
+        {
+            return true;
+        }
+
+        // iprivate, planes 15-16: %xF0000-FFFFD / %x100000-10FFFD
+        return (codePoint >= 0xF0000 && codePoint <= 0xFFFFD) ||
+               (codePoint >= 0x100000 && codePoint <= 0x10FFFD);
+    }
+
+    /// <summary>
+    /// Renders a Unicode scalar value for an error message as a U+XXXX escape, using at least
+    /// four hex digits and widening as needed for supplementary code points.
+    /// </summary>
+    private static string DescribeCodePoint(int codePoint)
+    {
+        return "U+" + codePoint.ToString("X4");
     }
 
     /// <summary>
