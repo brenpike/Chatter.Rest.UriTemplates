@@ -246,10 +246,12 @@ namespace Chatter.Rest.UriTemplates.Tests
 		/// an implementation to treat a null value as — is ignored during
 		/// expansion. This test covers only the
 		/// <c>IDictionary&lt;string, object?&gt;</c> overload, whose null
-		/// handling is settled. The <c>IDictionary&lt;string, string&gt;</c> and
-		/// <c>IDictionary&lt;string, UriTemplateValue&gt;</c> overloads are
-		/// deliberately not pinned here; issue #21 decides whether they throw or
-		/// treat null as undefined, and coverage for them belongs to that lane.
+		/// handling is settled. The <c>IDictionary&lt;string, string&gt;</c>
+		/// overload preserves the same behavior and is pinned by
+		/// <c>UriTemplateLevel1Tests.NullDictionaryValue_TreatedAsUndefined</c>.
+		/// The <c>IDictionary&lt;string, UriTemplateValue&gt;</c> overload still
+		/// throws for a null value today; aligning it with the others is issue
+		/// #21, with the fix and its coverage pending in PR #41.
 		/// </summary>
 		[Fact]
 		public void NullValue_TreatedAsUndefined()
