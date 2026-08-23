@@ -1,0 +1,44 @@
+<Project>
+
+  <!--
+    Shared build-security properties for the shipped packages (issue #26).
+    Deliberately scoped to src/ (not the repository root) so the audit gate
+    does not apply to the test projects while #27 clears their dependency
+    graph. Promoting this file to the repository root is a follow-up chore.
+  -->
+
+  <PropertyGroup Label="Build provenance">
+    <!--
+      SourceLink for GitHub is bundled in the .NET 8+ SDK; no explicit
+      Microsoft.SourceLink.GitHub PackageReference is required.
+    -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- Deterministic, normalized builds in CI only; local builds keep full local paths for debugging. -->
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Dependency auditing">
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Analyzer gating">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!--
+      Follow-up (issue #26): the three rules below have pre-existing findings
+      whose fixes require .cs edits owned by parallel remediation lanes, so
+      they are excluded from warnings-as-errors (they still report as build
+      warnings). Remove each rule from this list once its findings are fixed:
+        CA1305 (3): UriTemplateEncoder.cs:22,54; UriTemplateParser.cs:295
+        CA1510 (10): UriTemplate.cs:15,33,72,100,144,185;
+                     UriTemplateFactory.cs:18; UriTemplateValue.cs:45,57,75
+        CA1716 (2): IUriTemplateFactory.cs:5; IUriTemplateParser.cs:5
+    -->
+    <WarningsNotAsErrors>CA1305;CA1510;CA1716</WarningsNotAsErrors>
+  </PropertyGroup>
+
+</Project>
