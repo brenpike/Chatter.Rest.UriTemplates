@@ -525,11 +525,15 @@ the value the caller supplies:
 | A keyed or set container: `IDictionary<string, string>` (`Dictionary`, `FrozenDictionary`, `ImmutableDictionary`, `ConcurrentDictionary`, `ReadOnlyDictionary`, `SortedDictionary`, `SortedList`), including `UriTemplateValue.From(IDictionary<string, string>)`, or `ISet<KeyValuePair<string, string>>` (`HashSet`, `FrozenSet`, `ImmutableHashSet`) | Canonicalized: sorted ordinally by key (`string.CompareOrdinal`), with an ordinal comparison of the value as tie-break |
 | Every other `IEnumerable<KeyValuePair<string, string>>` — `List<KeyValuePair<string, string>>`, arrays, `ImmutableArray<...>`, `ImmutableList<...>`, `ReadOnlyCollection<...>`, `Queue<...>`, `LinkedList<...>`, `Stack<...>`, iterator methods, LINQ pipelines such as `Select` and `OrderBy`, and custom enumerables | Exactly the order the sequence enumerates, preserved verbatim, duplicate keys included |
 
-A keyed or set container exposes no way to place one pair before another, so
-its enumeration order is an implementation detail — a `Dictionary<string,
-string>` enumerates in hash-slot order, which diverges from insertion order
-once an entry is removed and another inserted into the freed slot. Those
-pairs are sorted to make the expansion reproducible. The sort is ordinal, not
+Canonicalization is a uniform policy applied to these two interfaces, not an
+inference about each container. Most keyed and set containers genuinely expose
+no way to place one pair before another — a `Dictionary<string, string>`
+enumerates in hash-slot order, which diverges from insertion order once an
+entry is removed and another inserted into the freed slot. A few do carry a
+caller-supplied order: `SortedDictionary`, `SortedList`, and `SortedSet`
+enumerate by their comparer, and the library replaces that order with its own.
+Sorting every implementation of these interfaces the same way means one
+interface always implies one ordering, and makes the expansion reproducible. The sort is ordinal, not
 culture-aware; the value tie-break exists because a set can hold two pairs
 with the same key, while dictionary keys are unique, so for a dictionary the
 order is purely ordinal by key.
