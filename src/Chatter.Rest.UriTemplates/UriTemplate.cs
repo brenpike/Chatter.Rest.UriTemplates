@@ -5,6 +5,14 @@ public sealed class UriTemplate
     private readonly IReadOnlyList<UriTemplateToken> _tokens;
     private readonly IUriTemplateExpander _expander;
 
+    /// <summary>
+    /// The set of variable names this template actually references, computed once at
+    /// construction. Only these names are snapshotted; a caller-supplied value the
+    /// template never mentions is passed through untouched, so an unused lazy, blocking,
+    /// or infinite sequence is never enumerated.
+    /// </summary>
+    private readonly HashSet<string> _referencedVariables;
+
     public UriTemplate(string template)
         : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
     {
@@ -29,6 +37,28 @@ public sealed class UriTemplate
 
         _tokens = tokens;
         _expander = expander;
+        _referencedVariables = CollectReferencedVariables(tokens);
+    }
+
+    /// <summary>
+    /// Builds the set of variable names referenced by any expression in the template.
+    /// </summary>
+    private static HashSet<string> CollectReferencedVariables(IReadOnlyList<UriTemplateToken> tokens)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var token in tokens)
+        {
+            if (token is UriTemplateExpressionToken expression)
+            {
+                foreach (var varSpec in expression.Variables)
+                {
+                    names.Add(varSpec.Name);
+                }
+            }
+        }
+
+        return names;
     }
 
     /// <summary>
@@ -98,7 +128,7 @@ public sealed class UriTemplate
 
         foreach (var kvp in variables)
         {
-            ordinal[kvp.Key] = Snapshot(kvp.Value);
+            ordinal[kvp.Key] = SnapshotIfReferenced(kvp.Key, kvp.Value);
         }
 
         return ExpandCore(ordinal);
@@ -243,7 +273,7 @@ public sealed class UriTemplate
             // First-wins for duplicates
             if (!dict.ContainsKey(key))
             {
-                dict[key] = Snapshot(value);
+                dict[key] = SnapshotIfReferenced(key, value);
             }
         }
 
@@ -281,6 +311,20 @@ public sealed class UriTemplate
     /// still reports them as a <see cref="FormatException"/>.
     /// </para>
     /// </summary>
+    private object? SnapshotIfReferenced(string name, object? value)
+    {
+        // A value the template never mentions is never read by the expander, so
+        // materializing it here would be an observable side effect the caller did not
+        // ask for: an unused sequence that throws, blocks, or never ends would break or
+        // hang an expansion that has no use for it.
+        if (!_referencedVariables.Contains(name))
+        {
+            return value;
+        }
+
+        return Snapshot(value);
+    }
+
     private static object? Snapshot(object? value)
     {
         if (value is null || value is string)
@@ -294,7 +338,28 @@ public sealed class UriTemplate
             // runtime type and applies its ordinal key ordering only to IDictionary values.
             // Flattening to IEnumerable<KeyValuePair<,>> here would silently opt these
             // values out of that ordering.
-            return new Dictionary<string, string>(dictionaryValue, StringComparer.Ordinal);
+            //
+            // The entries are copied by hand rather than through the copy constructor:
+            // Dictionary<,> rejects a null key with ArgumentNullException, which would
+            // pre-empt the expander's own null-key validation and replace this overload's
+            // documented FormatException with a different exception type.
+            var snapshot = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach (var entry in dictionaryValue)
+            {
+                if (entry.Key is null)
+                {
+                    // Hand the caller's instance to the expander untouched. It is still an
+                    // IDictionary<string, string>, so it takes the same dispatch branch and
+                    // reports the variable-specific FormatException. No snapshot guarantee
+                    // is lost, because expansion cannot succeed with a null key.
+                    return dictionaryValue;
+                }
+
+                snapshot[entry.Key] = entry.Value;
+            }
+
+            return snapshot;
         }
 
         if (value is IEnumerable<KeyValuePair<string, string>> pairsValue)

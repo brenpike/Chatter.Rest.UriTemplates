@@ -89,6 +89,80 @@ namespace Chatter.Rest.UriTemplates.Tests
 			after.Should().Be("a,b");
 		}
 
+		// A value the template never references must not be materialized at all:
+		// snapshotting it would turn an unused lazy, blocking, or infinite sequence
+		// into a failure or a hang for an expansion that has no use for it.
+		[Fact]
+		public void Expand_ObjectDictionary_UnreferencedThrowingSequence_IsNeverEnumerated()
+		{
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?> { ["unused"] = landmine };
+			var template = new UriTemplate("/status");
+
+			template.Expand(vars).Should().Be("/status");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_UnreferencedThrowingSequence_IsNeverEnumerated()
+		{
+			var landmine = new ThrowingSequence();
+			var template = new UriTemplate("/orders/{id}");
+
+			template.Expand(("id", (object?)"42"), ("unused", (object?)landmine))
+				.Should().Be("/orders/42");
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// Skipping unreferenced values must not weaken the snapshot guarantee for the
+		// values the template does reference.
+		[Fact]
+		public void Expand_ObjectDictionary_ReferencedSequenceStillSnapshotted_WhenUnreferencedValuePresent()
+		{
+			var oneShot = new SinglePassList("red", "green");
+			var landmine = new ThrowingSequence();
+			var vars = new Dictionary<string, object?>
+			{
+				["list"] = oneShot,
+				["unused"] = landmine,
+			};
+			var template = new UriTemplate("{list}{?list*}");
+
+			template.Expand(vars).Should().Be("red,green?list=red&list=green");
+			oneShot.EnumerationCount.Should().Be(1);
+			landmine.EnumerationAttempts.Should().Be(0);
+		}
+
+		// ----------------------------------------------------------------
+		// 1b. Snapshotting must not pre-empt the expander's own validation
+		// ----------------------------------------------------------------
+
+		// Dictionary<,> rejects a null key with ArgumentNullException. Snapshotting a
+		// caller's IDictionary through the copy constructor would therefore replace the
+		// documented, variable-specific FormatException with a different exception type.
+		[Fact]
+		public void Expand_ObjectDictionary_DictionaryWithNullKey_ThrowsFormatExceptionNamingVariable()
+		{
+			var vars = new Dictionary<string, object?> { ["keys"] = new NullKeyDictionary() };
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(vars);
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'keys'*null key*");
+		}
+
+		[Fact]
+		public void Expand_ObjectTuple_DictionaryWithNullKey_ThrowsFormatExceptionNamingVariable()
+		{
+			var template = new UriTemplate("{?keys*}");
+
+			var act = () => template.Expand(("keys", (object?)new NullKeyDictionary()));
+
+			act.Should().Throw<FormatException>()
+				.WithMessage("*'keys'*null key*");
+		}
+
 		// ----------------------------------------------------------------
 		// 2. Null UriTemplateValue entries are undefined, not an exception
 		// ----------------------------------------------------------------
@@ -285,6 +359,75 @@ namespace Chatter.Rest.UriTemplates.Tests
 			}
 
 			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+		}
+
+		/// <summary>
+		/// Stands in for a lazy sequence that cannot be enumerated safely — one that
+		/// throws, blocks, or never ends. Any attempt to read it is recorded, so a test
+		/// can assert the value was left alone entirely.
+		/// </summary>
+		private sealed class ThrowingSequence : IEnumerable<string>
+		{
+			internal int EnumerationAttempts { get; private set; }
+
+			public IEnumerator<string> GetEnumerator()
+			{
+				EnumerationAttempts++;
+				throw new InvalidOperationException("This sequence must never be enumerated.");
+			}
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+		}
+
+		/// <summary>
+		/// An <see cref="IDictionary{TKey, TValue}"/> that enumerates a null key, which
+		/// <see cref="Dictionary{TKey, TValue}"/> itself cannot hold. Only enumeration is
+		/// implemented; the expander needs nothing else.
+		/// </summary>
+		private sealed class NullKeyDictionary : IDictionary<string, string>
+		{
+			private readonly KeyValuePair<string, string>[] _entries =
+			{
+				new KeyValuePair<string, string>("ok", "1"),
+				new KeyValuePair<string, string>(null!, "2"),
+			};
+
+			public IEnumerator<KeyValuePair<string, string>> GetEnumerator() =>
+				((IEnumerable<KeyValuePair<string, string>>)_entries).GetEnumerator();
+
+			System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+			public int Count => _entries.Length;
+
+			public bool IsReadOnly => true;
+
+			public string this[string key]
+			{
+				get => throw new NotSupportedException();
+				set => throw new NotSupportedException();
+			}
+
+			public ICollection<string> Keys => throw new NotSupportedException();
+
+			public ICollection<string> Values => throw new NotSupportedException();
+
+			public void Add(string key, string value) => throw new NotSupportedException();
+
+			public void Add(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public void Clear() => throw new NotSupportedException();
+
+			public bool Contains(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public bool ContainsKey(string key) => throw new NotSupportedException();
+
+			public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex) => throw new NotSupportedException();
+
+			public bool Remove(string key) => throw new NotSupportedException();
+
+			public bool Remove(KeyValuePair<string, string> item) => throw new NotSupportedException();
+
+			public bool TryGetValue(string key, out string value) => throw new NotSupportedException();
 		}
 
 		private sealed class NullReturningParser : IUriTemplateParser
