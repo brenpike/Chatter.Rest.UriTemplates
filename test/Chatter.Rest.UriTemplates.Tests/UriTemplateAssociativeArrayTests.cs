@@ -9,17 +9,20 @@ namespace Chatter.Rest.UriTemplates.Tests
 	/// Associative-array expansion tests covering the determinism guarantee made by
 	/// <c>UriTemplateExpander.ExpandAssociativeArray</c>:
 	///
-	/// 1. A value that is index-addressable — <see cref="IList{T}"/> or
-	///    <see cref="IReadOnlyList{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/>,
-	///    which covers <see cref="List{T}"/>, arrays, and
-	///    <see cref="ReadOnlyCollection{T}"/> — has a caller-defined order, so that
-	///    order is preserved verbatim, duplicate keys included.
+	/// 1. A keyed or set container — <see cref="IDictionary{TKey, TValue}"/> of
+	///    <see cref="string"/> to <see cref="string"/>, or <see cref="ISet{T}"/> of
+	///    <see cref="KeyValuePair{TKey, TValue}"/> — gives the caller no way to place
+	///    one pair before another, so its pairs are canonicalized: ordinal by key,
+	///    with an ordinal value comparison as tie-break. This covers
+	///    <see cref="Dictionary{TKey, TValue}"/>,
+	///    <see cref="FrozenDictionary{TKey, TValue}"/>, and hash sets of pairs.
 	/// 2. Every other <see cref="IEnumerable{T}"/> of
-	///    <see cref="KeyValuePair{TKey, TValue}"/> has no ordering contract — this
-	///    covers <see cref="IDictionary{TKey, TValue}"/> implementations (including
-	///    <see cref="FrozenDictionary{TKey, TValue}"/>), hash sets of pairs, and LINQ
-	///    iterators — so its pairs are canonicalized: ordinal by key, with an ordinal
-	///    value comparison as tie-break.
+	///    <see cref="KeyValuePair{TKey, TValue}"/> is expanded in the order it
+	///    enumerates, duplicate keys included — <see cref="List{T}"/>, arrays,
+	///    <see cref="ReadOnlyCollection{T}"/>, <see cref="Queue{T}"/>,
+	///    <see cref="LinkedList{T}"/>, iterator methods, and LINQ pipelines. No
+	///    interface distinguishes an ordered sequence from an unordered one, so the
+	///    contract defers to the caller outside the two container shapes above.
 	///
 	/// Empty member names are legal: RFC 6570 §2.3 models associative-array members as
 	/// (name, value) string pairs and treats only a zero-member composite as undefined.
@@ -30,7 +33,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 	public class UriTemplateAssociativeArrayTests
 	{
 		// ----------------------------------------------------------------
-		// 1. Unordered inputs — canonical (ordinal key) ordering
+		// 1. Keyed containers — canonical (ordinal key) ordering
 		// ----------------------------------------------------------------
 
 		/// <summary>
@@ -154,7 +157,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// 2. Index-addressable inputs — supplied order preserved
+		// 2. Pair sequences — supplied order preserved
 		// ----------------------------------------------------------------
 
 		// A List<KeyValuePair<,>> has a defined enumeration order, so it is kept
@@ -302,7 +305,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 		}
 
 		// ----------------------------------------------------------------
-		// 5. Container-shape dispatch — ordered vs unordered
+		// 5. Container-shape dispatch — keyed/set containers vs pair sequences
 		// ----------------------------------------------------------------
 
 		private static readonly KeyValuePair<string, string>[] ReverseOrdinalPairs =
@@ -312,8 +315,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 			new("a", "3"),
 		};
 
-		// An array is index-addressable (KeyValuePair<,>[] implements
-		// IList<KeyValuePair<,>>), so its order is the caller's and is preserved.
+		// An array is a pair sequence, so its order is the caller's and is preserved.
 		[Fact]
 		public void Array_IsTreatedAsOrdered()
 		{
@@ -321,7 +323,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
 		}
 
-		// ReadOnlyCollection<KVP> implements IList<KVP>; same rule.
+		// ReadOnlyCollection<KVP> is a pair sequence too; same rule.
 		[Fact]
 		public void ReadOnlyCollection_IsTreatedAsOrdered()
 		{
@@ -333,9 +335,87 @@ namespace Chatter.Rest.UriTemplates.Tests
 			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
 		}
 
-		// A HashSet of pairs is an IEnumerable<KVP> that is not an IDictionary, but it
-		// has no ordering contract — its enumeration order can change after
-		// remove/reinsert or between processes — so it is canonicalized, not preserved.
+		// A Queue<KVP> is not index-addressable, but it is unambiguously ordered: the
+		// caller chose the enqueue order and it enumerates front-to-back. Sorting it
+		// would silently discard a caller decision, so the supplied order is kept.
+		[Fact]
+		public void QueueOfPairs_PreservesSuppliedOrder()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = new Queue<KeyValuePair<string, string>>(ReverseOrdinalPairs),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
+		}
+
+		// LinkedList<KVP> is likewise ordered without being a list.
+		[Fact]
+		public void LinkedListOfPairs_PreservesSuppliedOrder()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = new LinkedList<KeyValuePair<string, string>>(ReverseOrdinalPairs),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
+		}
+
+		// An iterator method yields pairs in a caller-written order. Nothing about its
+		// type says so, which is exactly why the contract defers to the caller here.
+		private static IEnumerable<KeyValuePair<string, string>> YieldReverseOrdinalPairs()
+		{
+			yield return new KeyValuePair<string, string>("z", "1");
+			yield return new KeyValuePair<string, string>("m", "2");
+			yield return new KeyValuePair<string, string>("a", "3");
+		}
+
+		[Fact]
+		public void YieldIterator_PreservesSuppliedOrder()
+		{
+			var vars = new Dictionary<string, object?> { ["d"] = YieldReverseOrdinalPairs() };
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
+		}
+
+		// An order-preserving LINQ pipeline is a sequence, not an unordered container;
+		// its projection order is the caller's and survives expansion.
+		[Fact]
+		public void LinqIterator_PreservesSuppliedOrder()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = ReverseOrdinalPairs.Select(pair => pair),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?z=1&m=2&a=3");
+		}
+
+		// A sequence deliberately sorted by the caller is likewise left alone — the
+		// result matches the canonical order here only because the caller asked for it.
+		[Fact]
+		public void LinqOrderByPipeline_PreservesItsOwnOrder()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = ReverseOrdinalPairs.OrderByDescending(pair => pair.Value, StringComparer.Ordinal),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
+		}
+
+		// A Dictionary exposes no API for ordering its pairs, so it is canonicalized.
+		[Fact]
+		public void Dictionary_IsCanonicalized()
+		{
+			var dictionary = new Dictionary<string, string>();
+			foreach (var pair in ReverseOrdinalPairs)
+			{
+				dictionary[pair.Key] = pair.Value;
+			}
+
+			var vars = new Dictionary<string, object?> { ["d"] = dictionary };
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
+		}
+
+		// A HashSet of pairs models membership only — its enumeration order can change
+		// after remove/reinsert or between processes — so it is canonicalized. It
+		// reaches that branch as ISet<KeyValuePair<string, string>>, not as a dictionary.
 		[Fact]
 		public void HashSetOfPairs_IsCanonicalized()
 		{
@@ -346,9 +426,21 @@ namespace Chatter.Rest.UriTemplates.Tests
 			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
 		}
 
-		// FrozenDictionary does implement IDictionary<string, string>, so it reaches the
-		// unordered branch; this pins that it is canonicalized rather than enumerated
-		// in whatever bucket order the frozen layout happens to produce.
+		// FrozenSet<KVP> implements ISet<KVP> without implementing IDictionary, which
+		// pins that the set test — not the dictionary test — is what catches it.
+		[Fact]
+		public void FrozenSetOfPairs_IsCanonicalized()
+		{
+			var vars = new Dictionary<string, object?>
+			{
+				["d"] = ReverseOrdinalPairs.ToFrozenSet(),
+			};
+			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
+		}
+
+		// FrozenDictionary implements IDictionary<string, string>, so it is caught by
+		// the dictionary test and canonicalized rather than enumerated in whatever
+		// bucket order the frozen layout happens to produce.
 		[Fact]
 		public void FrozenDictionary_IsCanonicalized()
 		{
@@ -364,20 +456,9 @@ namespace Chatter.Rest.UriTemplates.Tests
 			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
 		}
 
-		// A LINQ iterator is a custom enumerable with no ordering contract.
-		[Fact]
-		public void LinqIterator_IsCanonicalized()
-		{
-			var vars = new Dictionary<string, object?>
-			{
-				["d"] = ReverseOrdinalPairs.Select(pair => pair),
-			};
-			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=3&m=2&z=1");
-		}
-
-		// An unordered container may still hold repeated keys. Ordinal key comparison
-		// alone would leave those pairs tied under an unstable sort, so the value is
-		// compared as a tie-break to keep the canonical order total.
+		// A set may still hold repeated keys. Ordinal key comparison alone would leave
+		// those pairs tied under an unstable sort, so the value is compared as a
+		// tie-break to keep the canonical order total.
 		[Fact]
 		public void UnorderedContainer_DuplicateKeys_AreOrderedByKeyThenValue()
 		{
@@ -393,9 +474,8 @@ namespace Chatter.Rest.UriTemplates.Tests
 			new UriTemplate("{?d*}").Expand(vars).Should().Be("?a=2&z=1&z=3");
 		}
 
-		// Two logically identical unordered containers built in different insertion
-		// orders must expand identically — the determinism guarantee itself, extended
-		// past IDictionary.
+		// Two logically identical sets built in different insertion orders must expand
+		// identically — the determinism guarantee itself, extended past IDictionary.
 		[Fact]
 		public void UnorderedContainers_BuiltDifferently_ExpandIdentically()
 		{

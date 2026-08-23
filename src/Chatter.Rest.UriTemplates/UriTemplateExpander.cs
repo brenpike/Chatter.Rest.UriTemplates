@@ -34,30 +34,35 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
             }
 
             // Type dispatch: string first (string is IEnumerable<char>), then the two
-            // associative-array shapes — ordered pair lists, then unordered pair
-            // enumerables (IDictionary<,> included) — then list, then fail.
+            // associative-array shapes — the keyed/set containers whose own type proves
+            // their enumeration order is not the caller's, then every other pair
+            // sequence — then list, then fail.
             // See ExpandAssociativeArray's remarks for the ordering contract.
             if (rawValue is string stringValue)
             {
                 ExpandString(strategy, varSpec, varName, stringValue, parts);
             }
-            else if (rawValue is IList<KeyValuePair<string, string>> pairList)
+            else if (rawValue is IDictionary<string, string> pairDictionary)
             {
-                // Index-addressable, so the caller defined the order; preserve it verbatim.
-                // Covers List<KVP>, KeyValuePair<,>[], ImmutableArray/ImmutableList<KVP>,
-                // ReadOnlyCollection<KVP>.
-                ExpandAssociativeArray(strategy, varSpec, varName, pairList, parts, canonicalizePairOrder: false);
+                // A keyed map: the type gives the caller no way to define an order,
+                // so the pair order is canonicalized. Covers Dictionary, FrozenDictionary,
+                // ImmutableDictionary, ConcurrentDictionary, ReadOnlyDictionary, and the
+                // sorted dictionaries.
+                ExpandAssociativeArray(strategy, varSpec, varName, pairDictionary, parts, canonicalizePairOrder: true);
             }
-            else if (rawValue is IReadOnlyList<KeyValuePair<string, string>> readOnlyPairList)
+            else if (rawValue is ISet<KeyValuePair<string, string>> pairSet)
             {
-                // Also index-addressable; same reasoning as IList<KVP>.
-                ExpandAssociativeArray(strategy, varSpec, varName, readOnlyPairList, parts, canonicalizePairOrder: false);
+                // A set: membership only, no caller-defined order, so it is canonicalized
+                // too. Covers HashSet<KVP>, FrozenSet<KVP>, and ImmutableHashSet<KVP>.
+                ExpandAssociativeArray(strategy, varSpec, varName, pairSet, parts, canonicalizePairOrder: true);
             }
             else if (rawValue is IEnumerable<KeyValuePair<string, string>> kvpEnumerable)
             {
-                // No ordering contract (IDictionary<,>, FrozenDictionary, HashSet<KVP>,
-                // LINQ iterators, custom enumerables): canonicalize the pair order.
-                ExpandAssociativeArray(strategy, varSpec, varName, kvpEnumerable, parts, canonicalizePairOrder: true);
+                // Any other pair sequence — List<KVP>, arrays, Queue<KVP>, LinkedList<KVP>,
+                // iterator methods, LINQ pipelines, custom enumerables. The library cannot
+                // tell an ordered sequence from an unordered one, so it defers to the
+                // caller and preserves the supplied order verbatim.
+                ExpandAssociativeArray(strategy, varSpec, varName, kvpEnumerable, parts, canonicalizePairOrder: false);
             }
             else if (rawValue is IEnumerable<string> listValue)
             {
@@ -225,46 +230,74 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
     /// usable as cache keys, in signed URLs, and in tests.
     /// </para>
     /// <para>
-    /// The order is derived from whether the supplied value's own type carries an
-    /// ordering contract. The dispatch in <see cref="Expand"/> classifies the value
-    /// by exactly two type tests, in this order:
+    /// No .NET interface distinguishes an ordered sequence from an unordered one — a
+    /// <see cref="Queue{T}"/> and a <c>HashSet</c> are both just
+    /// <see cref="IEnumerable{T}"/> — so the contract does not try to guess. It
+    /// canonicalizes only the containers whose own type proves that their enumeration
+    /// order is not something the caller chose, and defers to the caller for everything
+    /// else. The dispatch in <see cref="Expand"/> applies exactly two type tests, in this
+    /// order:
     /// </para>
     /// <list type="bullet">
     /// <item><description>
-    /// <b>Ordered — preserved verbatim.</b> A value that implements
-    /// <see cref="IList{T}"/> or <see cref="IReadOnlyList{T}"/> of
-    /// <see cref="KeyValuePair{TKey, TValue}"/> is index-addressable, so its element
-    /// order is defined by the caller and is a property the caller controls. That
-    /// order is used exactly as supplied, duplicate keys included. This covers
-    /// <see cref="List{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/>, arrays of
-    /// <see cref="KeyValuePair{TKey, TValue}"/>, <c>ImmutableArray</c>,
-    /// <c>ImmutableList</c>, and <c>ReadOnlyCollection</c>. This is the
-    /// caller-controlled path and reproduces the RFC 6570 §3.2.1 example set exactly.
+    /// <b>Keyed and set containers — canonicalized.</b> A value that implements
+    /// <see cref="IDictionary{TKey, TValue}"/> of <see cref="string"/> to
+    /// <see cref="string"/>, or <see cref="ISet{T}"/> of
+    /// <see cref="KeyValuePair{TKey, TValue}"/>, exposes no API for placing one pair
+    /// before another, so its enumeration order is an implementation detail rather than a
+    /// caller decision. Its pairs are sorted before expansion. This covers
+    /// <see cref="Dictionary{TKey, TValue}"/>, <c>FrozenDictionary</c>,
+    /// <c>ImmutableDictionary</c>, <c>ConcurrentDictionary</c>, <c>ReadOnlyDictionary</c>,
+    /// the sorted dictionaries, <c>HashSet</c>, <c>FrozenSet</c>, and
+    /// <c>ImmutableHashSet</c> of <see cref="KeyValuePair{TKey, TValue}"/>.
+    /// <see cref="Dictionary{TKey, TValue}"/> in particular enumerates in hash-slot order,
+    /// which diverges from insertion order once an entry has been removed and another
+    /// inserted into the freed slot, and a hash-based set can reorder between processes,
+    /// so two logically identical maps would otherwise expand differently.
     /// </description></item>
     /// <item><description>
-    /// <b>Unordered — canonicalized.</b> Every other
-    /// <see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> has no
-    /// ordering contract, so its pairs are sorted before expansion. This covers
-    /// <see cref="IDictionary{TKey, TValue}"/> implementations
-    /// (<see cref="Dictionary{TKey, TValue}"/>, <c>FrozenDictionary</c>,
-    /// <c>ImmutableDictionary</c>, and the sorted dictionaries, all of which reach this
-    /// branch), <c>HashSet</c> of <see cref="KeyValuePair{TKey, TValue}"/>, LINQ
-    /// iterators, and any custom enumerable. <see cref="Dictionary{TKey, TValue}"/> in
-    /// particular enumerates in hash-slot order, which diverges from insertion order
-    /// once an entry has been removed and another inserted into the freed slot, and a
-    /// hash-based set can reorder between processes, so two logically identical maps
-    /// would otherwise expand differently.
+    /// <b>Every other pair sequence — preserved verbatim.</b> Any other
+    /// <see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> is
+    /// expanded in exactly the order it enumerates, duplicate keys included. This covers
+    /// <see cref="List{T}"/> and arrays of <see cref="KeyValuePair{TKey, TValue}"/>,
+    /// <c>ImmutableArray</c>, <c>ImmutableList</c>, <c>ReadOnlyCollection</c>,
+    /// <see cref="Queue{T}"/>, <see cref="LinkedList{T}"/>, <see cref="Stack{T}"/>,
+    /// iterator methods that <see langword="yield"/> pairs, order-preserving LINQ
+    /// pipelines such as <c>Select</c> and <c>OrderBy</c>, and any custom enumerable.
+    /// This is the caller-controlled path and reproduces the RFC 6570 §3.2.1 example set
+    /// exactly.
     /// </description></item>
     /// </list>
     /// <para>
+    /// <b>Determinism for any other unordered container is the caller's to control.</b>
+    /// A custom collection that enumerates nondeterministically but implements neither
+    /// <see cref="IDictionary{TKey, TValue}"/> nor <see cref="ISet{T}"/> falls into the
+    /// second group and is expanded in whatever order it happens to yield; the library
+    /// has no way to detect that. A caller who needs a stable URI from such a container
+    /// — for a cache key, a signed URL, or a test assertion — must impose the order
+    /// themselves, by supplying an ordered sequence (for example a
+    /// <see cref="List{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> or an
+    /// <c>OrderBy</c> projection) or by converting the container to an
+    /// <see cref="IDictionary{TKey, TValue}"/> and letting the canonical order apply.
+    /// The converse also holds: because sorting is keyed off the container type and not
+    /// off inspection of the data, a caller who deliberately sequenced pairs — including
+    /// repeating a key — keeps that sequence untouched.
+    /// </para>
+    /// <para>
+    /// A <c>SortedSet</c> or <c>ImmutableSortedSet</c> of
+    /// <see cref="KeyValuePair{TKey, TValue}"/> is ordered by its own comparer yet
+    /// implements <see cref="ISet{T}"/>, so it is canonicalized rather than enumerated in
+    /// comparer order. This is deliberate: the set tests are keyed off the interface, and
+    /// a caller who wants a custom comparer's order to survive should materialize it into
+    /// a sequence first.
+    /// </para>
+    /// <para>
     /// The canonical order is ordinal by key
     /// (<see cref="string.CompareOrdinal(string, string)"/>), with an ordinal comparison
-    /// of the value as a tie-break so that an unordered container holding duplicate keys
-    /// still has a total, input-order-independent order. Keys within an
+    /// of the value as a tie-break so that a set holding duplicate keys still has a total,
+    /// input-order-independent order. Keys within an
     /// <see cref="IDictionary{TKey, TValue}"/> are unique, so for a dictionary the
-    /// tie-break never applies and the order is purely ordinal by key. Callers who need
-    /// a specific pair order — including one that repeats a key — must supply an ordered
-    /// list rather than an unordered container.
+    /// tie-break never applies and the order is purely ordinal by key.
     /// </para>
     /// <para>
     /// Ordering is applied before percent-encoding, so it depends only on the raw
@@ -283,10 +316,10 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
     /// <param name="pairs">The associative-array pairs to expand.</param>
     /// <param name="parts">The accumulator that receives the formatted parts.</param>
     /// <param name="canonicalizePairOrder">
-    /// <see langword="true"/> when <paramref name="pairs"/> came from a container with no
-    /// ordering contract and must therefore be sorted into the canonical order;
-    /// <see langword="false"/> when it came from an index-addressable list whose order the
-    /// caller defined and which must be preserved verbatim.
+    /// <see langword="true"/> when <paramref name="pairs"/> came from a keyed or set
+    /// container, whose enumeration order the caller cannot define, and must therefore be
+    /// sorted into the canonical order; <see langword="false"/> when it came from any
+    /// other pair sequence, whose supplied order must be preserved verbatim.
     /// </param>
     /// <exception cref="FormatException">
     /// A prefix modifier was applied to a composite value, or a pair has a null key
@@ -332,9 +365,9 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
             return;
         }
 
-        // Impose a deterministic order on inputs that define none (see remarks).
-        // Key first, value as tie-break, so the comparison is a total order even when an
-        // unordered container holds duplicate keys and the sort itself is not stable.
+        // Impose a deterministic order on containers that define none (see remarks).
+        // Key first, value as tie-break, so the comparison is a total order even when a
+        // set holds duplicate keys and the sort itself is not stable.
         if (canonicalizePairOrder)
         {
             pairList.Sort(static (left, right) =>
