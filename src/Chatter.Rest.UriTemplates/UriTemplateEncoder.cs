@@ -4,10 +4,51 @@ namespace Chatter.Rest.UriTemplates;
 
 internal static class UriTemplateEncoder
 {
+    /// <summary>
+    /// UTF-8 encoder that throws on invalid input instead of substituting U+FFFD.
+    /// Without this, an unpaired UTF-16 surrogate in a variable value would be silently
+    /// mangled into the replacement character, collapsing distinct invalid inputs onto the
+    /// same URI. The library's policy is to reject invalid input, not to repair it.
+    /// </summary>
+    private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
+    /// <summary>
+    /// Encodes <paramref name="value"/> as UTF-8, rejecting unpaired surrogates.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when <paramref name="value"/> contains an unpaired UTF-16 surrogate.
+    /// </exception>
+    private static byte[] GetUtf8Bytes(string value)
+    {
+        if (value is null)
+        {
+            throw new ArgumentNullException(nameof(value));
+        }
+
+        try
+        {
+            return StrictUtf8.GetBytes(value);
+        }
+        catch (EncoderFallbackException ex)
+        {
+            throw new FormatException(
+                $"Variable value contains an unpaired UTF-16 surrogate at index {ex.Index} and cannot be percent-encoded.",
+                ex);
+        }
+    }
+
+    /// <summary>
+    /// Percent-encodes every character that is not an RFC 3986 unreserved character.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when <paramref name="value"/> contains an unpaired UTF-16 surrogate.
+    /// </exception>
     internal static string EncodeUnreserved(string value)
     {
         var sb = new StringBuilder();
-        var bytes = Encoding.UTF8.GetBytes(value);
+        var bytes = GetUtf8Bytes(value);
         for (var i = 0; i < bytes.Length; i++)
         {
             var b = bytes[i];
@@ -25,10 +66,18 @@ internal static class UriTemplateEncoder
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Percent-encodes every character that is not an RFC 3986 unreserved or reserved character,
+    /// passing existing percent-encoded triplets through unchanged.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when <paramref name="value"/> contains an unpaired UTF-16 surrogate.
+    /// </exception>
     internal static string EncodeReserved(string value)
     {
         var sb = new StringBuilder();
-        var bytes = Encoding.UTF8.GetBytes(value);
+        var bytes = GetUtf8Bytes(value);
         var i = 0;
         while (i < bytes.Length)
         {

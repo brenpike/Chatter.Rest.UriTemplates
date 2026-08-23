@@ -11,6 +11,11 @@ internal sealed class UriTemplateParser : IUriTemplateParser
 
     public IReadOnlyList<UriTemplateToken> Parse(string template)
     {
+        if (template is null)
+        {
+            throw new ArgumentNullException(nameof(template));
+        }
+
         var tokens = new List<UriTemplateToken>();
         var pos = 0;
 
@@ -205,6 +210,12 @@ internal sealed class UriTemplateParser : IUriTemplateParser
 
             if (c == '.')
             {
+                // Leading dot: RFC 6570 §2.3 requires varname to begin with a varchar
+                if (i == 0)
+                {
+                    throw new FormatException($"Leading dot is not allowed in variable name '{name}'.");
+                }
+
                 // Consecutive dots
                 if (i + 1 < name.Length && name[i + 1] == '.')
                 {
@@ -245,10 +256,22 @@ internal sealed class UriTemplateParser : IUriTemplateParser
 
     /// <summary>
     /// Validates and encodes a literal segment per RFC 6570 §2.1/§3.1.
-    /// Non-ASCII chars are UTF-8 pct-encoded. Spaces, lone '}', and
-    /// invalid percent triplets are rejected with FormatException.
-    /// Valid pct-encoded triplets and RFC 3986 unreserved/reserved chars pass through.
     /// </summary>
+    /// <remarks>
+    /// Policy: invalid input is rejected, never silently repaired.
+    /// <list type="bullet">
+    /// <item><description>Every ASCII character outside the §2.1 <c>literals</c> production is
+    /// rejected with <see cref="FormatException"/>. That set includes the space, all C0 control
+    /// characters (TAB, CR, LF, ...), DEL, a bare <c>{</c> or <c>}</c>, and
+    /// <c>"</c>, <c>'</c>, <c>&lt;</c>, <c>&gt;</c>, <c>\</c>, <c>^</c>, <c>`</c> and <c>|</c>.</description></item>
+    /// <item><description>A <c>%</c> is accepted only as the start of a valid percent-encoded
+    /// triplet, which is passed through unchanged; any other <c>%</c> is rejected.</description></item>
+    /// <item><description>Non-ASCII characters are percent-encoded as UTF-8. An unpaired UTF-16
+    /// surrogate is rejected rather than replaced with U+FFFD.</description></item>
+    /// <item><description>All remaining ASCII characters (the RFC 3986 unreserved and reserved
+    /// characters that are members of the <c>literals</c> set) pass through unchanged.</description></item>
+    /// </list>
+    /// </remarks>
     private static string ProcessLiteral(string raw)
     {
         var sb = new StringBuilder(raw.Length);
@@ -257,16 +280,6 @@ internal sealed class UriTemplateParser : IUriTemplateParser
         while (i < raw.Length)
         {
             var c = raw[i];
-
-            if (c == '}')
-            {
-                throw new FormatException("Invalid literal character '}' in URI template.");
-            }
-
-            if (c == ' ')
-            {
-                throw new FormatException("Invalid literal character ' ' in URI template.");
-            }
 
             if (c == '%')
             {
@@ -283,27 +296,81 @@ internal sealed class UriTemplateParser : IUriTemplateParser
                 throw new FormatException("Invalid percent-encoded triplet in literal.");
             }
 
-            if (c > 127)
+            if (c <= 127)
             {
-                // Non-ASCII: encode as UTF-8 pct-encoded bytes
-                var charCount = char.IsHighSurrogate(c) && i + 1 < raw.Length ? 2 : 1;
-                var chars = raw.ToCharArray(i, charCount);
-                var bytes = Encoding.UTF8.GetBytes(chars, 0, charCount);
-                foreach (var b in bytes)
+                if (!IsLiteralChar(c))
                 {
-                    sb.Append('%');
-                    sb.Append(b.ToString("X2"));
+                    throw new FormatException(
+                        $"Invalid literal character '{DescribeChar(c)}' in URI template.");
                 }
-                i += charCount;
+
+                sb.Append(c);
+                i++;
                 continue;
             }
 
-            // All other ASCII chars that are valid URI literals: pass through unchanged
-            sb.Append(c);
-            i++;
+            // Non-ASCII: encode as UTF-8 pct-encoded bytes
+            var charCount = 1;
+
+            if (char.IsHighSurrogate(c))
+            {
+                if (i + 1 >= raw.Length || !char.IsLowSurrogate(raw[i + 1]))
+                {
+                    throw new FormatException(
+                        $"Unpaired high surrogate '{DescribeChar(c)}' at index {i} in URI template literal.");
+                }
+
+                charCount = 2;
+            }
+            else if (char.IsLowSurrogate(c))
+            {
+                throw new FormatException(
+                    $"Unpaired low surrogate '{DescribeChar(c)}' at index {i} in URI template literal.");
+            }
+
+            var chars = raw.ToCharArray(i, charCount);
+            var bytes = Encoding.UTF8.GetBytes(chars, 0, charCount);
+            foreach (var b in bytes)
+            {
+                sb.Append('%');
+                sb.Append(b.ToString("X2"));
+            }
+            i += charCount;
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="c"/> is an ASCII character permitted by the RFC 6570 §2.1
+    /// <c>literals</c> production:
+    /// %x21 / %x23-24 / %x26 / %x28-3B / %x3D / %x3F-5B / %x5D / %x5F / %x61-7A / %x7E.
+    /// '%' (%x25) is deliberately excluded: it is only valid as the start of a pct-encoded triplet,
+    /// which <see cref="ProcessLiteral"/> handles before calling this method.
+    /// </summary>
+    private static bool IsLiteralChar(char c)
+    {
+        return c == '\u0021' ||
+               (c >= '\u0023' && c <= '\u0024') ||
+               c == '\u0026' ||
+               (c >= '\u0028' && c <= '\u003B') ||
+               c == '\u003D' ||
+               (c >= '\u003F' && c <= '\u005B') ||
+               c == '\u005D' ||
+               c == '\u005F' ||
+               (c >= '\u0061' && c <= '\u007A') ||
+               c == '\u007E';
+    }
+
+    /// <summary>
+    /// Renders a character for an error message: printable ASCII as-is, everything else
+    /// (control characters, DEL, surrogates) as a \uXXXX escape.
+    /// </summary>
+    private static string DescribeChar(char c)
+    {
+        return c >= '\u0020' && c < '\u007F'
+            ? c.ToString()
+            : "\\u" + ((int)c).ToString("X4");
     }
 
     private static bool IsHexDigit(char c)
