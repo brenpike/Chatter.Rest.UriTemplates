@@ -89,6 +89,14 @@ The same file also sets `agent` to `hivemind:overlord`, making that plugin's
 orchestrator the default agent for sessions opened in this workspace, and
 registers a `SubagentStart` hook from `.claude/hooks/`.
 
+Its `permissions.allow` list is deliberately limited to `Edit` rules scoped to
+the gitignored `.hivemind/` directory. Pre-approved `Bash` rules are kept out of
+the checked-in settings: a prefix rule such as `Bash(printf *)` also matches the
+same command with shell redirection appended, so it would authorize writes
+anywhere on a contributor's machine. Approve read-only commands per session, or
+add them to your own gitignored `.claude/settings.local.json` if you want them
+pre-approved on your machine only.
+
 Plugins run hooks and agents at your local privilege level, so an update published by a plugin author executes on contributor machines that may hold NuGet and GitHub credentials.
 
 ### Why the plugins are not version-pinned
