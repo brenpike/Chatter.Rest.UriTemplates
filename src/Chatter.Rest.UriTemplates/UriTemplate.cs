@@ -73,7 +73,7 @@ public sealed class UriTemplate
     ///   <item><description><see cref="string"/> — simple string value. Supports Level 1–3 expansion and Level 4 prefix (<c>:N</c>) truncation when specified in the template.</description></item>
     ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="string"/> — list value. Expanded per RFC 6570 composite rules; an empty list is treated as undefined.</description></item>
     ///   <item><description><see cref="IDictionary{TKey, TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array value. An empty dictionary is treated as undefined.</description></item>
-    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value (preserves insertion order). An empty sequence is treated as undefined.</description></item>
+    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value. Supplied order is preserved verbatim, duplicates included, except for <see cref="ISet{T}"/> implementations, which are unordered and are canonicalized by ordinal key order; see <c>docs/usage.md</c> for the full ordering contract. An empty sequence is treated as undefined.</description></item>
     /// </list>
     /// </para>
     /// </summary>
@@ -402,9 +402,9 @@ public sealed class UriTemplate
         if (value is IDictionary<string, string> dictionaryValue)
         {
             // Copy into a dictionary, not a list: UriTemplateExpander dispatches on the
-            // runtime type and applies its ordinal key ordering only to IDictionary values.
-            // Flattening to IEnumerable<KeyValuePair<,>> here would silently opt these
-            // values out of that ordering.
+            // runtime type, and its ordinal key ordering is selected by that type rather
+            // than by the contents of the sequence. Flattening to IEnumerable<KeyValuePair<,>>
+            // here would silently opt these values out of that ordering.
             //
             // The entries are copied by hand rather than through the copy constructor:
             // Dictionary<,> rejects a null key with ArgumentNullException, which would
