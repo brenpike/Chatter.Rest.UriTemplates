@@ -121,34 +121,47 @@ Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGe
 
 | Trigger | Condition |
 |---|---|
-| Push | `feature/**`, `bugfix/**`, `hotfix/**`, `refactor/**`, `chore/**`, `docs/**`, `test/**`, `ci/**`, `main` (path-scoped to `src/Chatter.Rest.UriTemplates/` and `test/Chatter.Rest.UriTemplates.Tests/`) |
+| Push | `feature/**`, `bugfix/**`, `hotfix/**`, `refactor/**`, `chore/**`, `docs/**`, `test/**`, `ci/**`, `main` (path-scoped to `src/Chatter.Rest.UriTemplates/`, `src/Directory.Build.props`, `test/Chatter.Rest.UriTemplates.Tests/`, and the workflow files themselves) |
 | Pull request | targeting `main` (same path scope) |
-| Manual | `workflow_dispatch` |
+| Manual | `workflow_dispatch` — runs the build job only; deploy and tag never run for manual dispatches |
 
 ### DI package — `uritemplate-di-cicd.yml`
 
 | Trigger | Condition |
 |---|---|
-| Push | same branch patterns (path-scoped to `src/Chatter.Rest.UriTemplates.DependencyInjection/`, `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`, and `src/Chatter.Rest.UriTemplates/` to catch DI integration impact of core changes) |
+| Push | same branch patterns (path-scoped to `src/Chatter.Rest.UriTemplates.DependencyInjection/`, `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`, `src/Chatter.Rest.UriTemplates/` to catch DI integration impact of core changes, `src/Directory.Build.props`, and the workflow files themselves) |
 | Pull request | targeting `main` (same path scope) |
-| Manual | `workflow_dispatch` |
+| Manual | `workflow_dispatch` — runs the build job only; deploy and tag never run for manual dispatches |
 
 ### Reusable workflows
 
 | File | Purpose |
 |---|---|
-| `version-check.yml` | Checks that the csproj `<Version>` is strictly greater than the latest release tag. Runs on pull requests only. When no tags exist, falls back to comparing against the origin/main csproj version. |
+| `version-check.yml` | Checks that the csproj `<Version>` is strictly greater than **both** the latest release tag and the `<Version>` currently on `origin/main` (tags are created post-merge by the tag job, so `origin/main` can be ahead of the newest tag; the baseline is the maximum of the two). Runs on pull requests only. When no tags exist, the `origin/main` comparison alone applies. Accepts an optional `extra-src-path` input naming an additional path whose non-markdown changes also require a bump; both caller workflows pass `src/Directory.Build.props` so the pre-merge check examines the same source set as the deploy job's publish gate. |
 | `create-version-tag.yml` | Creates an annotated git tag (`{prefix}/vX.Y.Z`) after a successful deploy. Runs on main push only. |
 
 ### Job structure (both workflows)
 
 **build:** restore (`--locked-mode`), build (`-c Release`), test (package-scoped), pack (package-scoped), upload artifact.
 
-**version-check:** calls `version-check.yml`. Runs on pull requests only. Tag prefixes: `uritemplate` (core), `uritemplate-di` (DI).
+**version-check:** calls `version-check.yml` with the package's `src/` directory plus `src/Directory.Build.props` (via `extra-src-path`) — the same source set the deploy job's publish gate diffs post-merge, so the two gates agree. The PR's `<Version>` must be strictly greater than both the latest release tag and the `<Version>` on `origin/main`, closing the window where a merged bump has not been tagged yet. Runs on pull requests only. Tag prefixes: `uritemplate` (core), `uritemplate-di` (DI).
 
-**deploy:** runs only when `github.ref == 'refs/heads/main'` (after successful PR merge). Downloads artifact, pushes `*.nupkg` to NuGet.org via `NUGET_API_KEY_CHATTER_URITEMPLATE` secret. Uses `--skip-duplicate` so both workflows can push safely.
+**deploy:** runs only when `github.ref == 'refs/heads/main'` **and** `github.event_name == 'push'` — i.e., the push produced by merging to `main`; a `workflow_dispatch` run never reaches deploy. The job declares a job-level `concurrency` group scoped to the package and ref (`nuget-deploy-uritemplate-${{ github.ref }}` core, `nuget-deploy-uritemplate-di-${{ github.ref }}` DI) with `cancel-in-progress: false`, so two deploys for the same package never run simultaneously and a run is never cancelled mid-push. This is mutual exclusion only, **not** a FIFO queue — GitHub runs pending jobs in arbitrary order and a newly arrived pending job replaces an existing pending one — so merge ordering and version correctness are enforced by `version-check.yml` and the publish gate, not by the concurrency group. Downloads the build artifact, then a "Determine publish action" step (`publish-gate`) queries the nuget.org flat-container index for the `<Version>` being packed and picks one of three outcomes:
 
-**tag:** calls `create-version-tag.yml`. Runs after deploy on main push. Tag format: `uritemplate/vX.Y.Z` (core) or `uritemplate-di/vX.Y.Z` (DI).
+- version not yet published on nuget.org (a 404 for a never-published package counts as unpublished) — first a downgrade guard requires the version to be strictly greater than the highest stable version already on nuget.org (refusing to publish a downgrade that slipped past the pre-merge check), then push `*.nupkg` to NuGet.org via the `NUGET_API_KEY_CHATTER_URITEMPLATE` secret; `--skip-duplicate` is no longer used, so a genuine push failure fails the job. If the push itself returns a 409 Conflict (a same-version publish by another publisher slipped between the gate's index query and the push), the step re-checks the index: when the version is confirmed published it succeeds with a "published concurrently" warning so `tag` still runs; any other failure — including a 409 the index cannot confirm — remains fatal
+- version already published and the push contains no non-markdown changes to the package's sources — skip the push with a notice; the job still succeeds, so `tag` runs
+- version already published but the push did change package sources — fail with an error listing the changed files; the fix is a `<Version>` bump
+
+The source set for that decision is the package's own `src/` directory plus `src/Directory.Build.props` — identical to what `version-check` examines pre-merge.
+
+**tag:** calls `create-version-tag.yml`. Runs after a successful deploy, under the same `main`-push-only condition as deploy (so it also never runs for `workflow_dispatch`). Tag format: `uritemplate/vX.Y.Z` (core) or `uritemplate-di/vX.Y.Z` (DI).
+
+### Workflow hardening
+
+- All actions across the workflows are pinned to full commit SHAs (with trailing version comments).
+- Checkouts in the package pipelines and `version-check.yml` set `persist-credentials: false`, so the workflow token is not written into the repository's git config. The exception within these pipelines is `create-version-tag.yml`, whose checkout keeps credentials because that job pushes the tag. (`codeql-analysis.yml`, a repository-scanning workflow outside these pipelines, uses the default checkout behavior.)
+- The NuGet API key is scoped to the deploy job only, via job-level `env`.
+- Each deploy job holds a per-package `concurrency` group with `cancel-in-progress: false` — mutual exclusion against simultaneous pushes of the same package, not an ordering guarantee (see the deploy description above).
 
 ## 7. Code Style
 
