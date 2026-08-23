@@ -29,9 +29,39 @@ public sealed class UriTemplateExpressionToken : UriTemplateToken
     public UriTemplateOperator Operator { get; }
     public IReadOnlyList<UriTemplateVarSpec> Variables { get; }
 
+    /// <summary>
+    /// Creates an expression token. The supplied variable specifications are copied,
+    /// so later mutation of <paramref name="variables"/> cannot alter the token.
+    /// </summary>
+    /// <param name="operator">The expression operator.</param>
+    /// <param name="variables">One or more non-null variable specifications.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="variables"/> is empty or contains a null element.
+    /// </exception>
     public UriTemplateExpressionToken(UriTemplateOperator @operator, IReadOnlyList<UriTemplateVarSpec> variables)
     {
+        if (variables is null)
+        {
+            throw new ArgumentNullException(nameof(variables));
+        }
+
+        if (variables.Count == 0)
+        {
+            throw new ArgumentException(
+                "An expression must declare at least one variable specification.", nameof(variables));
+        }
+
+        // Defensive copy: the token exposes a read-only view that callers must not be able to mutate.
+        var copy = new UriTemplateVarSpec[variables.Count];
+
+        for (var i = 0; i < variables.Count; i++)
+        {
+            copy[i] = variables[i] ?? throw new ArgumentException(
+                $"Variable specification at index {i} is null.", nameof(variables));
+        }
+
         Operator = @operator;
-        Variables = variables ?? throw new ArgumentNullException(nameof(variables));
+        Variables = copy;
     }
 }
