@@ -142,9 +142,12 @@ public sealed class UriTemplate
     /// </list>
     /// </para>
     /// <para>
-    /// Composite values must be finite sequences: a value the template references is enumerated
+    /// Composite values must be finite sequences: a value the expander reaches is enumerated
     /// exactly once and fully drained within a single <c>Expand</c> call, so an endless sequence
-    /// supplied for a variable the template names means <c>Expand</c> never returns. See "Values
+    /// supplied for a variable the expander does enumerate means <c>Expand</c> never returns.
+    /// Being named by the template is not sufficient — a named value stays unread when an
+    /// earlier variable or expression fails first, and when the varspec itself is rejected
+    /// before its enumerator is entered, as a prefix modifier over a composite is. See "Values
     /// must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
@@ -343,9 +346,12 @@ public sealed class UriTemplate
     /// <see cref="FormatException"/>. Use <see cref="Expand(IDictionary{string,UriTemplateValue})"/> instead.
     /// </para>
     /// <para>
-    /// Composite values must be finite sequences: a value the template references is enumerated
+    /// Composite values must be finite sequences: a value the expander reaches is enumerated
     /// exactly once and fully drained within a single <c>Expand</c> call, so an endless sequence
-    /// supplied for a variable the template names means <c>Expand</c> never returns. See "Values
+    /// supplied for a variable the expander does enumerate means <c>Expand</c> never returns.
+    /// Being named by the template is not sufficient — a named value stays unread when an
+    /// earlier variable or expression fails first, and when the varspec itself is rejected
+    /// before its enumerator is entered, as a prefix modifier over a composite is. See "Values
     /// must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>

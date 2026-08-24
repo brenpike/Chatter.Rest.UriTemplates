@@ -123,13 +123,16 @@ The existing `Expand(IDictionary<string, string>)` overload still works for call
 
 #### Values must be finite sequences
 
-List and associative-array values carry a caller contract: **every composite value supplied for a variable the template references must be a finite sequence.**
+List and associative-array values carry a caller contract: **every composite value that expansion actually reaches and attempts to enumerate must be a finite sequence.**
 
-- Within a single `Expand` call, a value the template references is enumerated exactly once, at the first expression that names it, and is fully drained by that first use. The members are recorded and replayed for any later expression naming the same variable, so a single-pass or lazily evaluated sequence is safe within the call.
-- Because that first use drains the sequence completely, supplying an endless or never-terminating sequence for a variable the template names makes `Expand` never return.
+- Within a single `Expand` call, a value the expander reaches is enumerated exactly once, at the first expression that reads it, and is fully drained by that first use. The members are recorded and replayed for any later expression naming the same variable, so a single-pass or lazily evaluated sequence is safe within the call.
+- Because that first use drains the sequence completely, supplying an endless or never-terminating sequence for a variable the expander does enumerate makes `Expand` never return.
+- Being named by the template is necessary but not sufficient for a value to be enumerated. Expansion walks the tokens in order and prepares nothing ahead of the expander, so a named value stays unread whenever the expander never gets to its enumerator. Two cases:
+  - **An earlier failure stops expansion first.** `{bad,later}` reports `bad` and leaves `later` untouched, whether the failing variable sits in the same expression or an earlier one.
+  - **The varspec is rejected before its enumerator is entered.** A prefix modifier over a composite is invalid per RFC 6570 and is caught before a single member is read, so `{items:1}` with an endless `IEnumerable<string>` throws `FormatException` rather than hanging.
 - Values the template never names are never enumerated at all, so an unused lazy, blocking, or endless sequence alongside the referenced values is harmless.
 
-The same finiteness contract applies to `UriTemplateValue.From(IEnumerable<string>)`, which materializes the sequence eagerly — there, an endless sequence hangs `From` itself rather than `Expand`.
+The same finiteness contract applies to `UriTemplateValue.From(IEnumerable<string>)`, but without any reachability qualification: `From` materializes the sequence eagerly at construction, before a template is involved, so an endless sequence hangs `From` itself rather than `Expand`.
 
 #### Exception message content
 

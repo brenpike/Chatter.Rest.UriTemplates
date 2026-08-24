@@ -131,7 +131,7 @@ public sealed record UriTemplateVarSpec(
 
 ### `UriTemplateToken` hierarchy (public)
 
-Parsed URI template tokens form a two-level class hierarchy. The abstract base prevents external subclassing via a `private protected` constructor. The parser emits a sequence of these tokens representing alternating literal text and `{expression}` segments.
+Parsed URI template tokens form a two-level class hierarchy. The abstract base prevents external subclassing via a `private protected` constructor. The parser emits a sequence of these tokens, each one representing either literal text or an `{expression}` segment. The two kinds do not alternate — no empty literal is emitted between adjacent expressions, so `{a}{b}` parses to two consecutive expression tokens.
 
 ```csharp
 public abstract class UriTemplateToken

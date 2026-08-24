@@ -4,8 +4,12 @@ namespace Chatter.Rest.UriTemplates;
 /// Base type for parsed URI template tokens.
 /// </summary>
 /// <remarks>
-/// A parsed template is a sequence of tokens alternating between
-/// <see cref="UriTemplateLiteralToken"/> and <see cref="UriTemplateExpressionToken"/> segments.
+/// A parsed template is a sequence of tokens, each one either a
+/// <see cref="UriTemplateLiteralToken"/> or a <see cref="UriTemplateExpressionToken"/> segment.
+/// The two kinds do not alternate: the default parser emits no empty literal between adjacent
+/// expressions, so <c>{a}{b}</c> parses to two consecutive expression tokens, and a custom
+/// <see cref="IUriTemplateParser"/> is under no obligation to alternate either. Consumers must
+/// test each token's type rather than assume a position-based ordering.
 /// The private protected constructor prevents subclassing outside this assembly.
 /// </remarks>
 public abstract class UriTemplateToken
