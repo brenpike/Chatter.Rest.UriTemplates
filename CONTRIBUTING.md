@@ -58,9 +58,10 @@ Follow the existing `.editorconfig` rules:
 - Indentation: tabs
 - Line endings: CRLF
 - Braces: Allman style
-- Nullable: enabled
 
-Run `dotnet build` before submitting - zero warnings expected on `net8.0`.
+Nullable reference types are enabled in every project (`<Nullable>enable</Nullable>` in each csproj, rather than an `.editorconfig` rule).
+
+Run `dotnet build` before submitting. The `src/` projects treat warnings as errors, so a new warning fails the build; the only expected warnings are the pre-existing `CA1305`/`CA1510`/`CA1716` findings tracked in `src/Directory.Build.props`.
 
 ## Tests
 
@@ -71,7 +72,7 @@ Run `dotnet build` before submitting - zero warnings expected on `net8.0`.
 ## Pull Request Checklist
 
 - [ ] Branched from `main`
-- [ ] `dotnet build` passes with zero warnings on `net8.0`
+- [ ] `dotnet build` passes with no new warnings (the pre-existing `CA1305`/`CA1510`/`CA1716` findings are the only expected ones)
 - [ ] `dotnet test` passes
 - [ ] New behavior has test coverage
 - [ ] Code style matches `.editorconfig`

@@ -291,6 +291,11 @@ Parses the template eagerly.
 - Throws `FormatException` for malformed templates, such as unclosed braces,
   nested braces, empty `{}` expressions, or mutually exclusive prefix and
   explode modifiers.
+- Throws `NotSupportedException` when an expression starts with one of the
+  operators RFC 6570 reserves for future use: `=`, `,`, `!`, `@`, or `|`.
+
+See [Constructor exceptions](docs/usage.md#constructor-exceptions) in the
+usage guide for the full contract.
 
 For dependency injection scenarios, use `IUriTemplateFactory.Create(string)`
 instead of calling the constructor directly. See the
@@ -318,7 +323,8 @@ Level 4 expansion. Supported value types: `string`, `IEnumerable<string>`,
 `IDictionary<string, string>`, `IEnumerable<KeyValuePair<string, string>>`, and
 `null` (treated as undefined). Associative-array pair order is determined by
 the container type supplied — see
-[Associative-Array Pair Order](#associative-array-pair-order).
+[Associative-Array Pair Order](#associative-array-pair-order). Composite
+values must be [finite sequences](docs/usage.md#values-must-be-finite-sequences).
 
 ```csharp
 var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
@@ -588,9 +594,12 @@ new UriTemplate("{?tags*}").Expand(new Dictionary<string, object?>
 
 ## Development
 
-Build and test locally with the .NET SDK:
+Build and test locally with the .NET SDK. The `uritemplate-test` submodule is
+required — the RFC 6570 compliance tests read their test data from it and
+throw on a clone where it was never initialized:
 
 ```bash
+git submodule update --init
 dotnet restore
 dotnet test
 ```

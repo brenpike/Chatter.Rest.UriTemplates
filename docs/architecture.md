@@ -61,6 +61,9 @@ src/
     UriTemplateFactory.cs        ← internal factory implementation
     UriTemplateEncoder.cs        ← internal percent-encoding utility
     OperatorStrategyFactory.cs   ← internal strategy resolver
+    UriTemplateMemoizedDictionary.cs ← internal memoizing IDictionary view (single-read, deferred)
+    UriTemplateMemoizedSet.cs    ← internal memoizing ISet view (single-read, deferred)
+    UriTemplateMemoizedSequence.cs ← internal memoizing sequence view shared by all composite shapes
     IsExternalInit.cs            ← netstandard2.0 polyfill for init-only setters
     Operators/
       NoneOperatorStrategy.cs    ← Level 1 simple expansion
@@ -79,15 +82,10 @@ src/
 test/
   Chatter.Rest.UriTemplates.Tests/
     Chatter.Rest.UriTemplates.Tests.csproj
-    UriTemplateLevel1Tests.cs
-    UriTemplateLevel2Tests.cs
-    UriTemplateLevel3Tests.cs
-    UriTemplateLevel4Tests.cs
-    UriTemplateEdgeCaseTests.cs
-    UriTemplateGetVariablesTests.cs
-    UriTemplateValueTests.cs
-    UriTemplateTupleOverloadTests.cs
-    UriTemplateComplianceTests.cs
+    UriTemplate*Tests.cs         ← one test class per concern (levels 1–4, parser validation,
+                                   values, edge cases, compliance, ...); list not exhaustive —
+                                   see the directory for the current set
+    uritemplate-test/            ← official RFC 6570 suite (git submodule, copied to TestData/ on build)
 
   Chatter.Rest.UriTemplates.DependencyInjection.Tests/
     Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj
@@ -187,8 +185,8 @@ Responsibilities:
 - Validate variable names: RFC 6570 `varname` = `varchar *( ["."] varchar )` where `varchar = ALPHA / DIGIT / "_"` and pct-encoded sequences. Dots and pct-encoded names are uncommon but must not cause a parse error.
 - Parse Level 4 modifier syntax: prefix (`:N` where N is 1–9999) and explode (`*` at the end of a varspec). Produces `UriTemplateVarSpec` instances with the appropriate modifier fields set.
 - Enforce mutual exclusion of prefix and explode modifiers on a single varspec; throw `FormatException` if both are present.
-- Throw `FormatException` for malformed templates (unclosed `{`, nested `{`, invalid modifier syntax)
-- Validate and encode literal segments per RFC 6570 section 2.1/3.1 (reject spaces, lone `}`, invalid percent triplets; UTF-8 pct-encode non-ASCII characters)
+- Throw `FormatException` for malformed templates (unclosed `{`, nested `{`, empty expression `{}`, double operators, invalid variable names, invalid modifier syntax) and `NotSupportedException` for an expression starting with one of the operators RFC 6570 §2.2 reserves for future use (`=`, `,`, `!`, `@`, `|`). The full contract is documented in [docs/usage.md — Constructor exceptions](usage.md#constructor-exceptions).
+- Validate and encode literal segments per RFC 6570 section 2.1/3.1 (reject spaces, lone `}`, invalid percent triplets, and any non-ASCII character whose scalar falls outside `ucschar`/`iprivate` — including unpaired surrogates; UTF-8 pct-encode non-ASCII characters inside those ranges)
 
 ### `IUriTemplateExpander` (internal interface)
 
@@ -213,14 +211,15 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
 }
 ```
 
-The expander performs runtime type dispatch on each variable value:
+The expander performs runtime type dispatch on each variable value. The type tests are applied in exactly this order:
 
 | Runtime type | Dispatch path | Notes |
 |---|---|---|
-| `string` | Scalar string expansion | Supports prefix truncation via `:N` modifier. |
-| `IDictionary<string, string>` | Associative array expansion | Checked before `IEnumerable<string>` to avoid false match. |
-| `IEnumerable<KeyValuePair<string, string>>` | Associative array expansion | Preserves insertion order for deterministic output. |
-| `IEnumerable<string>` | List expansion | Checked after dictionary/KVP to avoid matching `string` (which is `IEnumerable<char>`). |
+| `string` | Scalar string expansion | Checked first (`string` is `IEnumerable<char>`). Supports prefix truncation via `:N` modifier. |
+| `IDictionary<string, string>` | Associative array expansion | Pair order canonicalized (sorted ordinal by key, ordinal by value as tie-break): a keyed map gives the caller no way to define an order. |
+| `ISet<KeyValuePair<string, string>>` | Associative array expansion | Pair order canonicalized, same rule as `IDictionary`: a set defines membership only, not order. |
+| `IEnumerable<KeyValuePair<string, string>>` | Associative array expansion | Any other pair sequence: preserves the supplied order verbatim, duplicate keys included, for deterministic caller-controlled output. |
+| `IEnumerable<string>` | List expansion | Checked after the pair shapes so a pair sequence is not misread as a list. |
 | `null` | Treated as undefined | Omitted per RFC 6570 §2.3. |
 | Any other type | `FormatException` | Unsupported value type. |
 
@@ -230,11 +229,12 @@ Per-operator expansion algorithm:
    - Look up `varSpec.Name` in the `variables` dictionary. If absent or `null` (undefined): skip entirely.
    - Dispatch by runtime type (see table above).
    - **String values:**
-     - If `varSpec.PrefixLength` is set, truncate the value to that many Unicode code points (per RFC 6570 §2.4.1) using the internal `TruncateByCodePoints` method. The method walks the UTF-16 string, pairing valid high+low surrogate pairs as a single code point. This works on both `net8.0` and `netstandard2.0` without a `System.Text.Rune` dependency. Note: combining marks (e.g., `e` + U+0301) count as separate code points, so `{var:1}` on `"é"` keeps only `e`.
+     - If `varSpec.PrefixLength` is set, validate the whole original value first (`UriTemplateEncoder.ValidateEncodable`, so an unpaired surrogate beyond the prefix boundary is still rejected), then truncate the value to that many Unicode code points (per RFC 6570 §2.4.1) using the internal `TruncateByCodePoints` method. The method walks the UTF-16 string, pairing valid high+low surrogate pairs as a single code point. This works on both `net8.0` and `netstandard2.0` without a `System.Text.Rune` dependency. Note: combining marks (e.g., `e` + U+0301) count as separate code points, so `{var:1}` on `"é"` keeps only `e`.
      - If the (possibly truncated) value is empty: apply operator-specific empty-value rule (see [Operator Reference](#operator-reference)).
      - If non-empty: encode per operator encoding rule, then format per operator.
    - **List values (non-explode):** encode each member, comma-join into a single composite value. For named operators, prepend `varname=`. Empty list is treated as undefined and omitted.
    - **List values (explode):** each member becomes a separate part. Named operators emit `varname=encodedMember` per member (with ifEmp rules for empty members); non-named operators emit value-only segments.
+   - **Associative array pair order:** pairs from an `IDictionary<string, string>` or `ISet<KeyValuePair<string, string>>` are sorted into canonical order (ordinal by key, ordinal by value as tie-break) before expansion; any other pair sequence is expanded in the order it enumerates.
    - **Associative array values (non-explode):** flatten to alternating `key,value,key,value,...` — each key and value individually encoded, comma-joined. For named operators, prepend `varname=`. Empty associative array is treated as undefined.
    - **Associative array values (explode):** each pair becomes `encodedKey=encodedValue`, joined by operator separator. For named operators with empty values, ifEmp rules apply (`;` omits `=`; `?`/`&` include `=`).
    - **Prefix on composite:** throws `FormatException`. Prefix modifier applies only to scalar string values.
@@ -245,7 +245,7 @@ Per-operator expansion algorithm:
 
 ### `UriTemplateValue` (public)
 
-A polymorphic hierarchy representing a single URI template variable value. This is the second public type in the library alongside `UriTemplate`. It replaces the need for runtime type dispatch when callers supply composite values.
+A polymorphic hierarchy representing a single URI template variable value. It replaces the need for runtime type dispatch when callers supply composite values.
 
 The hierarchy consists of an abstract base class (`UriTemplateValue`) and three top-level sealed subtypes (`StringValue`, `ListValue`, `DictionaryValue`). Overloaded `From` factory methods on the base class return the specific subtype.
 
@@ -281,7 +281,7 @@ public sealed class DictionaryValue : UriTemplateValue
 
 The `private protected` constructor prevents external subclassing while allowing the sealed subtypes (`StringValue`, `ListValue`, `DictionaryValue`) to inherit from the base. Instances are created exclusively through the `From` factory methods. All internal properties are immutable snapshots -- the caller's original collection is copied on creation. The subtypes are public, enabling caller-side pattern matching (e.g., C# `switch` expressions) if needed.
 
-**Relationship to `Expand(IDictionary<string, object?>)`:** The existing `object?` overload is preserved for backward compatibility. The new `Expand(IDictionary<string, UriTemplateValue>)` overload provides compile-time safety by eliminating runtime type dispatch on the caller side.
+**Relationship to `Expand(IDictionary<string, object?>)`:** The existing `object?` overload is preserved for backward compatibility. The `Expand(IDictionary<string, UriTemplateValue>)` overload provides compile-time safety by eliminating runtime type dispatch on the caller side.
 
 ### `UriTemplate` (public)
 
@@ -330,6 +330,7 @@ public sealed class UriTemplate
     /// Expands the URI template using the provided key-value pairs.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
     public string Expand(params (string Key, string Value)[] variables);
 
     /// <summary>
@@ -339,6 +340,7 @@ public sealed class UriTemplate
     /// When duplicate keys are present, the first occurrence wins.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
     /// <exception cref="FormatException">Thrown when a value is not a supported type.</exception>
     public string Expand(params (string Key, object? Value)[] variables);
 
@@ -391,11 +393,13 @@ Encapsulates percent-encoding rules per RFC 6570 section 1.6 and RFC 3986.
 ```csharp
 internal static class UriTemplateEncoder
 {
+    internal static void ValidateEncodable(string value);
     internal static string EncodeUnreserved(string value);
     internal static string EncodeReserved(string value);
 }
 ```
 
+- `ValidateEncodable` — verifies a value is well-formed UTF-16 without allocating an encoded result; throws `FormatException` on an unpaired surrogate, and the message reports the character index of the offending code unit (not the variable name). Called on the original value before prefix truncation so rejection does not depend on where the invalid code unit sits relative to the prefix boundary. Both encode methods reject unpaired surrogates via the same validation.
 - `EncodeUnreserved` — passes through only unreserved characters (`A-Z a-z 0-9 - . _ ~`) unencoded; percent-encodes all other characters as UTF-8 bytes. Used by Level 1 and Level 3 operators.
 - `EncodeReserved` — passes through both unreserved and reserved characters unencoded; preserves existing valid pct-encoded triplets (`%XX`); percent-encodes everything else. Used by Level 2 operators (`+`, `#`).
 
@@ -500,11 +504,11 @@ A–Z  a–z  0–9  -  .  _  ~
 
 Pass through both unreserved characters AND reserved characters unencoded. Percent-encode everything else.
 
-Reserved characters (RFC 3986 Section 2.2 + `%`):
+Reserved characters (RFC 3986 Section 2.2):
 ```
-:  /  ?  #  [  ]  @  !  $  &  '  (  )  *  +  ,  ;  =  %
+:  /  ?  #  [  ]  @  !  $  &  '  (  )  *  +  ,  ;  =
 ```
-Pct-encoded sequences (`%XX`) in the source value are also passed through unencoded.
+Pct-encoded sequences (`%XX`) in the source value are passed through unencoded; a bare `%` that does not start a valid triplet is percent-encoded as `%25`.
 
 ---
 
@@ -516,4 +520,4 @@ For integration with HAL `LinkObject`, see the [Chatter.Rest.Hal](https://github
 
 ## Future Work
 
-See [docs/backlog.md](backlog.md) for deferred follow-ups including a tuple overload for composite values.
+See [docs/backlog.md](backlog.md) for deferred follow-ups.
