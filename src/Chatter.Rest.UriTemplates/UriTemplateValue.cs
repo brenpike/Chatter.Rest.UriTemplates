@@ -19,6 +19,13 @@ public abstract class UriTemplateValue
     /// <summary>
     /// Creates a <see cref="ListValue"/> representing a list value.
     /// </summary>
+    /// <remarks>
+    /// This method materializes <paramref name="values"/> eagerly: the sequence is fully enumerated
+    /// by <c>From</c> itself, before any expansion. The sequence must therefore be finite: an
+    /// endless or never-terminating sequence hangs this method, not a later
+    /// <see cref="UriTemplate.Expand(System.Collections.Generic.IDictionary{string, UriTemplateValue})"/> call.
+    /// See "Values must be finite sequences" in docs/usage.md.
+    /// </remarks>
     /// <param name="values">The list of string values. Must not be null, and no element may be null.</param>
     /// <returns>A new <see cref="ListValue"/> instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="values"/> is null.</exception>
@@ -28,6 +35,11 @@ public abstract class UriTemplateValue
     /// <summary>
     /// Creates a <see cref="DictionaryValue"/> representing an associative array (dictionary) value.
     /// </summary>
+    /// <remarks>
+    /// <see cref="ArgumentException"/> messages name the offending key, never the value, so they
+    /// remain safe to log even when values carry secrets or personal data.
+    /// See "Exception message content" in docs/usage.md.
+    /// </remarks>
     /// <param name="pairs">The key-value pairs. Must not be null, and no key or value may be null.</param>
     /// <returns>A new <see cref="DictionaryValue"/> instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pairs"/> is null.</exception>
@@ -37,6 +49,10 @@ public abstract class UriTemplateValue
     internal abstract object? ToRawValue();
 }
 
+/// <summary>
+/// A URI template variable value holding a single string.
+/// Created via <see cref="UriTemplateValue.From(string)"/>.
+/// </summary>
 public sealed class StringValue : UriTemplateValue
 {
     internal string Value { get; }
@@ -49,6 +65,10 @@ public sealed class StringValue : UriTemplateValue
     internal override object? ToRawValue() => Value;
 }
 
+/// <summary>
+/// A URI template variable value holding a list of strings.
+/// Created via <see cref="UriTemplateValue.From(IEnumerable{string})"/>.
+/// </summary>
 public sealed class ListValue : UriTemplateValue
 {
     internal IReadOnlyList<string> Values { get; }
@@ -67,6 +87,10 @@ public sealed class ListValue : UriTemplateValue
     internal override object? ToRawValue() => new List<string>(Values);
 }
 
+/// <summary>
+/// A URI template variable value holding an associative array of string key-value pairs.
+/// Created via <see cref="UriTemplateValue.From(IDictionary{string, string})"/>.
+/// </summary>
 public sealed class DictionaryValue : UriTemplateValue
 {
     internal IReadOnlyDictionary<string, string> Pairs { get; }

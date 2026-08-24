@@ -3,6 +3,11 @@ namespace Chatter.Rest.UriTemplates;
 /// <summary>
 /// Base type for parsed URI template tokens.
 /// </summary>
+/// <remarks>
+/// A parsed template is a sequence of tokens alternating between
+/// <see cref="UriTemplateLiteralToken"/> and <see cref="UriTemplateExpressionToken"/> segments.
+/// The private protected constructor prevents subclassing outside this assembly.
+/// </remarks>
 public abstract class UriTemplateToken
 {
     private protected UriTemplateToken() { }
@@ -13,8 +18,16 @@ public abstract class UriTemplateToken
 /// </summary>
 public sealed class UriTemplateLiteralToken : UriTemplateToken
 {
+    /// <summary>
+    /// Gets the literal text of this segment. Never null.
+    /// </summary>
     public string Value { get; }
 
+    /// <summary>
+    /// Creates a literal token holding the given text.
+    /// </summary>
+    /// <param name="value">The literal text of the segment.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="value"/> is null.</exception>
     public UriTemplateLiteralToken(string value)
     {
         Value = value ?? throw new ArgumentNullException(nameof(value));
@@ -26,7 +39,17 @@ public sealed class UriTemplateLiteralToken : UriTemplateToken
 /// </summary>
 public sealed class UriTemplateExpressionToken : UriTemplateToken
 {
+    /// <summary>
+    /// Gets the operator of this expression.
+    /// </summary>
     public UriTemplateOperator Operator { get; }
+
+    /// <summary>
+    /// Gets the variable specifications of this expression. The list is a read-only,
+    /// defensively copied snapshot taken at construction: later mutation of the collection
+    /// passed to the constructor does not affect it, and casting it to a mutable collection
+    /// interface cannot alter the token. It is never empty and contains no null elements.
+    /// </summary>
     public IReadOnlyList<UriTemplateVarSpec> Variables { get; }
 
     /// <summary>

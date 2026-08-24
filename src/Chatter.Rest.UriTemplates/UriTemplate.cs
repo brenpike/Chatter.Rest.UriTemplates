@@ -1,10 +1,32 @@
 ﻿namespace Chatter.Rest.UriTemplates;
 
+/// <summary>
+/// An RFC 6570 URI Template, parsed eagerly at construction and expanded against
+/// caller-supplied variables (Levels 1–4).
+/// </summary>
 public sealed class UriTemplate
 {
     private readonly IReadOnlyList<UriTemplateToken> _tokens;
     private readonly IUriTemplateExpander _expander;
 
+    /// <summary>
+    /// Parses <paramref name="template"/> eagerly, so every parse failure surfaces at
+    /// construction time — never later, at <c>Expand</c>. The authoritative statement of
+    /// this exception contract is "Constructor exceptions" in <c>docs/usage.md</c>.
+    /// </summary>
+    /// <param name="template">The RFC 6570 URI template string.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="template"/> is null.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when the template is malformed: an unclosed <c>{</c>, a nested <c>{</c>, an empty
+    /// expression, a double operator, an invalid variable name, an invalid prefix or explode
+    /// modifier, or invalid literal text. See "Constructor exceptions" in <c>docs/usage.md</c>
+    /// for the full enumeration.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when an expression starts with one of the operators RFC 6570 §2.2 reserves for
+    /// future use: <c>=</c>, <c>,</c>, <c>!</c>, <c>@</c>, or <c>|</c>. See "Constructor
+    /// exceptions" in <c>docs/usage.md</c>.
+    /// </exception>
     public UriTemplate(string template)
         : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
     {
@@ -82,6 +104,12 @@ public sealed class UriTemplate
     /// <param name="variables">A dictionary mapping variable names to string values.</param>
     /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
+    /// percent-encoded. That message reports the character index within the value, not the
+    /// variable name, and never quotes value text — see "Exception message content" in
+    /// <c>docs/usage.md</c>.
+    /// </exception>
     public string Expand(IDictionary<string, string> variables)
     {
         if (variables is null)
@@ -113,13 +141,27 @@ public sealed class UriTemplate
     ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value. Supplied order is preserved verbatim, duplicates included, except for <see cref="ISet{T}"/> implementations, which are unordered and are canonicalized by ordinal key order; see <c>docs/usage.md</c> for the full ordering contract. An empty sequence is treated as undefined.</description></item>
     /// </list>
     /// </para>
+    /// <para>
+    /// Composite values must be finite sequences: a value the template references is enumerated
+    /// exactly once and fully drained within a single <c>Expand</c> call, so an endless sequence
+    /// supplied for a variable the template names means <c>Expand</c> never returns. See "Values
+    /// must be finite sequences" in <c>docs/usage.md</c>.
+    /// </para>
+    /// <para>
+    /// Expansion-time exception messages identify the failing variable by name and, for an
+    /// associative-array member, the offending key — variable values are never quoted. The one
+    /// exception: the unpaired-surrogate message reports the character index within the value
+    /// instead of the variable name. See "Exception message content" in <c>docs/usage.md</c>.
+    /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to values of the supported types listed above.</param>
     /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value is not one of the supported types, when a prefix modifier
-    /// is applied to a composite value, or when a composite value contains null elements.
+    /// (e.g. <c>{var:3}</c>) is applied to a composite value, when a composite value contains a
+    /// null element, key, or value, or when a string value, list element, or associative-array
+    /// key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
     /// </exception>
     public string Expand(IDictionary<string, object?> variables)
     {
@@ -151,10 +193,28 @@ public sealed class UriTemplate
     /// A <see langword="null"/> entry is treated as undefined per RFC 6570 §2.3 (the variable is
     /// omitted), matching <see cref="Expand(IDictionary{string, object})"/>.
     /// </para>
+    /// <para>
+    /// The finite-sequence contract applies at construction here rather than at expansion:
+    /// <see cref="UriTemplateValue.From(IEnumerable{string})"/> materializes its sequence eagerly,
+    /// so an endless sequence hangs <c>From</c>, never this method. See "Values must be finite
+    /// sequences" in <c>docs/usage.md</c>.
+    /// </para>
+    /// <para>
+    /// Expansion-time exception messages identify the failing variable by name and never quote
+    /// variable values; the unpaired-surrogate message reports the character index within the
+    /// value instead of the variable name. See "Exception message content" in <c>docs/usage.md</c>.
+    /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to <see cref="UriTemplateValue"/> instances.</param>
     /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when a prefix modifier (e.g. <c>{var:3}</c>) is applied to a <see cref="ListValue"/>
+    /// or <see cref="DictionaryValue"/>, or when a string held by a value contains an unpaired
+    /// UTF-16 surrogate and cannot be percent-encoded. Unsupported types and null members are
+    /// unreachable through this overload, because <see cref="UriTemplateValue.From(string)"/> and
+    /// its sibling factories validate their contents at construction.
+    /// </exception>
     public string Expand(IDictionary<string, UriTemplateValue> variables)
     {
         if (variables is null)
@@ -234,6 +294,12 @@ public sealed class UriTemplate
     /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
+    /// percent-encoded. That message reports the character index within the value, not the
+    /// variable name, and never quotes value text — see "Exception message content" in
+    /// <c>docs/usage.md</c>.
+    /// </exception>
     public string Expand(params (string Key, string Value)[] variables)
     {
         if (variables is null)
@@ -276,10 +342,29 @@ public sealed class UriTemplate
     /// Note: passing a <see cref="UriTemplateValue"/> instance through this overload will throw
     /// <see cref="FormatException"/>. Use <see cref="Expand(IDictionary{string,UriTemplateValue})"/> instead.
     /// </para>
+    /// <para>
+    /// Composite values must be finite sequences: a value the template references is enumerated
+    /// exactly once and fully drained within a single <c>Expand</c> call, so an endless sequence
+    /// supplied for a variable the template names means <c>Expand</c> never returns. See "Values
+    /// must be finite sequences" in <c>docs/usage.md</c>.
+    /// </para>
+    /// <para>
+    /// Expansion-time exception messages identify the failing variable by name and, for an
+    /// associative-array member, the offending key — variable values are never quoted. The one
+    /// exception: the unpaired-surrogate message reports the character index within the value
+    /// instead of the variable name. See "Exception message content" in <c>docs/usage.md</c>.
+    /// </para>
     /// </summary>
+    /// <param name="variables">Name/value tuples mapping variable names to values of the supported types listed above. Neither the array nor any key may be null.</param>
+    /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
-    /// <exception cref="FormatException">Thrown when a value is not a supported type.</exception>
+    /// <exception cref="FormatException">
+    /// Thrown when a variable value is not one of the supported types, when a prefix modifier
+    /// (e.g. <c>{var:3}</c>) is applied to a composite value, when a composite value contains a
+    /// null element, key, or value, or when a string value, list element, or associative-array
+    /// key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
+    /// </exception>
     public string Expand(params (string Key, object? Value)[] variables)
     {
         if (variables is null)
@@ -484,6 +569,12 @@ public sealed class UriTemplate
     /// <returns>The expanded URI string with all variables omitted.</returns>
     public string Expand() => ExpandCore(new Dictionary<string, object?>(StringComparer.Ordinal));
 
+    /// <summary>
+    /// Returns the distinct variable names the template references, in the order the template
+    /// first references them. Duplicate references are deduplicated by ordinal (case-sensitive)
+    /// comparison, so names differing only in case are distinct entries.
+    /// </summary>
+    /// <returns>The deduplicated variable names in first-occurrence template order.</returns>
     public IReadOnlyList<string> GetVariables()
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
