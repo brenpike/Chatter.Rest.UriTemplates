@@ -304,6 +304,9 @@ var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, UriTemplate
 Factory methods: `From(string)` returning `StringValue`,
 `From(IEnumerable<string>)` returning `ListValue`,
 `From(IDictionary<string, string>)` returning `DictionaryValue`.
+Both eager factories — `From(IEnumerable<string>)` and
+`From(IDictionary<string, string>)` — drain their input at construction, so each
+requires a [finite sequence](docs/usage.md#values-must-be-finite-sequences).
 
 ### `Expand(params (string Key, string Value)[] variables)`
 

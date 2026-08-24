@@ -275,9 +275,11 @@ public sealed class DictionaryValue : UriTemplateValue
 }
 ```
 
-- **`From(string)`** — wraps a simple string value. Throws `ArgumentNullException` if `value` is null.
-- **`From(IEnumerable<string>)`** — wraps a list of strings (defensively copied to a read-only list). Throws `ArgumentNullException` if `values` is null, `ArgumentException` if any element is null.
-- **`From(IDictionary<string, string>)`** — wraps an associative array (defensively copied to a read-only dictionary). Throws `ArgumentNullException` if `pairs` is null, `ArgumentException` if any key or value is null.
+- **`From(string)`** — wraps a simple string value; reads no caller-supplied sequence. Throws `ArgumentNullException` if `value` is null.
+- **`From(IEnumerable<string>)`** — wraps a list of strings (defensively copied to a read-only list), draining the caller's sequence at construction. Throws `ArgumentNullException` if `values` is null, `ArgumentException` if any element is null.
+- **`From(IDictionary<string, string>)`** — wraps an associative array (defensively copied to a read-only dictionary), draining the caller's dictionary at construction. Throws `ArgumentNullException` if `pairs` is null, `ArgumentException` if any key or value is null.
+
+Both eager factories therefore require a finite input — the caller obligation is [Values must be finite sequences](usage.md#values-must-be-finite-sequences). What the messages those factories construct may carry, and why an exception raised by the caller's own enumeration is outside that guarantee, is governed by [Exception message content](usage.md#exception-message-content).
 
 The `private protected` constructor prevents external subclassing while allowing the sealed subtypes (`StringValue`, `ListValue`, `DictionaryValue`) to inherit from the base. Instances are created exclusively through the `From` factory methods. All internal properties are immutable snapshots -- the caller's original collection is copied on creation. The subtypes are public, enabling caller-side pattern matching (e.g., C# `switch` expressions) if needed.
 

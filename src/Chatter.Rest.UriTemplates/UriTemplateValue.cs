@@ -20,10 +20,15 @@ public abstract class UriTemplateValue
     /// Creates a <see cref="ListValue"/> representing a list value.
     /// </summary>
     /// <remarks>
-    /// This method materializes <paramref name="values"/> eagerly at construction, before any
-    /// <see cref="UriTemplate.Expand(System.Collections.Generic.IDictionary{string, UriTemplateValue})"/> call
-    /// exists, so the caller must supply a finite sequence.
-    /// See "Values must be finite sequences" in docs/usage.md.
+    /// <para>
+    /// This factory drains <paramref name="values"/> eagerly at construction, so the caller must
+    /// supply a finite sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
+    /// </para>
+    /// <para>
+    /// Exception messages this factory constructs never contain supplied value content, and an
+    /// exception raised by the caller's own enumeration is outside that guarantee; see
+    /// "Exception message content" in <c>docs/usage.md</c>.
+    /// </para>
     /// </remarks>
     /// <param name="values">The list of string values. Must not be null, and no element may be null.</param>
     /// <returns>A new <see cref="ListValue"/> instance.</returns>
@@ -35,8 +40,15 @@ public abstract class UriTemplateValue
     /// Creates a <see cref="DictionaryValue"/> representing an associative array (dictionary) value.
     /// </summary>
     /// <remarks>
-    /// Exception messages thrown here never contain supplied value content.
-    /// See "Exception message content" in docs/usage.md.
+    /// <para>
+    /// This factory drains <paramref name="pairs"/> eagerly at construction, so the caller must
+    /// supply a finite input; see "Values must be finite sequences" in <c>docs/usage.md</c>.
+    /// </para>
+    /// <para>
+    /// Exception messages this factory constructs never contain supplied value content, and an
+    /// exception raised by the caller's own enumeration is outside that guarantee; see
+    /// "Exception message content" in <c>docs/usage.md</c>.
+    /// </para>
     /// </remarks>
     /// <param name="pairs">The key-value pairs. Must not be null, and no key or value may be null.</param>
     /// <returns>A new <see cref="DictionaryValue"/> instance.</returns>
