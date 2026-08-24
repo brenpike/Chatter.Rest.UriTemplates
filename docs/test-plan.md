@@ -19,8 +19,8 @@ The current implementation covers RFC 6570 Level 1-4 expansion operators for sim
 | Variable-name grammar | Section 2.3 defines `varname = varchar *( ["."] varchar )`, where `varchar = ALPHA / DIGIT / "_" / pct-encoded`. | Parser validates variable names, dot placement, pct-encoded sequences, and Level 4 modifier syntax. | Remaining edge cases around uncommon pct-encoded variable names. |
 | Reserved operators | Section 2.2 reserves `=`, `,`, `!`, `@`, and `|` as operators for future extensions. | Detected and rejected with `NotSupportedException`. | None. |
 | Reserved expansion `%` handling | Section 3.2.1 allows `%` through only as part of pct-encoded triplets for `+` and `#`; bare `%` must become `%25`. | Correct. `IsReservedChar` deliberately excludes `%`, so a bare `%` is encoded as `%25` while a valid pct-encoded triplet passes through unchanged. | None. Behaviour verified: `{+v}` with `50%` gives `50%25`, with `%2F` gives `%2F`, with `a%zz` gives `a%25zz`. |
-| Undefined null values | Section 2.3 allows unknown or null values to be treated as undefined; Section 3.2.1 says undefined variables are ignored. | The `IDictionary<string, object?>` overload treats a null value as undefined and omits the variable (`UriTemplateExpander.Expand`); `UriTemplateSecurityTests.NullValue_TreatedAsUndefined` locks that behavior. The `IDictionary<string, string>` overload preserves the same behavior when wrapping values into the canonical overload; `UriTemplateLevel1Tests.NullDictionaryValue_TreatedAsUndefined` locks that. The `IDictionary<string, UriTemplateValue>` overload also treats a null entry as undefined — `UriTemplate.Expand` maps a null entry to the canonical `null` representation before `UriTemplateExpander.MapValue` is reached, so all overloads agree (issue #21, landed via PR #41); `UriTemplateArgumentContractTests.Expand_UriTemplateValueDictionary_NullEntry_TreatedAsUndefined` locks that behavior. | None. |
-| Case-sensitive lookup | Section 2.3 says variable names are case-sensitive. | Resolved. Every public overload copies the caller's variables into a `Dictionary<string, object?>` built with `StringComparer.Ordinal` before expansion, so a case-insensitive input dictionary can no longer satisfy `{Var}` from `var`. | None. |
+| Undefined null values | Section 2.3 allows unknown or null values to be treated as undefined; Section 3.2.1 says undefined variables are ignored. | Resolved. A null value expands as undefined on every overload — the authoritative statement is [What counts as undefined](usage.md#what-counts-as-undefined). Locked per overload by `UriTemplateSecurityTests.NullValue_TreatedAsUndefined` (`object?` dictionary), `UriTemplateLevel1Tests.NullDictionaryValue_TreatedAsUndefined` (`string` dictionary), and `UriTemplateArgumentContractTests.Expand_UriTemplateValueDictionary_NullEntry_TreatedAsUndefined` (`UriTemplateValue` dictionary; issue #21, landed via PR #41). | None. |
+| Case-sensitive lookup | Section 2.3 says variable names are case-sensitive. | Resolved. Variable-name matching is ordinal and case-sensitive regardless of the comparer the caller's container was created with — the authoritative statement is [Variable materialization](usage.md#variable-materialization). Locked by the section 5.6 case-sensitivity tests in `UriTemplateEdgeCaseTests`. | None. |
 | Query/path parameter names | Sections 3.2.7-3.2.9 append the variable name encoded as a literal string. | Resolved. `UriTemplateParser.ValidateVarName` enforces the Section 2.3 `varname` production — rejecting leading, trailing and consecutive dots, invalid characters, and malformed pct-encoded triplets — and `UriTemplateParserValidationTests` covers dotted and invalid names. | None. |
 | Canonical RFC examples | RFC Sections 3.2.2-3.2.9 include examples using `who`, `half`, `base`, `dub`, `v`, `list`, `keys`, and `empty_keys`. | Resolved. The official suite is consumed by `UriTemplateComplianceTests`, which covers the canonical Level 1-4 examples in addition to the hand-written per-level tests. | None. |
 | Official test suite | The URI Templates community test suite covers broader syntax and edge cases. | Resolved. `UriTemplateComplianceTests` is a data-driven harness over the official `uri-templates/uritemplate-test` suite, covering `spec-examples.json`, `extended-tests.json` and `negative-tests.json`. | None. Note the suite data arrives via a git submodule that cannot always be cloned; when it is absent these tests fail rather than skip. |
@@ -487,7 +487,7 @@ Class: `UriTemplateLevel4Tests` (edge case methods) and `UriTemplateEdgeCaseTest
 | Existing | `ListWithEmptyStringMembers_QueryExplode` | List with empty-string members applies ifEmp rules for query explode. |
 | Existing | `ListWithEmptyStringMembers_SemicolonExplode` | List with empty-string members applies ifEmp rules for semicolon explode. |
 | Existing | `PrefixLargerThanLength_ReturnsFullValue` | Prefix larger than value length returns full value. |
-| Existing | `PrefixOnEmoji_ReturnsSingleTextElement` | Unicode prefix truncation via code-point counting (`TruncateByCodePoints`). |
+| Existing | `PrefixOnEmoji_ReturnsSingleTextElement` | Unicode prefix truncation counts code points (see [Prefix truncation in code points](usage.md#prefix-truncation-in-code-points)); exercised via `TruncateByCodePoints`. |
 | Existing | `MixedLevel1Through4_InOneTemplate` | Mixed Level 1-4 expressions in a single template. |
 | Existing | `UnsupportedValueType_Int_ThrowsFormatException` | `int` value throws `FormatException`. |
 | Existing | `UnsupportedValueType_Bool_ThrowsFormatException` | `bool` value throws `FormatException`. |
@@ -530,7 +530,7 @@ counts drift as tests are added. Treat them as a size indicator, not a contract.
 | `UriTemplateEdgeCaseTests` | Template parsing shape, mixed-level templates, malformed expressions, reserved future operators, Level 4 modifier validation, case sensitivity | 5 | 43 |
 | `UriTemplateLevel4Tests` | Level 4 prefix/explode modifiers, list values, associative arrays, Level 4 edge cases | 6 | 73 |
 | `UriTemplateComplianceTests` | Data-driven harness over the official `uritemplate-test` suite | 7 | 3 |
-| `UriTemplateAssociativeArrayTests` | Associative-array ordering semantics: ordered pair sequences preserve supplied order; unordered containers (dictionaries, sets) are canonicalized to ordinal key order | — | 27 |
+| `UriTemplateAssociativeArrayTests` | Associative-array pair-order determinism across container types — the authoritative ordering contract is [Associative-array pair order](usage.md#associative-array-pair-order) | — | 27 |
 | `UriTemplateValueTests` | `UriTemplateValue` factory validation (`From` overloads) and expansion through the `IDictionary<string, UriTemplateValue>` overload | — | 23 |
 | `UriTemplateTupleOverloadTests` | The `params (string, object?)[]` `Expand` overload: argument guards, duplicate keys, value-kind dispatch | — | 11 |
 | `UriTemplateArgumentContractTests` | Cross-overload argument contract: single-pass enumeration of composite values, lazy failure ordering, null entry/key/element/value diagnostics, set and custom-comparer canonicalization, parser-contract guards | — | 93 |
@@ -562,9 +562,9 @@ One row in the RFC Review Findings table still carries a follow-up, and it is th
 - **Variable-name grammar** — a test-coverage gap around uncommon pct-encoded variable names.
   The parser validates them; the edge cases are not exercised.
 
-The previously listed **Undefined null values** follow-up is resolved: the
-`IDictionary<string, UriTemplateValue>` overload now treats a null entry as undefined
-(issue #21, landed via PR #41), so all overloads agree. See the undefined null values
-row in the RFC Review Findings table and
+The previously listed **Undefined null values** follow-up is resolved (issue #21,
+landed via PR #41): all overloads agree on the null-value mapping — see
+[What counts as undefined](usage.md#what-counts-as-undefined), the undefined null
+values row in the RFC Review Findings table, and
 `UriTemplateArgumentContractTests`.
 

@@ -233,9 +233,10 @@ side regardless of which operator produced them.
 
 ### Optional Variables
 
-Variables that are not supplied are omitted. Prefixes such as `?`, `&`, `/`,
-and `.` are only emitted when at least one variable in the expression has a
-value.
+Variables that are not supplied are omitted per RFC 6570, including the
+expression's operator prefix when every variable in it is undefined — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined) in the
+usage guide for exactly which inputs expand as undefined.
 
 ```csharp
 var template = new UriTemplate("/orders/{id}{?status,page}");
@@ -256,7 +257,8 @@ var uri = new UriTemplate("/orders{?status,page}")
 
 ### Empty Values
 
-Empty strings are defined values and are expanded according to the operator.
+Empty strings are defined values and are expanded according to the operator —
+see [What counts as undefined](docs/usage.md#what-counts-as-undefined).
 
 ```csharp
 new UriTemplate("/orders{?status}")
@@ -285,17 +287,10 @@ var variables = template.GetVariables();
 
 ### `new UriTemplate(string template)`
 
-Parses the template eagerly.
-
-- Throws `ArgumentNullException` when `template` is `null`.
-- Throws `FormatException` for malformed templates, such as unclosed braces,
-  nested braces, empty `{}` expressions, or mutually exclusive prefix and
-  explode modifiers.
-- Throws `NotSupportedException` when an expression starts with one of the
-  operators RFC 6570 reserves for future use: `=`, `,`, `!`, `@`, or `|`.
-
-See [Constructor exceptions](docs/usage.md#constructor-exceptions) in the
-usage guide for the full contract.
+Parses the template eagerly on construction, so every parse failure surfaces
+at construction time, never later at `Expand` — see
+[Constructor exceptions](docs/usage.md#constructor-exceptions) in the usage
+guide for the authoritative exception contract.
 
 For dependency injection scenarios, use `IUriTemplateFactory.Create(string)`
 instead of calling the constructor directly. See the
@@ -321,10 +316,11 @@ var uri = new UriTemplate("/search{?q,lang}")
 Expands the template using a dictionary that supports composite value types for
 Level 4 expansion. Supported value types: `string`, `IEnumerable<string>`,
 `IDictionary<string, string>`, `IEnumerable<KeyValuePair<string, string>>`, and
-`null` (treated as undefined). Associative-array pair order is determined by
-the container type supplied — see
-[Associative-Array Pair Order](#associative-array-pair-order). Composite
-values must be
+`null` (treated as undefined — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined)).
+Associative-array pair order is derived from the container type supplied — see
+[Associative-array pair order](docs/usage.md#associative-array-pair-order).
+Composite values must be
 [finite sequences](docs/usage.md#values-must-be-finite-sequences).
 
 ```csharp
@@ -371,7 +367,9 @@ var uri = new UriTemplate("/search{?q}")
 Tuple overload for composite values. Supported value types via `object?`:
 `string`, `IEnumerable<string>`, `IDictionary<string, string>`,
 `IEnumerable<KeyValuePair<string, string>>`, and `null` (treated as
-undefined). First-wins for duplicate keys.
+undefined — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined)).
+First-wins for duplicate keys.
 
 ```csharp
 var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
@@ -389,7 +387,8 @@ var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
 ### `Expand()`
 
 Expands the template with all variables undefined. Every expression is omitted
-per RFC 6570 rules.
+per RFC 6570 rules — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined).
 
 ```csharp
 var uri = new UriTemplate("/orders{?status,page}").Expand();
@@ -400,7 +399,8 @@ var uri = new UriTemplate("/orders{?status,page}").Expand();
 ### `GetVariables()`
 
 Returns variable names in first-seen order with duplicates removed. Variable
-names are case-sensitive.
+names are matched case-sensitively — see
+[Variable materialization](docs/usage.md#variable-materialization).
 
 ```csharp
 var variables = new UriTemplate("/{resource}/{id}{?id,format}")
@@ -409,10 +409,10 @@ var variables = new UriTemplate("/{resource}/{id}{?id,format}")
 // ["resource", "id", "format"]
 ```
 
-RFC 6570 permits duplicate variable names, and each occurrence expands:
-`{?x,x}` with `x = "1"` produces `?x=1&x=1`, while `GetVariables()` reports
-`x` once. Callers that count expansion output via `GetVariables()` will
-under-count in that case.
+RFC 6570 permits duplicate variable names, and each occurrence expands while
+`GetVariables()` reports the name once — see
+[`GetVariables()`](docs/usage.md#ireadonlyliststring-getvariables) in the
+usage guide for the under-counting consequence.
 
 ## Supported Template Features
 
@@ -444,7 +444,10 @@ template with a literal path segment.
 
 ## Encoding
 
-`Chatter.Rest.UriTemplates` percent-encodes values as UTF-8 bytes.
+`Chatter.Rest.UriTemplates` percent-encodes values as UTF-8 bytes. Supplied
+strings must be well-formed UTF-16: expanding a value that contains an
+unpaired surrogate throws `FormatException` — see
+[Unpaired surrogates in values](docs/usage.md#unpaired-surrogates-in-values).
 
 - Simple, label, path segment, path-style parameter, and query operators encode
   everything except RFC 3986 unreserved characters: `A-Z a-z 0-9 - . _ ~`.
@@ -489,10 +492,12 @@ filesystem path, validate it there as well.
 ## Level 4: Prefix, Explode, and Composite Values
 
 Level 4 templates use the `Expand(IDictionary<string, object?>)` overload to
-supply list and associative-array values alongside strings.
+supply list and associative-array values alongside strings. A prefix modifier
+truncates a string value in Unicode code points — see
+[Prefix truncation in code points](docs/usage.md#prefix-truncation-in-code-points).
 
 ```csharp
-// Prefix modifier: truncate value to 3 characters
+// Prefix modifier: truncate the value before expansion
 var uri = new UriTemplate("{var:3}").Expand(new Dictionary<string, object?>
 {
     ["var"] = "value"
@@ -526,65 +531,10 @@ string-only values, including templates with prefix modifiers.
 ### Associative-Array Pair Order
 
 RFC 6570 mandates no particular pair order for associative-array values, so
-this library defines one. The order is derived from the ordering contract of
-the value the caller supplies:
-
-| Supplied value | Pair order |
-|---|---|
-| A keyed or set container: `IDictionary<string, string>` (`Dictionary`, `FrozenDictionary`, `ImmutableDictionary`, `ConcurrentDictionary`, `ReadOnlyDictionary`, `SortedDictionary`, `SortedList`), including `UriTemplateValue.From(IDictionary<string, string>)`, or `ISet<KeyValuePair<string, string>>` (`HashSet`, `FrozenSet`, `ImmutableHashSet`) | Canonicalized: sorted ordinally by key (`string.CompareOrdinal`), with an ordinal comparison of the value as tie-break |
-| Every other `IEnumerable<KeyValuePair<string, string>>` — `List<KeyValuePair<string, string>>`, arrays, `ImmutableArray<...>`, `ImmutableList<...>`, `ReadOnlyCollection<...>`, `Queue<...>`, `LinkedList<...>`, `Stack<...>`, iterator methods, LINQ pipelines such as `Select` and `OrderBy`, and custom enumerables | Exactly the order the sequence enumerates, preserved verbatim, duplicate keys included |
-
-Canonicalization is a uniform policy applied to these two interfaces, not an
-inference about each container. Most keyed and set containers genuinely expose
-no way to place one pair before another — a `Dictionary<string, string>`
-enumerates in hash-slot order, which diverges from insertion order once an
-entry is removed and another inserted into the freed slot. A few do carry a
-caller-supplied order: `SortedDictionary`, `SortedList`, and `SortedSet`
-enumerate by their comparer, and the library replaces that order with its own.
-Sorting every implementation of these interfaces the same way means one
-interface always implies one ordering, and makes the expansion reproducible. The sort is ordinal, not
-culture-aware; the value tie-break exists because a set can hold two pairs
-with the same key, while dictionary keys are unique, so for a dictionary the
-order is purely ordinal by key.
-
-No .NET interface distinguishes an ordered sequence from an unordered one — a
-`Queue<T>` and a `HashSet<T>` are both just `IEnumerable<T>` — so the library
-does not guess: it canonicalizes only where the container type proves the
-order is not the caller's, and defers to the caller everywhere else. A
-sequence you deliberately ordered — including one that repeats a key — is
-never reordered. Note that `FrozenDictionary<string, string>` implements
-`IDictionary<string, string>` and `FrozenSet<KeyValuePair<string, string>>`
-implements `ISet<...>`, so both are canonicalized rather than
-order-preserving.
-
-```csharp
-// Dictionary input: keys sorted ordinally, whatever order they were added in
-new UriTemplate("{?keys*}").Expand(new Dictionary<string, object?>
-{
-    ["keys"] = new Dictionary<string, string>
-    {
-        ["semi"] = ";",
-        ["dot"] = ".",
-        ["comma"] = ","
-    }
-});
-// "?comma=%2C&dot=.&semi=%3B"
-
-// Ordered sequence input: supplied order preserved, duplicates included
-new UriTemplate("{?tags*}").Expand(new Dictionary<string, object?>
-{
-    ["tags"] = new List<KeyValuePair<string, string>>
-    {
-        new("tag", "a"),
-        new("tag", "b")
-    }
-});
-// "?tag=a&tag=b"
-```
-
-**Callers who need a specific pair order should pass a
-`List<KeyValuePair<string, string>>`.** See the
-[usage guide](docs/usage.md#associative-array-pair-order) for details.
+this library defines one, derived from the ordering contract of the container
+type the caller supplies — see
+[Associative-array pair order](docs/usage.md#associative-array-pair-order) in
+the usage guide for the authoritative ordering contract.
 
 ## More Documentation
 

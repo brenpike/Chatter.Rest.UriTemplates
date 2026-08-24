@@ -220,7 +220,7 @@ The expander performs runtime type dispatch on each variable value. The type tes
 | `ISet<KeyValuePair<string, string>>` | Associative array expansion | Pair order canonicalized, same rule as `IDictionary`: a set defines membership only, not order. |
 | `IEnumerable<KeyValuePair<string, string>>` | Associative array expansion | Any other pair sequence: preserves the supplied order verbatim, duplicate keys included, for deterministic caller-controlled output. |
 | `IEnumerable<string>` | List expansion | Checked after the pair shapes so a pair sequence is not misread as a list. |
-| `null` | Treated as undefined | Omitted per RFC 6570 §2.3. |
+| `null` | Treated as undefined | Omitted per RFC 6570 §2.3 — caller-facing contract: [What counts as undefined](usage.md#what-counts-as-undefined). |
 | Any other type | `FormatException` | Unsupported value type. |
 
 Per-operator expansion algorithm:
@@ -229,15 +229,15 @@ Per-operator expansion algorithm:
    - Look up `varSpec.Name` in the `variables` dictionary. If absent or `null` (undefined): skip entirely.
    - Dispatch by runtime type (see table above).
    - **String values:**
-     - If `varSpec.PrefixLength` is set, validate the whole original value first (`UriTemplateEncoder.ValidateEncodable`, so an unpaired surrogate beyond the prefix boundary is still rejected), then truncate the value to that many Unicode code points (per RFC 6570 §2.4.1) using the internal `TruncateByCodePoints` method. The method walks the UTF-16 string, pairing valid high+low surrogate pairs as a single code point. This works on both `net8.0` and `netstandard2.0` without a `System.Text.Rune` dependency. Note: combining marks (e.g., `e` + U+0301) count as separate code points, so `{var:1}` on `"é"` keeps only `e`.
+     - If `varSpec.PrefixLength` is set, validate the whole original value first (`UriTemplateEncoder.ValidateEncodable`, so an unpaired surrogate beyond the prefix boundary is still rejected), then truncate the value to that many Unicode code points (per RFC 6570 §2.4.1) using the internal `TruncateByCodePoints` method. The method walks the UTF-16 string, pairing valid high+low surrogate pairs as a single code point. This works on both `net8.0` and `netstandard2.0` without a `System.Text.Rune` dependency. Note: combining marks (e.g., `e` + U+0301) count as separate code points, so `{var:1}` on `"é"` keeps only `e`. The caller-facing contract is [Prefix truncation in code points](usage.md#prefix-truncation-in-code-points).
      - If the (possibly truncated) value is empty: apply operator-specific empty-value rule (see [Operator Reference](#operator-reference)).
      - If non-empty: encode per operator encoding rule, then format per operator.
-   - **List values (non-explode):** encode each member, comma-join into a single composite value. For named operators, prepend `varname=`. Empty list is treated as undefined and omitted.
+   - **List values (non-explode):** encode each member, comma-join into a single composite value. For named operators, prepend `varname=`. Empty list is treated as undefined and omitted — see [What counts as undefined](usage.md#what-counts-as-undefined).
    - **List values (explode):** each member becomes a separate part. Named operators emit `varname=encodedMember` per member (with ifEmp rules for empty members); non-named operators emit value-only segments.
-   - **Associative array pair order:** pairs from an `IDictionary<string, string>` or `ISet<KeyValuePair<string, string>>` are sorted into canonical order (ordinal by key, ordinal by value as tie-break) before expansion; any other pair sequence is expanded in the order it enumerates.
-   - **Associative array values (non-explode):** flatten to alternating `key,value,key,value,...` — each key and value individually encoded, comma-joined. For named operators, prepend `varname=`. Empty associative array is treated as undefined.
+   - **Associative array pair order:** determined by which dispatch path the type-dispatch table above selects; the caller-facing ordering contract is [Associative-array pair order](usage.md#associative-array-pair-order).
+   - **Associative array values (non-explode):** flatten to alternating `key,value,key,value,...` — each key and value individually encoded, comma-joined. For named operators, prepend `varname=`. Empty associative array is treated as undefined — see [What counts as undefined](usage.md#what-counts-as-undefined).
    - **Associative array values (explode):** each pair becomes `encodedKey=encodedValue`, joined by operator separator. For named operators with empty values, ifEmp rules apply (`;` omits `=`; `?`/`&` include `=`).
-   - **Prefix on composite:** throws `FormatException`. Prefix modifier applies only to scalar string values.
+   - **Prefix on composite:** throws `FormatException`; a prefix modifier applies only to scalar string values — see [Prefix truncation in code points](usage.md#prefix-truncation-in-code-points).
    - **Null elements/values in composites:** throws `FormatException`. List elements and associative array values must be non-null strings.
 2. Join the formatted variable results with the operator's separator.
 3. Prepend the operator's prefix (if any) to the joined result.
@@ -400,7 +400,7 @@ internal static class UriTemplateEncoder
 }
 ```
 
-- `ValidateEncodable` — verifies a value is well-formed UTF-16 without allocating an encoded result; throws `FormatException` on an unpaired surrogate — what the message carries is governed by [Exception message content](usage.md#exception-message-content). Called on the original value before prefix truncation so rejection does not depend on where the invalid code unit sits relative to the prefix boundary. Both encode methods reject unpaired surrogates via the same validation.
+- `ValidateEncodable` — verifies a value is well-formed UTF-16 without allocating an encoded result; throws `FormatException` on an unpaired surrogate — what the message carries is governed by [Exception message content](usage.md#exception-message-content). Called on the original value before prefix truncation so rejection does not depend on where the invalid code unit sits relative to the prefix boundary. Both encode methods reject unpaired surrogates via the same validation. The caller-facing encodability contract is [Unpaired surrogates in values](usage.md#unpaired-surrogates-in-values).
 - `EncodeUnreserved` — passes through only unreserved characters (`A-Z a-z 0-9 - . _ ~`) unencoded; percent-encodes all other characters as UTF-8 bytes. Used by Level 1 and Level 3 operators.
 - `EncodeReserved` — passes through both unreserved and reserved characters unencoded; preserves existing valid pct-encoded triplets (`%XX`); percent-encodes everything else. Used by Level 2 operators (`+`, `#`).
 
@@ -477,6 +477,7 @@ The table below summarizes explode behavior for list and associative-array value
 - Applies only to scalar string values. Truncates the value to `N` Unicode code points (per RFC 6570 §2.4.1) before encoding.
 - The implementation walks UTF-16 with surrogate-pair pairing and works on both `net8.0` and `netstandard2.0` without `System.Text.Rune`. Combining marks count as separate code points; a surrogate pair counts as one code point.
 - Applying a prefix modifier to a list or associative-array value throws `FormatException`.
+- The caller-facing truncation contract is [Prefix truncation in code points](usage.md#prefix-truncation-in-code-points).
 
 **Explode modifier (`*`):**
 - For named operators (`;`, `?`, `&`): each list member becomes `varname=encodedMember`; each associative-array pair becomes `encodedKey=encodedValue`. Empty members/values follow the operator's ifEmp rule.
@@ -484,7 +485,7 @@ The table below summarizes explode behavior for list and associative-array value
 - Segments are joined by the operator's separator.
 
 **Empty composite values:**
-- An empty list (`Count == 0`) or empty associative array is treated as undefined per RFC 6570 §2.3 and produces no output.
+- An empty list (`Count == 0`) or empty associative array is treated as undefined per RFC 6570 §2.3 and produces no output — see [What counts as undefined](usage.md#what-counts-as-undefined).
 
 ---
 
