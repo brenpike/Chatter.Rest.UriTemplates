@@ -417,9 +417,12 @@ public sealed class UriTemplate
     /// Memoizing is what stops a single-pass or lazily evaluated sequence being drained by
     /// the first expression that names it, and what stops a mutable one giving two
     /// expressions two different answers. A view is built per entry, per expansion, so the
-    /// caller's sequence is read exactly once per entry that holds it; a value bound to
-    /// several entries is read once per referenced entry, however many expressions name
-    /// that entry's variable.
+    /// caller's sequence is read at most once per entry that holds it, and only when
+    /// expansion reaches that view's enumerator: a prefix modifier applied to a composite
+    /// value is rejected before enumeration begins, and a failure on an earlier expression
+    /// ends the expansion with later entries still unread. Where the read does happen, a
+    /// value bound to several entries is read once per referenced entry, however many
+    /// expressions name that entry's variable.
     /// </para>
     /// <para>
     /// Members are validated during the read rather than after it. Reading first and
