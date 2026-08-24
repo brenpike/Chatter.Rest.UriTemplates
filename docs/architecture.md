@@ -336,7 +336,8 @@ public sealed class UriTemplate
     /// <summary>
     /// Expands the URI template using the provided variable tuples, supporting composite
     /// value types for RFC 6570 Level 4 expansion.
-    /// Delegates to <see cref="Expand(IDictionary{string, object?})"/>.
+    /// Entry values support the same types as <see cref="Expand(IDictionary{string, object})"/>;
+    /// see that overload for the supported-type list.
     /// When duplicate keys are present, the first occurrence wins.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
@@ -399,7 +400,7 @@ internal static class UriTemplateEncoder
 }
 ```
 
-- `ValidateEncodable` — verifies a value is well-formed UTF-16 without allocating an encoded result; throws `FormatException` on an unpaired surrogate, and the message reports the character index of the offending code unit (not the variable name). Called on the original value before prefix truncation so rejection does not depend on where the invalid code unit sits relative to the prefix boundary. Both encode methods reject unpaired surrogates via the same validation.
+- `ValidateEncodable` — verifies a value is well-formed UTF-16 without allocating an encoded result; throws `FormatException` on an unpaired surrogate — what the message carries is governed by [Exception message content](usage.md#exception-message-content). Called on the original value before prefix truncation so rejection does not depend on where the invalid code unit sits relative to the prefix boundary. Both encode methods reject unpaired surrogates via the same validation.
 - `EncodeUnreserved` — passes through only unreserved characters (`A-Z a-z 0-9 - . _ ~`) unencoded; percent-encodes all other characters as UTF-8 bytes. Used by Level 1 and Level 3 operators.
 - `EncodeReserved` — passes through both unreserved and reserved characters unencoded; preserves existing valid pct-encoded triplets (`%XX`); percent-encodes everything else. Used by Level 2 operators (`+`, `#`).
 
