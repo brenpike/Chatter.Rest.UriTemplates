@@ -133,9 +133,9 @@ public sealed class UriTemplate
     /// <list type="bullet">
     ///   <item><description><see langword="null"/> — treated as undefined per RFC 6570 §2.3 (variable is omitted).</description></item>
     ///   <item><description><see cref="string"/> — simple string value. Supports Level 1–3 expansion and Level 4 prefix (<c>:N</c>) truncation; see "Prefix truncation in code points" in <c>docs/usage.md</c>.</description></item>
-    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="string"/> — list value. Expanded per RFC 6570 composite rules; an empty list is treated as undefined.</description></item>
-    ///   <item><description><see cref="IDictionary{TKey, TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array value; pair order is canonicalized per "Associative-array pair order" in <c>docs/usage.md</c>. An empty dictionary is treated as undefined.</description></item>
-    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value; pair order is determined by the container type per "Associative-array pair order" in <c>docs/usage.md</c>. An empty sequence is treated as undefined.</description></item>
+    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="string"/> — list value. Expanded per RFC 6570 composite rules.</description></item>
+    ///   <item><description><see cref="IDictionary{TKey, TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array value; pair order is canonicalized per "Associative-array pair order" in <c>docs/usage.md</c>.</description></item>
+    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value; pair order is determined by the container type per "Associative-array pair order" in <c>docs/usage.md</c>.</description></item>
     /// </list>
     /// Which inputs expand as undefined is governed by "What counts as undefined" in
     /// <c>docs/usage.md</c>.
@@ -145,8 +145,8 @@ public sealed class UriTemplate
     /// sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Exception messages for variable-value failures never contain value content; see
-    /// "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages the library constructs for variable-value failures never contain
+    /// value content; see "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
@@ -198,8 +198,8 @@ public sealed class UriTemplate
     /// sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Exception messages for variable-value failures never contain value content; see
-    /// "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages the library constructs for variable-value failures never contain
+    /// value content; see "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
@@ -348,8 +348,8 @@ public sealed class UriTemplate
     /// sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Exception messages for variable-value failures never contain value content; see
-    /// "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages the library constructs for variable-value failures never contain
+    /// value content; see "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// </summary>
     /// <param name="variables">Name/value tuples mapping variable names to values of the types supported by <see cref="Expand(IDictionary{string, object})"/>. Neither the array nor any key may be null.</param>
