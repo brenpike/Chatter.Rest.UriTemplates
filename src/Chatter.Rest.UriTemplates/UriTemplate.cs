@@ -100,10 +100,19 @@ public sealed class UriTemplate
     /// reference type analysis (for example a <c>netstandard2.0</c> consumer); such a caller gets
     /// an omitted variable rather than an exception.
     /// </para>
+    /// <para>
+    /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
+    /// "Variable materialization" in <c>docs/usage.md</c>.
+    /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to string values.</param>
     /// <returns>The expanded URI string.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="variables"/> is null. Also thrown when the supplied
+    /// dictionary yields an entry with a null key, in violation of the
+    /// <see cref="IDictionary{TKey, TValue}"/> contract — see "Variable materialization" in
+    /// <c>docs/usage.md</c>.
+    /// </exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
     /// percent-encoded. That message reports the character index within the value, not the
@@ -149,10 +158,19 @@ public sealed class UriTemplate
     /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
     /// See "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
+    /// <para>
+    /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
+    /// "Variable materialization" in <c>docs/usage.md</c>.
+    /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to values of the supported types listed above.</param>
     /// <returns>The expanded URI string.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="variables"/> is null. Also thrown when the supplied
+    /// dictionary yields an entry with a null key, in violation of the
+    /// <see cref="IDictionary{TKey, TValue}"/> contract — see "Variable materialization" in
+    /// <c>docs/usage.md</c>.
+    /// </exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value is not one of the supported types, when a prefix modifier
     /// (e.g. <c>{var:3}</c>) is applied to a composite value, when a composite value contains a
@@ -197,10 +215,19 @@ public sealed class UriTemplate
     /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
     /// See "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
+    /// <para>
+    /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
+    /// "Variable materialization" in <c>docs/usage.md</c>.
+    /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to <see cref="UriTemplateValue"/> instances.</param>
     /// <returns>The expanded URI string.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="variables"/> is null. Also thrown when the supplied
+    /// dictionary yields an entry with a null key, in violation of the
+    /// <see cref="IDictionary{TKey, TValue}"/> contract — see "Variable materialization" in
+    /// <c>docs/usage.md</c>.
+    /// </exception>
     /// <exception cref="FormatException">
     /// Thrown when a prefix modifier (e.g. <c>{var:3}</c>) is applied to a <see cref="ListValue"/>
     /// or <see cref="DictionaryValue"/>, or when a string held by a value contains an unpaired
@@ -282,6 +309,10 @@ public sealed class UriTemplate
     /// A <see langword="null"/> value is treated as undefined per RFC 6570 §2.3 (the variable
     /// is omitted), matching <see cref="Expand(IDictionary{string, string})"/>.
     /// </para>
+    /// <para>
+    /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
+    /// "Variable materialization" in <c>docs/usage.md</c>.
+    /// </para>
     /// </summary>
     /// <param name="variables">Name/value tuples. Neither the array nor any key may be null.</param>
     /// <returns>The expanded URI string.</returns>
@@ -322,14 +353,9 @@ public sealed class UriTemplate
     /// Expands the URI template using the provided variable tuples, supporting composite
     /// value types for RFC 6570 Level 4 expansion.
     /// <para>
-    /// Supported value types for <paramref name="variables"/> entries:
-    /// <list type="bullet">
-    ///   <item><description><see langword="null"/> — treated as undefined per RFC 6570 §2.3.</description></item>
-    ///   <item><description><see cref="string"/> — simple string value.</description></item>
-    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="string"/> — list value.</description></item>
-    ///   <item><description><see cref="IDictionary{TKey,TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array.</description></item>
-    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value. Supplied order is preserved verbatim, duplicates included, except for <see cref="ISet{T}"/> and <see cref="IDictionary{TKey,TValue}"/> implementations, which are canonicalized by ordinal key order; see <c>docs/usage.md</c> for the full ordering contract. An empty sequence is treated as undefined.</description></item>
-    /// </list>
+    /// Entry values support the same types as <see cref="Expand(IDictionary{string, object})"/>;
+    /// see that overload for the supported-type list. The shared per-entry copy and
+    /// memoization contract is "Variable materialization" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>When duplicate keys are present, the first occurrence wins.</para>
     /// <para>
@@ -345,7 +371,7 @@ public sealed class UriTemplate
     /// See "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// </summary>
-    /// <param name="variables">Name/value tuples mapping variable names to values of the supported types listed above. Neither the array nor any key may be null.</param>
+    /// <param name="variables">Name/value tuples mapping variable names to values of the types supported by <see cref="Expand(IDictionary{string, object})"/>. Neither the array nor any key may be null.</param>
     /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
@@ -412,8 +438,10 @@ public sealed class UriTemplate
     /// <para>
     /// Memoizing is what stops a single-pass or lazily evaluated sequence being drained by
     /// the first expression that names it, and what stops a mutable one giving two
-    /// expressions two different answers. The view is built once per expansion, so however
-    /// many expressions name the variable, the caller's sequence is read exactly once.
+    /// expressions two different answers. A view is built per entry, per expansion, so the
+    /// caller's sequence is read exactly once per entry that holds it; a value bound to
+    /// several entries is read once per referenced entry, however many expressions name
+    /// that entry's variable.
     /// </para>
     /// <para>
     /// Members are validated during the read rather than after it. Reading first and

@@ -202,6 +202,16 @@ Canonical behavioral contracts (in `docs/usage.md` and in XML doc comments) must
 
 The check for every contract sentence: could someone add a validation check tomorrow that makes this sentence false? If yes, it is keyed wrong; reword it as an obligation, a premise-conditioned consequence, or a prescriptive commitment. Worked examples: [Values must be finite sequences](usage.md#values-must-be-finite-sequences) and [Exception message content](usage.md#exception-message-content).
 
+### Behavioral contract keying — single source per primitive
+
+The wording clauses above govern how a contract sentence is phrased. This rule governs where a contract fact may live. The two are orthogonal: a sentence can satisfy every wording clause and still violate this rule.
+
+1. A behavior implemented in one shared internal step is documented at exactly one canonical anchored section in `docs/usage.md`, keyed to that step — not to any of the overloads that expose it.
+2. Every API surface exposing that step — overload prose in `docs/usage.md`, XML doc comments, `README.md` mirrors — carries at most one sentence plus a link to that canonical anchor, never a copy of the detail.
+3. A true sentence restated per-overload is a defect against this rule regardless of its content. Replication is the violation, so a review can flag it without first proving the restatement false or divergent.
+
+Worked examples: [Variable materialization](usage.md#variable-materialization), alongside the two wording examples cited above.
+
 ## 8. Test Conventions
 
 - **Framework:** xunit 2.9.x

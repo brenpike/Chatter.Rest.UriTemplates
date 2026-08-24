@@ -85,6 +85,7 @@ Expands the URI template using the provided variable dictionary.
 - Throws `ArgumentNullException` if `variables` is null.
 - Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded. That message reports the character index within the value, not the variable name — see [Exception message content](#exception-message-content).
 - Variables absent from the dictionary are treated as undefined and omitted per RFC 6570 rules.
+- Keys must be non-null strings; copy timing, ordinal name matching, and null-key behavior follow the shared contract in [Variable materialization](#variable-materialization).
 
 ```csharp
 var uri = template.Expand(new Dictionary<string, string>
@@ -103,6 +104,7 @@ Expands the URI template using a dictionary that supports composite value types 
 - **Returns:** the expanded URI string.
 - **Throws `ArgumentNullException`** if `variables` is null.
 - **Throws `FormatException`** if a variable value is not a supported type, if a prefix modifier is applied to a composite value (list or associative array), if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
+- **Keys must be non-null strings** -- copy timing, ordinal name matching, per-entry memoization, and null-key behavior follow the shared contract in [Variable materialization](#variable-materialization).
 
 Supported value types:
 - `null` — treated as undefined (variable is omitted).
@@ -121,6 +123,18 @@ var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
 
 The existing `Expand(IDictionary<string, string>)` overload still works for callers who only need string values (Level 1–3 inputs and string-only Level 4 like `{var:3}`).
 
+#### Variable materialization
+
+This is the authoritative statement of the input-materialization contract: how a variable-accepting `Expand` call takes in the caller's entries, and when, if ever, it reads their values. The contract is shared by all five variable-accepting overloads -- `Expand(IDictionary<string, string>)`, `Expand(IDictionary<string, object?>)`, `Expand(IDictionary<string, UriTemplateValue>)`, and both tuple overloads. Overload sections carry at most a summary sentence and a link here; the detail lives only in this section.
+
+- **Eager one-time copy.** Each call reads the caller's container exactly once, at call time, copying its entries into private storage. The copy records names and tests each value's runtime type; it enumerates no value. The first enumeration of a value happens at the first expression that names it, during expansion. (The `UriTemplateValue` overload's entries hold contents already materialized by `From` at construction -- see [Values must be finite sequences](#values-must-be-finite-sequences) -- so on that path no deferred caller sequence exists to enumerate.)
+- **Ordinal re-keying.** The copy re-keys every entry under an ordinal, case-sensitive comparison, so variable-name matching is ordinal and case-sensitive (RFC 6570 §2.3) regardless of the comparer the caller's container was created with. Consequence: a caller that supplies a case-insensitive dictionary keyed `"ID"` finds that `{id}` expands as undefined -- the container's own lookup semantics do not survive the copy.
+- **Variable names must be non-null strings.** This is a caller obligation on every overload. What a violation produces differs by input shape:
+  - The tuple overloads commit to rejecting an entry with a null key by throwing `ArgumentException` whose message names the offending entry index.
+  - For the three dictionary overloads the library withholds commitment on the exception identity. Today those paths have no dedicated guard: a custom `IDictionary` implementation that yields a null key during enumeration (a BCL `Dictionary` cannot hold one) surfaces an `ArgumentNullException` whose `paramName`, `key`, exists on no `Expand` overload -- an observation, not a contract. The asymmetry is tracked in [issue #60](https://github.com/brenpike/Chatter.Rest.UriTemplates/issues/60), and what a violation throws on this path may change when that issue is resolved.
+- **Per-entry memoization.** Within a single `Expand` call, each entry's value is enumerated at most once: the first expression that names the entry drains the value, records its members, and replays the recording for every later expression naming the same variable. The unit of memoization is the entry -- the binding of one variable name to one value -- not the value object. A single sequence instance bound to several referenced names is enumerated once per name, and each name after the first observes whatever a fresh enumeration of the already-drained sequence happens to yield: nothing, a throw, or different members. That outcome is determined by the sequence, not by the library -- a sequence-dependent consequence, not a promise. Memoization is scoped to the call: nothing is replayed across `Expand` calls.
+- **Never-named entries are never enumerated.** An entry whose name no expression in the template references is never enumerated at all.
+
 #### Values must be finite sequences
 
 List and associative-array values carry a caller obligation: **Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.**
@@ -130,10 +144,7 @@ The obligation is keyed to the caller, not to which checks the library happens t
 - **Consequence of violating it.** If expansion begins enumerating a value and that enumeration never terminates, `Expand` never returns.
 - **No early-failure guarantee.** Other contract violations may throw before or during enumeration; which failure surfaces first is unspecified and may change between releases. Callers must not rely on an early failure to bound an infinite sequence.
 
-Two properties remain guaranteed:
-
-- **Enumerated at most once, replayed after.** Within a single `Expand` call, the expander enumerates a given value at most once: the first expression that reads it drains it, records the members, and replays them for any later expression naming the same variable. A single-pass or lazily evaluated *finite* sequence is therefore safe within the call.
-- **Values the template never names are never enumerated at all**, so an unused lazy, blocking, or endless sequence alongside the referenced values is harmless.
+Two properties of [Variable materialization](#variable-materialization) bound this obligation: enumeration is memoized per entry -- per name-to-value binding, not per value object, see the canonical section for what a sequence bound to several names observes -- so a single-pass or lazily evaluated *finite* sequence bound to one referenced name is safe within the call; and never-named entries are never enumerated, so an unused lazy, blocking, or endless sequence alongside the referenced values is harmless.
 
 For illustration only, a named value can also go unread when expansion never reaches its enumerator. These cases are not exhaustive, and none of them is a promise:
 
@@ -149,7 +160,7 @@ The same obligation applies to `UriTemplateValue.From(IEnumerable<string>)`, wit
 Messages thrown for variable-value failures are written so callers can log them safely. The library maintains one commitment about their content:
 
 - **Value content never appears.** Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted. This is a promise the library maintains, not a description of throw sites someone has checked — a future throw site that quoted value content would be a bug against this contract. The messages therefore stay safe to log even when values carry secrets or personal data.
-- **Which identifying datum appears varies by failure — illustrations, not promises.** Most expansion messages name the failing variable, for example `Variable 'keys' contains a null key. Associative array keys must be non-null strings.` The associative-array null-*value* message additionally quotes the offending key: `Variable 'keys' contains a null value for key 'dot'. Associative array values must be non-null strings.` A tuple entry with a null key reports the entry index; a value containing an unpaired UTF-16 surrogate reports the character index within the value; an unsupported value type quotes the value's runtime type name. `UriTemplateValue.From` keeps the same posture at construction time: its messages never contain supplied values — the null-value message quotes the offending key (`Dictionary must not contain null values (key: 'dot').`), the null-key message names neither the key nor the value (the key is null), and the null-element message carries no supplied data at all. No message is promised to carry any particular datum.
+- **Which identifying datum appears varies by failure — illustrations, not promises.** Most expansion messages name the failing variable, for example `Variable 'keys' contains a null key. Associative array keys must be non-null strings.` The associative-array null-*value* message additionally quotes the offending key: `Variable 'keys' contains a null value for key 'dot'. Associative array values must be non-null strings.` A tuple entry with a null key reports the entry index (for that failure alone the index is committed, not illustrative -- see [Variable materialization](#variable-materialization)); a value containing an unpaired UTF-16 surrogate reports the character index within the value; an unsupported value type quotes the value's runtime type name. `UriTemplateValue.From` keeps the same posture at construction time: its messages never contain supplied values — the null-value message quotes the offending key (`Dictionary must not contain null values (key: 'dot').`), the null-key message names neither the key nor the value (the key is null), and the null-element message carries no supplied data at all. No message is promised to carry any particular datum.
 - **Wording is not API.** Message wording, and which identifying detail appears, are not stable API and may change between releases; callers must not parse messages. The only stable property is the absence of value content. Associative-array keys and runtime type names are supplied-adjacent data that MAY appear in messages, so a caller whose keys are themselves sensitive cannot treat these messages as key-free.
 
 This commitment is scoped to messages about variable values. Parse-time `FormatException` messages from the [constructor](#constructor-exceptions) deliberately quote template text — variable names and offending literal characters — because there the template itself is the malformed input.
@@ -159,7 +170,7 @@ This commitment is scoped to messages about variable values. Parse-time `FormatE
 Tuple convenience overload. First-wins for duplicate keys.
 
 - Throws `ArgumentNullException` if `variables` is null.
-- Throws `ArgumentException` if an entry has a null key; the message names the entry index.
+- Throws `ArgumentException` if an entry has a null key; the committed message content and the rest of the shared input contract (copy timing, ordinal name matching) live in [Variable materialization](#variable-materialization).
 - Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded. That message reports the character index within the value, not the variable name — see [Exception message content](#exception-message-content).
 
 ```csharp
@@ -185,7 +196,7 @@ var uri = template.Expand(
 Tuple convenience overload for composite values. Accepts the same value types as the canonical path it delegates to — `string`, `IEnumerable<string>` lists, `IDictionary<string, string>` dictionaries, `IEnumerable<KeyValuePair<string, string>>` pair sequences (see [Associative-array pair order](#associative-array-pair-order)), and `null` — via `object?`. First-wins for duplicate keys. Delegates to the canonical `IDictionary<string, object?>` expansion path.
 
 - Throws `ArgumentNullException` if `variables` is null.
-- Throws `ArgumentException` if an entry has a null key; the message names the entry index.
+- Throws `ArgumentException` if an entry has a null key; the committed message content and the rest of the shared input contract (copy timing, ordinal name matching, per-entry memoization) live in [Variable materialization](#variable-materialization).
 - Throws `FormatException` if a value is not a supported type (including `UriTemplateValue` -- use the dedicated overload instead), if a prefix modifier is applied to a composite value, if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
 
 ```csharp
@@ -620,6 +631,8 @@ The corresponding `Expand` overload:
 ```csharp
 public string Expand(IDictionary<string, UriTemplateValue> variables);
 ```
+
+Keys must be non-null strings; this overload shares the input-materialization contract in [Variable materialization](#variable-materialization) (copy timing, ordinal name matching, per-entry memoization, null-key behavior).
 
 ### String value
 
