@@ -91,11 +91,8 @@ public sealed class UriTemplate
     /// Expands the URI template using the provided variable dictionary.
     /// All values are treated as simple strings (Levels 1–3).
     /// <para>
-    /// A <see langword="null"/> value is treated as undefined per RFC 6570 §2.3 (the variable
-    /// is omitted), matching <see cref="Expand(IDictionary{string, object})"/>. The value type is
-    /// declared non-nullable, so a null can only arrive from a caller that bypasses nullable
-    /// reference type analysis (for example a <c>netstandard2.0</c> consumer); such a caller gets
-    /// an omitted variable rather than an exception.
+    /// A <see langword="null"/> value is treated as undefined (the variable is omitted); see
+    /// "What counts as undefined" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
@@ -107,7 +104,8 @@ public sealed class UriTemplate
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
-    /// percent-encoded; see "Exception message content" in <c>docs/usage.md</c>.
+    /// percent-encoded; what the message carries is governed by "Exception message content"
+    /// in <c>docs/usage.md</c>. See "Unpaired surrogates in values" in <c>docs/usage.md</c>.
     /// </exception>
     public string Expand(IDictionary<string, string> variables)
     {
@@ -134,11 +132,13 @@ public sealed class UriTemplate
     /// Supported value types:
     /// <list type="bullet">
     ///   <item><description><see langword="null"/> — treated as undefined per RFC 6570 §2.3 (variable is omitted).</description></item>
-    ///   <item><description><see cref="string"/> — simple string value. Supports Level 1–3 expansion and Level 4 prefix (<c>:N</c>) truncation when specified in the template.</description></item>
+    ///   <item><description><see cref="string"/> — simple string value. Supports Level 1–3 expansion and Level 4 prefix (<c>:N</c>) truncation; see "Prefix truncation in code points" in <c>docs/usage.md</c>.</description></item>
     ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="string"/> — list value. Expanded per RFC 6570 composite rules; an empty list is treated as undefined.</description></item>
-    ///   <item><description><see cref="IDictionary{TKey, TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array value. An empty dictionary is treated as undefined.</description></item>
-    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value. Supplied order is preserved verbatim, duplicates included, except for <see cref="ISet{T}"/> implementations, which are unordered and are canonicalized by ordinal key order; see <c>docs/usage.md</c> for the full ordering contract. An empty sequence is treated as undefined.</description></item>
+    ///   <item><description><see cref="IDictionary{TKey, TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array value; pair order is canonicalized per "Associative-array pair order" in <c>docs/usage.md</c>. An empty dictionary is treated as undefined.</description></item>
+    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value; pair order is determined by the container type per "Associative-array pair order" in <c>docs/usage.md</c>. An empty sequence is treated as undefined.</description></item>
     /// </list>
+    /// Which inputs expand as undefined is governed by "What counts as undefined" in
+    /// <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// Every composite value supplied for a variable the template names must be a finite
@@ -160,7 +160,8 @@ public sealed class UriTemplate
     /// Thrown when a variable value is not one of the supported types, when a prefix modifier
     /// (e.g. <c>{var:3}</c>) is applied to a composite value, when a composite value contains a
     /// null element, key, or value, or when a string value, list element, or associative-array
-    /// key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
+    /// key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded. See
+    /// "Unpaired surrogates in values" in <c>docs/usage.md</c>.
     /// </exception>
     public string Expand(IDictionary<string, object?> variables)
     {
@@ -189,8 +190,8 @@ public sealed class UriTemplate
     /// <see cref="UriTemplateValue"/> instances, supporting all RFC 6570
     /// Level 1–4 value types through a strongly-typed API.
     /// <para>
-    /// A <see langword="null"/> entry is treated as undefined per RFC 6570 §2.3 (the variable is
-    /// omitted), matching <see cref="Expand(IDictionary{string, object})"/>.
+    /// A <see langword="null"/> entry is treated as undefined (the variable is omitted); see
+    /// "What counts as undefined" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// Every composite value supplied for a variable the template names must be a finite
@@ -213,7 +214,8 @@ public sealed class UriTemplate
     /// or <see cref="DictionaryValue"/>, or when a string held by a value contains an unpaired
     /// UTF-16 surrogate and cannot be percent-encoded; unsupported types and null members are
     /// unreachable through this overload, because <see cref="UriTemplateValue.From(string)"/> and
-    /// its sibling factories validate their contents at construction.
+    /// its sibling factories validate their contents at construction. See "Unpaired surrogates
+    /// in values" in <c>docs/usage.md</c>.
     /// </exception>
     public string Expand(IDictionary<string, UriTemplateValue> variables)
     {
@@ -286,8 +288,8 @@ public sealed class UriTemplate
     /// simple strings (Levels 1–3).
     /// <para>When duplicate keys are present, the first occurrence wins.</para>
     /// <para>
-    /// A <see langword="null"/> value is treated as undefined per RFC 6570 §2.3 (the variable
-    /// is omitted), matching <see cref="Expand(IDictionary{string, string})"/>.
+    /// A <see langword="null"/> value is treated as undefined (the variable is omitted); see
+    /// "What counts as undefined" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
@@ -300,7 +302,8 @@ public sealed class UriTemplate
     /// <exception cref="ArgumentException">Thrown when an entry has a null key; see "Variable materialization" in <c>docs/usage.md</c>.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
-    /// percent-encoded; see "Exception message content" in <c>docs/usage.md</c>.
+    /// percent-encoded; what the message carries is governed by "Exception message content"
+    /// in <c>docs/usage.md</c>. See "Unpaired surrogates in values" in <c>docs/usage.md</c>.
     /// </exception>
     public string Expand(params (string Key, string Value)[] variables)
     {
@@ -357,7 +360,8 @@ public sealed class UriTemplate
     /// Thrown when a variable value is not one of the supported types, when a prefix modifier
     /// (e.g. <c>{var:3}</c>) is applied to a composite value, when a composite value contains a
     /// null element, key, or value, or when a string value, list element, or associative-array
-    /// key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
+    /// key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded. See
+    /// "Unpaired surrogates in values" in <c>docs/usage.md</c>.
     /// </exception>
     public string Expand(params (string Key, object? Value)[] variables)
     {
@@ -563,7 +567,8 @@ public sealed class UriTemplate
     }
 
     /// <summary>
-    /// Expands the URI template with no variables. All variable references are treated as undefined.
+    /// Expands the URI template with no variables. All variable references are treated as
+    /// undefined; see "What counts as undefined" in <c>docs/usage.md</c>.
     /// </summary>
     /// <returns>The expanded URI string with all variables omitted.</returns>
     public string Expand() => ExpandCore(new Dictionary<string, object?>(StringComparer.Ordinal));
