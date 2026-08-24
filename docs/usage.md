@@ -83,8 +83,8 @@ UriTemplate template = factory.Create("/orders{?status,page}");
 Expands the URI template using the provided variable dictionary.
 
 - Throws `ArgumentNullException` if `variables` is null.
-- Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded; what the message carries is governed by [Exception message content](#exception-message-content).
-- Variables absent from the dictionary are treated as undefined and omitted per RFC 6570 rules.
+- Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded — see [Unpaired surrogates in values](#unpaired-surrogates-in-values); what the message carries is governed by [Exception message content](#exception-message-content).
+- Variables absent from the dictionary are treated as undefined and omitted per RFC 6570 rules — see [What counts as undefined](#what-counts-as-undefined).
 - Keys must be non-null strings; copy timing, ordinal name matching, and null-key behavior follow the shared contract in [Variable materialization](#variable-materialization).
 
 ```csharp
@@ -103,15 +103,15 @@ Expands the URI template using a dictionary that supports composite value types 
 - **Parameter:** `variables` — a dictionary mapping variable names to values.
 - **Returns:** the expanded URI string.
 - **Throws `ArgumentNullException`** if `variables` is null.
-- **Throws `FormatException`** if a variable value is not a supported type, if a prefix modifier is applied to a composite value (list or associative array), if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
+- **Throws `FormatException`** if a variable value is not a supported type, if a prefix modifier is applied to a composite value (list or associative array — see [Prefix truncation in code points](#prefix-truncation-in-code-points)), if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded — see [Unpaired surrogates in values](#unpaired-surrogates-in-values).
 - **Keys must be non-null strings** -- copy timing, ordinal name matching, per-entry memoization, and null-key behavior follow the shared contract in [Variable materialization](#variable-materialization).
 
 Supported value types:
-- `null` — treated as undefined (variable is omitted).
+- `null` — treated as undefined (variable is omitted) — see [What counts as undefined](#what-counts-as-undefined).
 - `string` — simple string value. Works with all operators and Level 4 prefix modifiers.
-- `IEnumerable<string>` (e.g., `string[]`, `List<string>`) — list value. An empty list is treated as undefined.
-- `IDictionary<string, string>` (e.g., `Dictionary<string, string>`) — associative array value, expanded with keys sorted by `string.CompareOrdinal`. An empty dictionary is treated as undefined. See [Associative-array pair order](#associative-array-pair-order).
-- `IEnumerable<KeyValuePair<string, string>>` — associative array value. Pair order is determined by the container type: `IDictionary<string, string>` and `ISet<KeyValuePair<string, string>>` are canonicalized (sorted ordinally by key with the value as tie-break); every other enumerable — `List<KeyValuePair<string, string>>`, arrays, `Queue<...>`, iterator methods, LINQ pipelines — is expanded in exactly the order it enumerates, duplicate keys included. An empty sequence is treated as undefined. See [Associative-array pair order](#associative-array-pair-order).
+- `IEnumerable<string>` (e.g., `string[]`, `List<string>`) — list value. An empty list is treated as undefined — see [What counts as undefined](#what-counts-as-undefined).
+- `IDictionary<string, string>` (e.g., `Dictionary<string, string>`) — associative array value; pair order is canonicalized per [Associative-array pair order](#associative-array-pair-order). An empty dictionary is treated as undefined — see [What counts as undefined](#what-counts-as-undefined).
+- `IEnumerable<KeyValuePair<string, string>>` — associative array value; pair order is determined by the container type per [Associative-array pair order](#associative-array-pair-order). An empty sequence is treated as undefined — see [What counts as undefined](#what-counts-as-undefined).
 
 ```csharp
 var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
@@ -149,7 +149,7 @@ Two properties of [Variable materialization](#variable-materialization) bound th
 For illustration only, a named value can also go unread when expansion never reaches its enumerator. These cases are not exhaustive, and none of them is a promise:
 
 - Expansion may stop at an earlier failure first: `{bad,later}` can report `bad` and leave `later` untouched.
-- A varspec may be rejected before its enumerator is entered: a prefix modifier over a composite is invalid per RFC 6570 and throws `FormatException`; today that check runs before a single member is read, so `{items:1}` with an endless `IEnumerable<string>` happens to throw rather than hang — but whether that check fires before enumeration is exactly the ordering this section declines to promise.
+- A varspec may be rejected before its enumerator is entered: a prefix modifier over a composite is invalid and throws `FormatException` (see [Prefix truncation in code points](#prefix-truncation-in-code-points)); today that check runs before a single member is read, so `{items:1}` with an endless `IEnumerable<string>` happens to throw rather than hang — but whether that check fires before enumeration is exactly the ordering this section declines to promise.
 
 The obligation above applies to every composite value supplied for a named variable, whether or not the current implementation would reach it.
 
@@ -171,7 +171,7 @@ Tuple convenience overload. First-wins for duplicate keys.
 
 - Throws `ArgumentNullException` if `variables` is null.
 - Throws `ArgumentException` if an entry has a null key; the committed message content and the rest of the shared input contract (copy timing, ordinal name matching) live in [Variable materialization](#variable-materialization).
-- Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded; what the message carries is governed by [Exception message content](#exception-message-content).
+- Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded — see [Unpaired surrogates in values](#unpaired-surrogates-in-values); what the message carries is governed by [Exception message content](#exception-message-content).
 
 ```csharp
 var uri = template.Expand(
@@ -197,7 +197,7 @@ Tuple convenience overload for composite values. Accepts the same value types as
 
 - Throws `ArgumentNullException` if `variables` is null.
 - Throws `ArgumentException` if an entry has a null key; the committed message content and the rest of the shared input contract (copy timing, ordinal name matching, per-entry memoization) live in [Variable materialization](#variable-materialization).
-- Throws `FormatException` if a value is not a supported type (including `UriTemplateValue` -- use the dedicated overload instead), if a prefix modifier is applied to a composite value, if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
+- Throws `FormatException` if a value is not a supported type (including `UriTemplateValue` -- use the dedicated overload instead), if a prefix modifier is applied to a composite value (see [Prefix truncation in code points](#prefix-truncation-in-code-points)), if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded — see [Unpaired surrogates in values](#unpaired-surrogates-in-values).
 
 ```csharp
 var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
@@ -236,7 +236,7 @@ var uri = new UriTemplate("/users/{id}").Expand(
 
 ### `string Expand()`
 
-Expands the URI template with all variables undefined. Every expression is omitted per RFC 6570 rules — equivalent to passing an empty dictionary.
+Expands the URI template with all variables undefined. Every expression is omitted per RFC 6570 rules — equivalent to passing an empty dictionary; see [What counts as undefined](#what-counts-as-undefined).
 
 ```csharp
 var uri = new UriTemplate("/orders{?status,page}").Expand();
@@ -421,6 +421,18 @@ Even under `{+}` and `{#}`, characters outside the reserved and unreserved sets 
 
 That guarantee is scoped to *raw* control characters in the value, and it is not an end-to-end guarantee against HTTP header splitting. As the trust-boundary note above states, `{+}` and `{#}` preserve valid percent triplets, so a caller-supplied `%0d%0a` survives expansion unchanged (`{+p}` with `p = "%0d%0aX: y"` yields `%0d%0aX:%20y`) and becomes CR LF again in any consumer that percent-decodes the value before placing it in a header. What this library guarantees is that it never *introduces* a raw control character into the output; whether a decoded value is safe in a header, a host position, or a filesystem path must be validated where that decoding happens.
 
+### Unpaired surrogates in values
+
+This is the authoritative statement of the value-encodability contract. It is shared by every `Expand` overload because every expansion routes through the library's one validating encoder step.
+
+Percent-encoding converts text to UTF-8 bytes, and UTF-8 cannot represent an unpaired UTF-16 surrogate (a high surrogate without a matching low, or a lone low surrogate). Supplying well-formed UTF-16 is therefore a caller obligation, and it covers every string the expansion encodes: string values, list elements, and associative-array keys and values.
+
+- **Consequence of violating it.** If expansion reaches a string containing an unpaired surrogate, that string cannot be percent-encoded and `Expand` throws `FormatException`. What the message carries is governed by [Exception message content](#exception-message-content).
+- **A prefix modifier does not narrow the obligation.** The library commits to validating the whole supplied value: an unpaired surrogate is rejected even when a `{var:N}` prefix would have truncated it away — see [Prefix truncation in code points](#prefix-truncation-in-code-points).
+- **Whether a violating value is reached is not promised.** Which entries are read at all is governed by [Variable materialization](#variable-materialization), and which failure surfaces first by the ordering non-promises in [Values must be finite sequences](#values-must-be-finite-sequences).
+
+This contract is about supplied values at expansion time. An unpaired surrogate in the template's own literal text is a parse-time failure, rejected by the constructor — see [Constructor exceptions](#constructor-exceptions).
+
 ---
 
 ## 7. LinkObject Integration
@@ -431,7 +443,17 @@ For integration with the HAL `LinkObject`, see the [Chatter.Rest.Hal](https://gi
 
 ## 8. Undefined Variables
 
-When a variable referenced in the template is absent from the provided dictionary, it is treated as **undefined** and omitted entirely per RFC 6570 rules. No placeholder or literal `{var}` text is left in the output.
+When a variable referenced in the template is undefined, the library commits to omitting it entirely per RFC 6570 rules: no placeholder or literal `{var}` text is left in the output.
+
+### What counts as undefined
+
+This is the authoritative statement of which inputs expand as undefined. The mapping is a commitment the library maintains, shared by every `Expand` overload whose input shape can express the case:
+
+- **Absent entry** — no supplied entry has the variable's name, under the ordinal, case-sensitive matching of [Variable materialization](#variable-materialization). The no-argument `Expand()` is this case for every variable.
+- **Null value** — the entry's value is `null`. This holds on every overload: the `object?`-typed and `UriTemplateValue`-typed paths, and also the `string`-typed paths, where the value is declared non-nullable but a null that arrives anyway (for example from a caller without nullable reference type analysis) is treated as undefined rather than rejected.
+- **Empty composite** — the entry's value is a list, associative array, or pair sequence that yields no members, on both the `object?` and `UriTemplateValue` paths.
+
+An empty **string** is not undefined: the variable expands under the operator's empty-value rule (`{?status}` with `""` yields `?status=`; `{;x}` with `""` yields `;x`).
 
 ```csharp
 var t = new UriTemplate("/orders{?status,page}");
@@ -453,12 +475,24 @@ This applies consistently across all operator types. Operator prefixes (`?`, `#`
 
 RFC 6570 Level 4 adds two value modifiers and composite value types:
 
-- **Prefix** (`{var:3}`) — truncate a string value to a maximum number of Unicode code points before expansion (per RFC 6570 §2.4.1). Surrogate pairs count as one code point; combining marks (e.g., `e` + U+0301) count as separate code points.
+- **Prefix** (`{var:3}`) — truncate a string value before expansion — see [Prefix truncation in code points](#prefix-truncation-in-code-points).
 - **Explode** (`{var*}`) — expand list or associative array values into separate segments per the operator's rules.
 
 Level 4 expansion requires the `Expand(IDictionary<string, object?>)` overload so that list and associative-array values can be supplied alongside string values.
 
-### Prefix modifier on a string
+### Prefix truncation in code points
+
+This is the authoritative statement of the prefix-truncation contract. It is shared by every operator and overload because every prefixed expansion routes through the library's one internal truncation step.
+
+`{var:N}` truncates a string value to at most its first N Unicode **code points** before encoding (RFC 6570 §2.4.1). The library commits to both boundary properties that follow from that unit:
+
+- **Not UTF-16 code units** — a surrogate pair counts as one code point and is never split by truncation.
+- **Not grapheme clusters** — a combining mark counts as its own code point, so `{var:1}` on `"é"` composed as `e` + U+0301 keeps only `e`.
+
+Two adjacent contracts live at their own anchors:
+
+- A prefix modifier applies only to string values: applying it to a composite value (a list or associative array) is invalid per RFC 6570 and throws `FormatException`. Whether that rejection fires before the composite is enumerated is deliberately unpromised — see [Values must be finite sequences](#values-must-be-finite-sequences).
+- Truncation does not narrow the value's encodability obligation: an unpaired surrogate beyond the prefix boundary is still rejected — see [Unpaired surrogates in values](#unpaired-surrogates-in-values).
 
 ```csharp
 var uri = new UriTemplate("{var:3}").Expand(new Dictionary<string, object?>
@@ -669,7 +703,7 @@ var uri = new UriTemplate("{?keys*}").Expand(new Dictionary<string, UriTemplateV
 // Result: "?comma=%2C&dot=.&semi=%3B"
 ```
 
-`UriTemplateValue.From(IDictionary<string, string>)` follows the same rule as a plain `IDictionary<string, string>`: keys are sorted by `string.CompareOrdinal`. To choose the pair order, supply a `List<KeyValuePair<string, string>>` through the `IDictionary<string, object?>` overload instead — see [Associative-array pair order](#associative-array-pair-order).
+`UriTemplateValue.From(IDictionary<string, string>)` follows the same canonicalized pair order as a plain `IDictionary<string, string>` — see [Associative-array pair order](#associative-array-pair-order). To choose the pair order yourself, supply a `List<KeyValuePair<string, string>>` through the `IDictionary<string, object?>` overload instead.
 
 ### Mixed value kinds in one call
 
