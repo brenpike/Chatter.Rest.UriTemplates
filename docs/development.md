@@ -190,6 +190,18 @@ The source set for that decision is the package's own `src/` directory plus `src
 
 All projects have `<Nullable>enable</Nullable>`.
 
+### Behavioral contract wording
+
+Canonical behavioral contracts (in `docs/usage.md` and in XML doc comments) must be keyed so that a guard, a throw site, or a future code change cannot falsify them:
+
+1. State what the caller must guarantee (an obligation), not what the library will do.
+2. Condition consequences on the failure actually occurring, so a guard that fires negates the premise rather than contradicting the sentence.
+3. Write library promises as prescriptive commitments: a future code path that violates one is a bug against the contract, not a counterexample that falsifies the docs.
+4. Mark example lists as explicitly non-exhaustive.
+5. Mirrors (e.g. `README.md`) carry only the obligation or commitment sentence plus a link to the canonical `docs/usage.md` anchor, never a copy of the detail.
+
+The check for every contract sentence: could someone add a validation check tomorrow that makes this sentence false? If yes, it is keyed wrong; reword it as an obligation, a premise-conditioned consequence, or a prescriptive commitment. Worked examples: [Values must be finite sequences](usage.md#values-must-be-finite-sequences) and [Exception message content](usage.md#exception-message-content).
+
 ## 8. Test Conventions
 
 - **Framework:** xunit 2.9.x

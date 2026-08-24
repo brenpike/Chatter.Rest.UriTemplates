@@ -21,6 +21,7 @@ Review PRs for:
 - maintainability
 - missing or weak tests
 - risky behavior changes
+- universally-quantified behavioral claims, in prose docs or XML doc comments, not keyed per the "Behavioral contract wording" convention in `docs/development.md`
 
 ## Severity
 
