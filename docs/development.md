@@ -23,7 +23,7 @@ src/
 test/
   Chatter.Rest.UriTemplates.Tests/
     Chatter.Rest.UriTemplates.Tests.csproj  <- targets net8.0
-    UriTemplate*Tests.cs                    <- 14 test classes; complete list in section 4
+    *Tests.cs                               <- 15 test classes; complete list in section 4
     uritemplate-test/                       <- official RFC 6570 test-suite submodule (JSON fixtures)
   Chatter.Rest.UriTemplates.DependencyInjection.Tests/
     Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj  <- targets net8.0
@@ -92,7 +92,7 @@ dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Res
 
 **Test classes (complete list — update this section when adding or removing a test class):**
 
-Core test project (`test/Chatter.Rest.UriTemplates.Tests/`), 14 classes:
+Core test project (`test/Chatter.Rest.UriTemplates.Tests/`), 15 classes:
 
 - `UriTemplateLevel1Tests` — simple string expansion
 - `UriTemplateLevel2Tests` — reserved and fragment expansion
@@ -108,6 +108,7 @@ Core test project (`test/Chatter.Rest.UriTemplates.Tests/`), 14 classes:
 - `UriTemplateTupleOverloadTests` — tuple-based `Expand` overloads
 - `UriTemplateTypeValidationTests` — construction-time validation of token types and the operator strategy factory
 - `UriTemplateValueTests` — `UriTemplateValue` factory methods and the `UriTemplateValue`-dictionary `Expand` overload
+- `XmlDocExceptionTagShapeTests` — mechanical enforcement of the `<exception>`-tag shape convention against the core assembly's generated XML documentation (see section 7)
 
 DI test project (`test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`), 1 class:
 

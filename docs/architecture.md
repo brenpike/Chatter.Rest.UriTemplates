@@ -330,7 +330,7 @@ public sealed class UriTemplate
     /// Expands the URI template using the provided key-value pairs.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; see "Variable materialization" in <c>docs/usage.md</c>.</exception>
     public string Expand(params (string Key, string Value)[] variables);
 
     /// <summary>
@@ -341,7 +341,7 @@ public sealed class UriTemplate
     /// When duplicate keys are present, the first occurrence wins.
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; see "Variable materialization" in <c>docs/usage.md</c>.</exception>
     /// <exception cref="FormatException">Thrown when a value is not a supported type.</exception>
     public string Expand(params (string Key, object? Value)[] variables);
 

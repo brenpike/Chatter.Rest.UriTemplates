@@ -537,6 +537,7 @@ counts drift as tests are added. Treat them as a size indicator, not a contract.
 | `UriTemplateParserValidationTests` | Parser-level literal validation and encoding (ASCII acceptance set, pct-triplets, unpaired surrogates, `ucschar`/`iprivate` scalar sets, apostrophe pass-through), varname dot rules | — | 41 |
 | `UriTemplateTypeValidationTests` | Public token-type contracts: `UriTemplateExpressionToken` defensive copying and immutability, `UriTemplateVarSpec` validation, operator strategy resolution | — | 38 |
 | `UriTemplateSecurityTests` | Injection/smuggling-focused encoding behavior: reserved pass-through boundaries, control characters, pre-encoded input neutralization, duplicate names, null values | — | 11 |
+| `XmlDocExceptionTagShapeTests` | Mechanical enforcement of the `<exception>`-tag shape convention (`docs/development.md` §7) against the core assembly's generated XML documentation: at most one sentence, plus an optional trailing `docs/usage.md` pointer sentence that ends at the path | — | 4 |
 | `ServiceCollectionExtensionsTests` (in `Chatter.Rest.UriTemplates.DependencyInjection.Tests`) | `AddUriTemplates` DI registration: service lifetimes, custom parser override, idempotency (not RFC 6570 behavior) | — | 10 |
 
 Classes with `—` in the plan-section column have no dedicated scenario section in this

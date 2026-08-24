@@ -10,12 +10,13 @@ namespace Chatter.Rest.UriTemplates.Tests
 	/// Mechanically enforces the exception-tag shape convention of docs/development.md §7:
 	/// every &lt;exception&gt; tag in the core assembly's generated XML documentation carries
 	/// at most one sentence (a semicolon-joined clause is one sentence), optionally followed
-	/// by one trailing pointer sentence of the form: See "…" in docs/usage.md. Behavioral
+	/// by one trailing pointer sentence that is exactly: See "…" in docs/usage.md. That
+	/// pointer sentence ends at the path — prose appended after it is a violation. Behavioral
 	/// detail beyond that shape belongs in the canonical docs/usage.md anchor, not in the tag.
 	/// </summary>
 	public class XmlDocExceptionTagShapeTests
 	{
-		private static readonly Regex UsagePointerPattern = new(@"^[Ss]ee ""[^""]+"" in docs/usage\.md\b", RegexOptions.Compiled);
+		private static readonly Regex UsagePointerPattern = new(@"^[Ss]ee ""[^""]+"" in docs/usage\.md\.?$", RegexOptions.Compiled);
 		private static readonly Regex AbbreviationPattern = new(@"\b(?:[eE]\.g|[iI]\.e)\.", RegexOptions.Compiled);
 		private static readonly Regex DottedNumberPattern = new(@"(?<=\d)\.(?=\d)", RegexOptions.Compiled);
 		private static readonly Regex SentenceBoundaryPattern = new(@"(?<=[.!?])\s+", RegexOptions.Compiled);
@@ -79,6 +80,22 @@ namespace Chatter.Rest.UriTemplates.Tests
 			HasCompliantSentenceShape(XElement.Parse(fragment)).Should().BeFalse(
 				"a tag carrying more than one sentence of behavioral detail must fail the shape check, " +
 				"otherwise the check cannot enforce the convention");
+		}
+
+		[Theory]
+		[InlineData(
+			"<exception cref=\"T:System.ArgumentException\">Thrown when an entry has a null key. See " +
+			"\"Variable materialization\" in <c>docs/usage.md</c> and the message names the entry " +
+			"index.</exception>")]
+		[InlineData(
+			"<exception cref=\"T:System.FormatException\">Thrown when the template is malformed. See " +
+			"\"Constructor exceptions\" in <c>docs/usage.md</c> for the enumeration of malformed " +
+			"forms.</exception>")]
+		public void HasCompliantSentenceShape_ProseTrailingThePointerPath_IsRejected(string fragment)
+		{
+			HasCompliantSentenceShape(XElement.Parse(fragment)).Should().BeFalse(
+				"the trailing pointer sentence must end at the docs/usage.md path; behavioral detail " +
+				"appended after the path would otherwise sail through a start-anchored pattern");
 		}
 
 		private static bool HasCompliantSentenceShape(XElement exceptionTag)

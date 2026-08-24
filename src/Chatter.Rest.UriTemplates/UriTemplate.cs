@@ -297,7 +297,7 @@ public sealed class UriTemplate
     /// <param name="variables">Name/value tuples. Neither the array nor any key may be null.</param>
     /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; see "Variable materialization" in <c>docs/usage.md</c>.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
     /// percent-encoded; see "Exception message content" in <c>docs/usage.md</c>.
@@ -352,7 +352,7 @@ public sealed class UriTemplate
     /// <param name="variables">Name/value tuples mapping variable names to values of the types supported by <see cref="Expand(IDictionary{string, object})"/>. Neither the array nor any key may be null.</param>
     /// <returns>The expanded URI string.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
+    /// <exception cref="ArgumentException">Thrown when an entry has a null key; see "Variable materialization" in <c>docs/usage.md</c>.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value is not one of the supported types, when a prefix modifier
     /// (e.g. <c>{var:3}</c>) is applied to a composite value, when a composite value contains a
