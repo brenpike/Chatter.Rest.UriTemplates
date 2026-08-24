@@ -95,8 +95,8 @@ See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
 | Artifact | NuGet Package ID | Current Version |
 |---|---|---|
-| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.10.0` |
-| `Chatter.Rest.UriTemplates.DependencyInjection` | `Chatter.Rest.UriTemplates.DependencyInjection` | `0.2.0` |
+| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.11.0` |
+| `Chatter.Rest.UriTemplates.DependencyInjection` | `Chatter.Rest.UriTemplates.DependencyInjection` | `0.3.0` |
 
 ### Canonical Version Source
 

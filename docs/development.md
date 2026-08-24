@@ -119,7 +119,7 @@ DI test project (`test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`), 1
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.10.0.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.11.0.
 
 To pack the DI extension package:
 
@@ -127,7 +127,7 @@ To pack the DI extension package:
 dotnet pack src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj -c Release -o publish/nuget
 ```
 
-Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.2.0.
+Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.3.0.
 
 ## 6. CI/CD Parity
 
