@@ -83,6 +83,7 @@ UriTemplate template = factory.Create("/orders{?status,page}");
 Expands the URI template using the provided variable dictionary.
 
 - Throws `ArgumentNullException` if `variables` is null.
+- Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded. That message reports the character index within the value, not the variable name — see [Exception message content](#exception-message-content).
 - Variables absent from the dictionary are treated as undefined and omitted per RFC 6570 rules.
 
 ```csharp
@@ -101,7 +102,7 @@ Expands the URI template using a dictionary that supports composite value types 
 - **Parameter:** `variables` — a dictionary mapping variable names to values.
 - **Returns:** the expanded URI string.
 - **Throws `ArgumentNullException`** if `variables` is null.
-- **Throws `FormatException`** if a variable value is not a supported type, if a prefix modifier is applied to a composite value (list or associative array), or if a composite value contains null elements.
+- **Throws `FormatException`** if a variable value is not a supported type, if a prefix modifier is applied to a composite value (list or associative array), if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
 
 Supported value types:
 - `null` — treated as undefined (variable is omitted).
@@ -145,6 +146,8 @@ This posture is scoped to expansion-time messages about variable values. Parse-t
 Tuple convenience overload. First-wins for duplicate keys.
 
 - Throws `ArgumentNullException` if `variables` is null.
+- Throws `ArgumentException` if an entry has a null key; the message names the entry index.
+- Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded. That message reports the character index within the value, not the variable name — see [Exception message content](#exception-message-content).
 
 ```csharp
 var uri = template.Expand(
@@ -169,7 +172,8 @@ var uri = template.Expand(
 Tuple convenience overload for composite values. Accepts string, list, dictionary, and null values via `object?`. First-wins for duplicate keys. Delegates to the canonical `IDictionary<string, object?>` expansion path.
 
 - Throws `ArgumentNullException` if `variables` is null.
-- Throws `FormatException` if a value is not a supported type (including `UriTemplateValue` -- use the dedicated overload instead), if a prefix modifier is applied to a composite value, or if a composite value contains null elements.
+- Throws `ArgumentException` if an entry has a null key; the message names the entry index.
+- Throws `FormatException` if a value is not a supported type (including `UriTemplateValue` -- use the dedicated overload instead), if a prefix modifier is applied to a composite value, if a composite value contains a null element, key, or value, or if a string value, list element, or associative-array key or value contains an unpaired UTF-16 surrogate and cannot be percent-encoded.
 
 ```csharp
 var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
