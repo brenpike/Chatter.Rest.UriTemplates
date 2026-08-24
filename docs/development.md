@@ -212,6 +212,8 @@ The wording clauses above govern how a contract sentence is phrased. This rule g
 
 Worked examples: [Variable materialization](usage.md#variable-materialization), alongside the two wording examples cited above.
 
+**Enforcement note:** of the two rules above, one slice now has teeth. The `<exception>`-tag shape — at most one sentence carrying the throw condition (semicolon-joined clauses count as one sentence; `e.g.`/`i.e.` abbreviations and dotted references such as `§3.2.1` do not end one), optionally followed by a single trailing `See "…" in docs/usage.md` pointer sentence — is mechanically enforced against the core assembly's generated XML documentation by `XmlDocExceptionTagShapeTests` in `test/Chatter.Rest.UriTemplates.Tests/`. That test checks shape only, not whether a sentence is true. Everything else in this class — `<summary>` and `<remarks>` blocks, `docs/usage.md` overload prose, `README.md` and `docs/architecture.md` mirrors, and whether a canonical sentence actually matches the code — remains convention-only, enforced by review. The residual is tracked in issue #69.
+
 ## 8. Test Conventions
 
 - **Framework:** xunit 2.9.x
