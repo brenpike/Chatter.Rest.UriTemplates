@@ -17,15 +17,12 @@ public sealed class UriTemplate
     /// <param name="template">The RFC 6570 URI template string.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="template"/> is null.</exception>
     /// <exception cref="FormatException">
-    /// Thrown when the template is malformed: an unclosed <c>{</c>, a nested <c>{</c>, an empty
-    /// expression, a double operator, an invalid variable name, an invalid prefix or explode
-    /// modifier, or invalid literal text. See "Constructor exceptions" in <c>docs/usage.md</c>
-    /// for the full enumeration.
+    /// Thrown when the template is malformed; see "Constructor exceptions" in
+    /// <c>docs/usage.md</c> for the enumeration of malformed forms.
     /// </exception>
     /// <exception cref="NotSupportedException">
-    /// Thrown when an expression starts with one of the operators RFC 6570 §2.2 reserves for
-    /// future use: <c>=</c>, <c>,</c>, <c>!</c>, <c>@</c>, or <c>|</c>. See "Constructor
-    /// exceptions" in <c>docs/usage.md</c>.
+    /// Thrown when an expression starts with an operator RFC 6570 §2.2 reserves for future
+    /// use; see "Constructor exceptions" in <c>docs/usage.md</c>.
     /// </exception>
     public UriTemplate(string template)
         : this(template, UriTemplateParser.Default, UriTemplateExpander.Default)
@@ -107,17 +104,10 @@ public sealed class UriTemplate
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to string values.</param>
     /// <returns>The expanded URI string.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="variables"/> is null. Also thrown when the supplied
-    /// dictionary yields an entry with a null key, in violation of the
-    /// <see cref="IDictionary{TKey, TValue}"/> contract — see "Variable materialization" in
-    /// <c>docs/usage.md</c>.
-    /// </exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
-    /// percent-encoded. That message reports the character index within the value, not the
-    /// variable name, and never quotes value text — see "Exception message content" in
-    /// <c>docs/usage.md</c>.
+    /// percent-encoded; see "Exception message content" in <c>docs/usage.md</c>.
     /// </exception>
     public string Expand(IDictionary<string, string> variables)
     {
@@ -151,12 +141,12 @@ public sealed class UriTemplate
     /// </list>
     /// </para>
     /// <para>
-    /// Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.
-    /// See "Values must be finite sequences" in <c>docs/usage.md</c>.
+    /// Every composite value supplied for a variable the template names must be a finite
+    /// sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
-    /// See "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages for variable-value failures never contain value content; see
+    /// "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
@@ -165,12 +155,7 @@ public sealed class UriTemplate
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to values of the supported types listed above.</param>
     /// <returns>The expanded URI string.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="variables"/> is null. Also thrown when the supplied
-    /// dictionary yields an entry with a null key, in violation of the
-    /// <see cref="IDictionary{TKey, TValue}"/> contract — see "Variable materialization" in
-    /// <c>docs/usage.md</c>.
-    /// </exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value is not one of the supported types, when a prefix modifier
     /// (e.g. <c>{var:3}</c>) is applied to a composite value, when a composite value contains a
@@ -208,12 +193,12 @@ public sealed class UriTemplate
     /// omitted), matching <see cref="Expand(IDictionary{string, object})"/>.
     /// </para>
     /// <para>
-    /// Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.
-    /// See "Values must be finite sequences" in <c>docs/usage.md</c>.
+    /// Every composite value supplied for a variable the template names must be a finite
+    /// sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
-    /// See "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages for variable-value failures never contain value content; see
+    /// "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
     /// The per-entry copy and memoization contract shared by every <c>Expand</c> overload is
@@ -222,16 +207,11 @@ public sealed class UriTemplate
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to <see cref="UriTemplateValue"/> instances.</param>
     /// <returns>The expanded URI string.</returns>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="variables"/> is null. Also thrown when the supplied
-    /// dictionary yields an entry with a null key, in violation of the
-    /// <see cref="IDictionary{TKey, TValue}"/> contract — see "Variable materialization" in
-    /// <c>docs/usage.md</c>.
-    /// </exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="variables"/> is null.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a prefix modifier (e.g. <c>{var:3}</c>) is applied to a <see cref="ListValue"/>
     /// or <see cref="DictionaryValue"/>, or when a string held by a value contains an unpaired
-    /// UTF-16 surrogate and cannot be percent-encoded. Unsupported types and null members are
+    /// UTF-16 surrogate and cannot be percent-encoded; unsupported types and null members are
     /// unreachable through this overload, because <see cref="UriTemplateValue.From(string)"/> and
     /// its sibling factories validate their contents at construction.
     /// </exception>
@@ -320,9 +300,7 @@ public sealed class UriTemplate
     /// <exception cref="ArgumentException">Thrown when an entry has a null key; the message names the entry index.</exception>
     /// <exception cref="FormatException">
     /// Thrown when a variable value contains an unpaired UTF-16 surrogate and cannot be
-    /// percent-encoded. That message reports the character index within the value, not the
-    /// variable name, and never quotes value text — see "Exception message content" in
-    /// <c>docs/usage.md</c>.
+    /// percent-encoded; see "Exception message content" in <c>docs/usage.md</c>.
     /// </exception>
     public string Expand(params (string Key, string Value)[] variables)
     {
@@ -363,12 +341,12 @@ public sealed class UriTemplate
     /// <see cref="FormatException"/>. Use <see cref="Expand(IDictionary{string,UriTemplateValue})"/> instead.
     /// </para>
     /// <para>
-    /// Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.
-    /// See "Values must be finite sequences" in <c>docs/usage.md</c>.
+    /// Every composite value supplied for a variable the template names must be a finite
+    /// sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
-    /// See "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages for variable-value failures never contain value content; see
+    /// "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// </summary>
     /// <param name="variables">Name/value tuples mapping variable names to values of the types supported by <see cref="Expand(IDictionary{string, object})"/>. Neither the array nor any key may be null.</param>
