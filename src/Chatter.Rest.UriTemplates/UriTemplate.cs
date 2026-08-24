@@ -142,19 +142,12 @@ public sealed class UriTemplate
     /// </list>
     /// </para>
     /// <para>
-    /// Composite values must be finite sequences: a value the expander reaches is enumerated
-    /// exactly once and fully drained within a single <c>Expand</c> call, so an endless sequence
-    /// supplied for a variable the expander does enumerate means <c>Expand</c> never returns.
-    /// Being named by the template is not sufficient — a named value stays unread when an
-    /// earlier variable or expression fails first, and when the varspec itself is rejected
-    /// before its enumerator is entered, as a prefix modifier over a composite is. See "Values
-    /// must be finite sequences" in <c>docs/usage.md</c>.
+    /// Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.
+    /// See "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Expansion-time exception messages identify the failing variable by name and, for an
-    /// associative-array member, the offending key — variable values are never quoted. The one
-    /// exception: the unpaired-surrogate message reports the character index within the value
-    /// instead of the variable name. See "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
+    /// See "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to values of the supported types listed above.</param>
@@ -197,15 +190,12 @@ public sealed class UriTemplate
     /// omitted), matching <see cref="Expand(IDictionary{string, object})"/>.
     /// </para>
     /// <para>
-    /// The finite-sequence contract applies at construction here rather than at expansion:
-    /// <see cref="UriTemplateValue.From(IEnumerable{string})"/> materializes its sequence eagerly,
-    /// so an endless sequence hangs <c>From</c>, never this method. See "Values must be finite
-    /// sequences" in <c>docs/usage.md</c>.
+    /// Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.
+    /// See "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Expansion-time exception messages identify the failing variable by name and never quote
-    /// variable values; the unpaired-surrogate message reports the character index within the
-    /// value instead of the variable name. See "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
+    /// See "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// </summary>
     /// <param name="variables">A dictionary mapping variable names to <see cref="UriTemplateValue"/> instances.</param>
@@ -338,6 +328,7 @@ public sealed class UriTemplate
     ///   <item><description><see cref="string"/> — simple string value.</description></item>
     ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="string"/> — list value.</description></item>
     ///   <item><description><see cref="IDictionary{TKey,TValue}"/> of <see cref="string"/> to <see cref="string"/> — associative array.</description></item>
+    ///   <item><description><see cref="IEnumerable{T}"/> of <see cref="KeyValuePair{TKey, TValue}"/> with <see cref="string"/> key and <see cref="string"/> value — associative array value. Supplied order is preserved verbatim, duplicates included, except for <see cref="ISet{T}"/> and <see cref="IDictionary{TKey,TValue}"/> implementations, which are canonicalized by ordinal key order; see <c>docs/usage.md</c> for the full ordering contract. An empty sequence is treated as undefined.</description></item>
     /// </list>
     /// </para>
     /// <para>When duplicate keys are present, the first occurrence wins.</para>
@@ -346,19 +337,12 @@ public sealed class UriTemplate
     /// <see cref="FormatException"/>. Use <see cref="Expand(IDictionary{string,UriTemplateValue})"/> instead.
     /// </para>
     /// <para>
-    /// Composite values must be finite sequences: a value the expander reaches is enumerated
-    /// exactly once and fully drained within a single <c>Expand</c> call, so an endless sequence
-    /// supplied for a variable the expander does enumerate means <c>Expand</c> never returns.
-    /// Being named by the template is not sufficient — a named value stays unread when an
-    /// earlier variable or expression fails first, and when the varspec itself is rejected
-    /// before its enumerator is entered, as a prefix modifier over a composite is. See "Values
-    /// must be finite sequences" in <c>docs/usage.md</c>.
+    /// Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.
+    /// See "Values must be finite sequences" in <c>docs/usage.md</c>.
     /// </para>
     /// <para>
-    /// Expansion-time exception messages identify the failing variable by name and, for an
-    /// associative-array member, the offending key — variable values are never quoted. The one
-    /// exception: the unpaired-surrogate message reports the character index within the value
-    /// instead of the variable name. See "Exception message content" in <c>docs/usage.md</c>.
+    /// Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted.
+    /// See "Exception message content" in <c>docs/usage.md</c>.
     /// </para>
     /// </summary>
     /// <param name="variables">Name/value tuples mapping variable names to values of the supported types listed above. Neither the array nor any key may be null.</param>

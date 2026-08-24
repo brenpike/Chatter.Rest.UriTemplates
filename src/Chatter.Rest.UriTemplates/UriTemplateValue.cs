@@ -20,10 +20,10 @@ public abstract class UriTemplateValue
     /// Creates a <see cref="ListValue"/> representing a list value.
     /// </summary>
     /// <remarks>
-    /// This method materializes <paramref name="values"/> eagerly: the sequence is fully enumerated
-    /// by <c>From</c> itself, before any expansion. The sequence must therefore be finite: an
-    /// endless or never-terminating sequence hangs this method, not a later
+    /// This method materializes <paramref name="values"/> eagerly: enumeration happens inside
+    /// <c>From</c> itself, before any template exists to expand, not inside a later
     /// <see cref="UriTemplate.Expand(System.Collections.Generic.IDictionary{string, UriTemplateValue})"/> call.
+    /// If enumerating the sequence never terminates, <c>From</c> never returns.
     /// See "Values must be finite sequences" in docs/usage.md.
     /// </remarks>
     /// <param name="values">The list of string values. Must not be null, and no element may be null.</param>
@@ -36,7 +36,9 @@ public abstract class UriTemplateValue
     /// Creates a <see cref="DictionaryValue"/> representing an associative array (dictionary) value.
     /// </summary>
     /// <remarks>
-    /// <see cref="ArgumentException"/> messages name the offending key, never the value, so they
+    /// Exception messages for variable-value failures never contain value content: string values,
+    /// list elements, and associative-array values are never quoted. The null-value message quotes
+    /// the offending key; the null-key message names neither key nor value. Messages therefore
     /// remain safe to log even when values carry secrets or personal data.
     /// See "Exception message content" in docs/usage.md.
     /// </remarks>

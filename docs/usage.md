@@ -123,26 +123,36 @@ The existing `Expand(IDictionary<string, string>)` overload still works for call
 
 #### Values must be finite sequences
 
-List and associative-array values carry a caller contract: **every composite value that expansion actually reaches and attempts to enumerate must be a finite sequence.**
+List and associative-array values carry a caller obligation: **Every composite value supplied for a variable the template names must be a finite sequence; the library does not defend against endless enumeration.**
 
-- Within a single `Expand` call, a value the expander reaches is enumerated exactly once, at the first expression that reads it, and is fully drained by that first use. The members are recorded and replayed for any later expression naming the same variable, so a single-pass or lazily evaluated sequence is safe within the call.
-- Because that first use drains the sequence completely, supplying an endless or never-terminating sequence for a variable the expander does enumerate makes `Expand` never return.
-- Being named by the template is necessary but not sufficient for a value to be enumerated. Expansion walks the tokens in order and prepares nothing ahead of the expander, so a named value stays unread whenever the expander never gets to its enumerator. Two cases:
-  - **An earlier failure stops expansion first.** `{bad,later}` reports `bad` and leaves `later` untouched, whether the failing variable sits in the same expression or an earlier one.
-  - **The varspec is rejected before its enumerator is entered.** A prefix modifier over a composite is invalid per RFC 6570 and is caught before a single member is read, so `{items:1}` with an endless `IEnumerable<string>` throws `FormatException` rather than hanging.
-- Values the template never names are never enumerated at all, so an unused lazy, blocking, or endless sequence alongside the referenced values is harmless.
+The obligation is keyed to the caller, not to which checks the library happens to perform:
 
-The same finiteness contract applies to `UriTemplateValue.From(IEnumerable<string>)`, but without any reachability qualification: `From` materializes the sequence eagerly at construction, before a template is involved, so an endless sequence hangs `From` itself rather than `Expand`.
+- **Consequence of violating it.** If expansion begins enumerating a value and that enumeration never terminates, `Expand` never returns.
+- **No early-failure guarantee.** Other contract violations may throw before or during enumeration; which failure surfaces first is unspecified and may change between releases. Callers must not rely on an early failure to bound an infinite sequence.
+
+Two properties remain guaranteed:
+
+- **Enumerated at most once, replayed after.** Within a single `Expand` call, the expander enumerates a given value at most once: the first expression that reads it drains it, records the members, and replays them for any later expression naming the same variable. A single-pass or lazily evaluated *finite* sequence is therefore safe within the call.
+- **Values the template never names are never enumerated at all**, so an unused lazy, blocking, or endless sequence alongside the referenced values is harmless.
+
+For illustration only, a named value can also go unread when expansion never reaches its enumerator. These cases are not exhaustive, and none of them is a promise:
+
+- Expansion may stop at an earlier failure first: `{bad,later}` can report `bad` and leave `later` untouched.
+- A varspec may be rejected before its enumerator is entered: a prefix modifier over a composite is invalid per RFC 6570 and throws `FormatException`; today that check runs before a single member is read, so `{items:1}` with an endless `IEnumerable<string>` happens to throw rather than hang — but whether that check fires before enumeration is exactly the ordering this section declines to promise.
+
+The obligation above applies to every composite value supplied for a named variable, whether or not the current implementation would reach it.
+
+The same obligation applies to `UriTemplateValue.From(IEnumerable<string>)`, with no template involved: `From` materializes the sequence eagerly at construction, so if enumerating the sequence never terminates, `From` never returns.
 
 #### Exception message content
 
-Expansion-time `FormatException` messages are written so callers can log them safely:
+Messages thrown for variable-value failures are written so callers can log them safely. The library maintains one commitment about their content:
 
-- Messages identify the failing variable by name — for example, `Variable 'keys' contains a null key. Associative array keys must be non-null strings.` — and, for an associative-array member, the offending key: `Variable 'keys' contains a null value for key 'dot'. Associative array values must be non-null strings.`
-- **Variable values never appear in expansion exception messages.** String values, list elements, and associative-array values are never quoted, so the messages stay safe to log even when values carry secrets or personal data. This is a deliberate posture callers can rely on. Associative-array *keys* are the one piece of supplied data that is quoted, as shown above. One encoding-level failure — a value containing an unpaired UTF-16 surrogate — reports the character index within the value instead of the variable name; it likewise contains no value text.
-- `UriTemplateValue.From` follows the same posture at construction time: its `ArgumentException` messages name the offending key (`Dictionary must not contain null values (key: 'dot').`), never the value.
+- **Value content never appears.** Exception messages for variable-value failures never contain value content: string values, list elements, and associative-array values are never quoted. This is a promise the library maintains, not a description of throw sites someone has checked — a future throw site that quoted value content would be a bug against this contract. The messages therefore stay safe to log even when values carry secrets or personal data.
+- **Which identifying datum appears varies by failure — illustrations, not promises.** Most expansion messages name the failing variable, for example `Variable 'keys' contains a null key. Associative array keys must be non-null strings.` The associative-array null-*value* message additionally quotes the offending key: `Variable 'keys' contains a null value for key 'dot'. Associative array values must be non-null strings.` A tuple entry with a null key reports the entry index; a value containing an unpaired UTF-16 surrogate reports the character index within the value; an unsupported value type quotes the value's runtime type name. `UriTemplateValue.From` keeps the same posture at construction time: its messages never contain supplied values — the null-value message quotes the offending key (`Dictionary must not contain null values (key: 'dot').`), the null-key message names neither the key nor the value (the key is null), and the null-element message carries no supplied data at all. No message is promised to carry any particular datum.
+- **Wording is not API.** Message wording, and which identifying detail appears, are not stable API and may change between releases; callers must not parse messages. The only stable property is the absence of value content. Associative-array keys and runtime type names are supplied-adjacent data that MAY appear in messages, so a caller whose keys are themselves sensitive cannot treat these messages as key-free.
 
-This posture is scoped to expansion-time messages about variable values. Parse-time `FormatException` messages from the [constructor](#constructor-exceptions) deliberately quote template text — variable names and offending literal characters — because there the template itself is the malformed input.
+This commitment is scoped to messages about variable values. Parse-time `FormatException` messages from the [constructor](#constructor-exceptions) deliberately quote template text — variable names and offending literal characters — because there the template itself is the malformed input.
 
 ### `string Expand(params (string Key, string Value)[] variables)`
 
@@ -172,7 +182,7 @@ var uri = template.Expand(
 
 ### `string Expand(params (string Key, object? Value)[] variables)`
 
-Tuple convenience overload for composite values. Accepts string, list, dictionary, and null values via `object?`. First-wins for duplicate keys. Delegates to the canonical `IDictionary<string, object?>` expansion path.
+Tuple convenience overload for composite values. Accepts the same value types as the canonical path it delegates to — `string`, `IEnumerable<string>` lists, `IDictionary<string, string>` dictionaries, `IEnumerable<KeyValuePair<string, string>>` pair sequences (see [Associative-array pair order](#associative-array-pair-order)), and `null` — via `object?`. First-wins for duplicate keys. Delegates to the canonical `IDictionary<string, object?>` expansion path.
 
 - Throws `ArgumentNullException` if `variables` is null.
 - Throws `ArgumentException` if an entry has a null key; the message names the entry index.
@@ -668,7 +678,7 @@ var uri = new UriTemplate("/users/{id}{?tag*}").Expand(new Dictionary<string, Ur
 | `Expand(IDictionary<string, object?>)` | Mixed value types when working with loosely-typed data via dictionary. |
 | `Expand(IDictionary<string, UriTemplateValue>)` | Mixed value types with compile-time safety via dictionary. |
 | `Expand(params (string, string)[])` | Quick inline calls with string-only values. |
-| `Expand(params (string, object?)[])` | Quick inline calls with mixed value types (string, list, dict). |
+| `Expand(params (string, object?)[])` | Quick inline calls with mixed value types — accepts every value type the `IDictionary<string, object?>` overload accepts. |
 
 The `object?` and `UriTemplateValue` overloads (both dictionary and tuple forms) produce identical expansion results. Choose `UriTemplateValue` when you want the compiler to catch invalid value types instead of getting a `FormatException` at runtime. The tuple overloads delegate to their dictionary counterparts, adding only first-wins duplicate handling.
 

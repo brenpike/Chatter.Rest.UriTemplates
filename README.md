@@ -324,7 +324,7 @@ Level 4 expansion. Supported value types: `string`, `IEnumerable<string>`,
 `null` (treated as undefined). Associative-array pair order is determined by
 the container type supplied — see
 [Associative-Array Pair Order](#associative-array-pair-order). Composite
-values that expansion enumerates must be
+values must be
 [finite sequences](docs/usage.md#values-must-be-finite-sequences).
 
 ```csharp
@@ -368,8 +368,10 @@ var uri = new UriTemplate("/search{?q}")
 
 ### `Expand(params (string Key, object? Value)[] variables)`
 
-Tuple overload for composite values. Accepts string, list, dictionary, and null
-values via `object?`. First-wins for duplicate keys.
+Tuple overload for composite values. Supported value types via `object?`:
+`string`, `IEnumerable<string>`, `IDictionary<string, string>`,
+`IEnumerable<KeyValuePair<string, string>>`, and `null` (treated as
+undefined). First-wins for duplicate keys.
 
 ```csharp
 var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
