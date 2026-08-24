@@ -324,7 +324,8 @@ Level 4 expansion. Supported value types: `string`, `IEnumerable<string>`,
 `null` (treated as undefined). Associative-array pair order is determined by
 the container type supplied — see
 [Associative-Array Pair Order](#associative-array-pair-order). Composite
-values must be [finite sequences](docs/usage.md#values-must-be-finite-sequences).
+values that expansion enumerates must be
+[finite sequences](docs/usage.md#values-must-be-finite-sequences).
 
 ```csharp
 var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
