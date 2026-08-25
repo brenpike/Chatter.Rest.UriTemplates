@@ -23,7 +23,7 @@ The current implementation covers RFC 6570 Level 1-4 expansion operators for sim
 | Case-sensitive lookup | Section 2.3 says variable names are case-sensitive. | Resolved. Variable-name matching is ordinal and case-sensitive regardless of the comparer the caller's container was created with — the authoritative statement is [Variable materialization](usage.md#variable-materialization). Locked by the section 5.6 case-sensitivity tests in `UriTemplateEdgeCaseTests`. | None. |
 | Query/path parameter names | Sections 3.2.7-3.2.9 append the variable name encoded as a literal string. | Resolved. `UriTemplateParser.ValidateVarName` enforces the Section 2.3 `varname` production — rejecting leading, trailing and consecutive dots, invalid characters, and malformed pct-encoded triplets — and `UriTemplateParserValidationTests` covers dotted and invalid names. | None. |
 | Canonical RFC examples | RFC Sections 3.2.2-3.2.9 include examples using `who`, `half`, `base`, `dub`, `v`, `list`, `keys`, and `empty_keys`. | Resolved. The official suite is consumed by `UriTemplateComplianceTests`, which covers the canonical Level 1-4 examples in addition to the hand-written per-level tests. | None. |
-| Official test suite | The URI Templates community test suite covers broader syntax and edge cases. | Resolved. `UriTemplateComplianceTests` is a data-driven harness over the official `uri-templates/uritemplate-test` suite, covering `spec-examples.json`, `extended-tests.json` and `negative-tests.json`. | None. Note the suite data arrives via a git submodule that cannot always be cloned; when it is absent these tests fail rather than skip. |
+| Official test suite | The URI Templates community test suite covers broader syntax and edge cases. | Resolved. `UriTemplateComplianceTests` is a data-driven harness over the official `uri-templates/uritemplate-test` suite, covering `spec-examples.json`, `extended-tests.json`, `negative-tests.json`, and `spec-examples-by-section.json`. | None. Note the suite data arrives via a git submodule that cannot always be cloned; when it is absent these tests fail rather than skip. |
 | Docs accuracy | `docs/architecture.md` previously described literal text as returned unchanged, and `docs/usage.md` previously listed `%` in the reserved pass-through set. | Resolved. `docs/architecture.md` now states that literal text is validated and percent-encoded per Section 2.1, including the non-ASCII scalar rule (only `ucschar` and `iprivate` scalars are encoded; everything else, unpaired surrogates included, is rejected). `docs/usage.md` already states that `%` is not in the pass-through set and that a bare `%` becomes `%25`. | None. |
 
 ## Shared Fixtures
@@ -512,14 +512,17 @@ Data-driven harness around https://github.com/uri-templates/uritemplate-test.
 | Existing | `spec-examples.json` Level 1-4 string/list/dictionary cases | Must pass. |
 | Existing | `extended-tests.json` valid Level 1-4 cases | Must pass after parser/encoding gaps are closed. |
 | Existing | Invalid grammar cases | Must assert `FormatException` or the chosen diagnostic API behavior. |
+| Existing | `spec-examples-by-section.json` per-RFC-section Level 1-4 cases | Must pass. |
+| Existing | `AllCopiedTestDataFiles_AreExercisedByATheory` guard | Asserts every copied `TestData/*.json` fixture is exercised by a theory. |
 
 ## 8. Coverage Summary
 
 Every test class in the suite, mapped to the area it covers. The method count is the
 number of `[Fact]`/`[Theory]` methods in the class and is approximate by design: a
 `[Theory]` expands to one executed case per data row (the compliance harness in
-particular is three theories that fan out over the entire official suite), and the
-counts drift as tests are added. Treat them as a size indicator, not a contract.
+particular is four theories that fan out over the entire official suite, plus three
+facts), and the counts drift as tests are added. Treat them as a size indicator,
+not a contract.
 
 | Class | Area covered | Plan section | ~Methods |
 |---|---|---|---:|
@@ -529,7 +532,7 @@ counts drift as tests are added. Treat them as a size indicator, not a contract.
 | `UriTemplateGetVariablesTests` | Variable discovery via `GetVariables()` | 4 | 13 |
 | `UriTemplateEdgeCaseTests` | Template parsing shape, mixed-level templates, malformed expressions, reserved future operators, Level 4 modifier validation, case sensitivity | 5 | 43 |
 | `UriTemplateLevel4Tests` | Level 4 prefix/explode modifiers, list values, associative arrays, Level 4 edge cases | 6 | 73 |
-| `UriTemplateComplianceTests` | Data-driven harness over the official `uritemplate-test` suite | 7 | 3 |
+| `UriTemplateComplianceTests` | Data-driven harness over the official `uritemplate-test` suite | 7 | 7 |
 | `UriTemplateAssociativeArrayTests` | Associative-array pair-order determinism across container types — the authoritative ordering contract is [Associative-array pair order](usage.md#associative-array-pair-order) | — | 27 |
 | `UriTemplateValueTests` | `UriTemplateValue` factory validation (`From` overloads) and expansion through the `IDictionary<string, UriTemplateValue>` overload | — | 23 |
 | `UriTemplateTupleOverloadTests` | The `params (string, object?)[]` `Expand` overload: argument guards, duplicate keys, value-kind dispatch | — | 11 |
@@ -537,7 +540,7 @@ counts drift as tests are added. Treat them as a size indicator, not a contract.
 | `UriTemplateParserValidationTests` | Parser-level literal validation and encoding (ASCII acceptance set, pct-triplets, unpaired surrogates, `ucschar`/`iprivate` scalar sets, apostrophe pass-through), varname dot rules | — | 41 |
 | `UriTemplateTypeValidationTests` | Public token-type contracts: `UriTemplateExpressionToken` defensive copying and immutability, `UriTemplateVarSpec` validation, operator strategy resolution | — | 38 |
 | `UriTemplateSecurityTests` | Injection/smuggling-focused encoding behavior: reserved pass-through boundaries, control characters, pre-encoded input neutralization, duplicate names, null values | — | 11 |
-| `XmlDocExceptionTagShapeTests` | Mechanical enforcement of the `<exception>`-tag shape convention (`docs/development.md` §7) against the core assembly's generated XML documentation: at most one sentence, plus an optional trailing `docs/usage.md` pointer sentence that ends at the path | — | 4 |
+| `XmlDocExceptionTagShapeTests` | Mechanical enforcement of the `<exception>`-tag shape convention (`docs/development.md` §7) against the core assembly's generated XML documentation: at most one sentence, plus an optional trailing `docs/usage.md` pointer sentence that ends at the path | — | 5 |
 | `ServiceCollectionExtensionsTests` (in `Chatter.Rest.UriTemplates.DependencyInjection.Tests`) | `AddUriTemplates` DI registration: service lifetimes, custom parser override, idempotency (not RFC 6570 behavior) | — | 10 |
 
 Classes with `—` in the plan-section column have no dedicated scenario section in this
