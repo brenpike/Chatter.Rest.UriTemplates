@@ -143,10 +143,25 @@ namespace Chatter.Rest.UriTemplates.Tests
             var variables = LoadVariablesForSection(filename, section);
             var result = new UriTemplate(template).Expand(variables);
 
-            if (expected is string s)
-                result.Should().Be(s, because: "template '{0}' in section '{1}'", template, section);
-            else if (expected is string[] arr)
-                result.Should().BeOneOf(arr, because: "template '{0}' in section '{1}'", template, section);
+            switch (expected)
+            {
+                case string s:
+                    result.Should().Be(s,
+                        because: "template '{0}' in section '{1}' of '{2}'", template, section, filename);
+                    break;
+
+                case string[] arr:
+                    result.Should().BeOneOf(arr,
+                        because: "template '{0}' in section '{1}' of '{2}'", template, section, filename);
+                    break;
+
+                default:
+                {
+                    var actualType = expected is null ? "null" : expected.GetType().FullName;
+                    throw new InvalidOperationException(
+                        $"Unsupported expected value type '{actualType}' for template '{template}' in section '{section}' of '{filename}'. A positive compliance row must supply a string or a string[].");
+                }
+            }
         }
 
         private static JsonDocument LoadTestFile(string filename)
