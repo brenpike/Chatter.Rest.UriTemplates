@@ -16,7 +16,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 	/// </summary>
 	public class XmlDocExceptionTagShapeTests
 	{
-		private static readonly Regex UsagePointerPattern = new(@"^[Ss]ee ""[^""]+"" in docs/usage\.md\.?$", RegexOptions.Compiled);
+		private static readonly Regex UsagePointerPattern = new(@"^See ""[^""]+"" in docs/usage\.md\.?$", RegexOptions.Compiled);
 		private static readonly Regex AbbreviationPattern = new(@"\b(?:[eE]\.g|[iI]\.e)\.", RegexOptions.Compiled);
 		private static readonly Regex DottedNumberPattern = new(@"(?<=\d)\.(?=\d)", RegexOptions.Compiled);
 		private static readonly Regex SentenceBoundaryPattern = new(@"(?<=[.!?])\s+", RegexOptions.Compiled);
@@ -96,6 +96,20 @@ namespace Chatter.Rest.UriTemplates.Tests
 			HasCompliantSentenceShape(XElement.Parse(fragment)).Should().BeFalse(
 				"the trailing pointer sentence must end at the docs/usage.md path; behavioral detail " +
 				"appended after the path would otherwise sail through a start-anchored pattern");
+		}
+
+		[Theory]
+		[InlineData(
+			"<exception cref=\"T:System.NotSupportedException\">Thrown when an expression starts with an operator " +
+			"RFC 6570 §2.2 reserves for future use. see \"Constructor exceptions\" in <c>docs/usage.md</c>.</exception>")]
+		[InlineData(
+			"<exception cref=\"T:System.ArgumentNullException\">Thrown when <paramref name=\"variables\"/> is null. " +
+			"see \"Variable materialization\" in <c>docs/usage.md</c>.</exception>")]
+		public void HasCompliantSentenceShape_LowercasePointerIntroduction_IsRejected(string fragment)
+		{
+			HasCompliantSentenceShape(XElement.Parse(fragment)).Should().BeFalse(
+				"the convention spells the trailing pointer sentence See \"...\" in docs/usage.md; a lowercase " +
+				"introduction is a different sentence shape and must not sail through the check");
 		}
 
 		private static bool HasCompliantSentenceShape(XElement exceptionTag)

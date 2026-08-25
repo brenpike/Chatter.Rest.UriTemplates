@@ -84,7 +84,7 @@ Expands the URI template using the provided variable dictionary.
 
 - Throws `ArgumentNullException` if `variables` is null.
 - Throws `FormatException` if a variable value contains an unpaired UTF-16 surrogate and cannot be percent-encoded — see [Unpaired surrogates in values](#unpaired-surrogates-in-values); what the message carries is governed by [Exception message content](#exception-message-content).
-- Variables absent from the dictionary are treated as undefined and omitted per RFC 6570 rules — see [What counts as undefined](#what-counts-as-undefined).
+- Which inputs this overload expands as undefined, and what expansion then emits for them, follow [What counts as undefined](#what-counts-as-undefined).
 - Keys must be non-null strings; copy timing, ordinal name matching, and null-key behavior follow the shared contract in [Variable materialization](#variable-materialization).
 
 ```csharp
@@ -107,11 +107,13 @@ Expands the URI template using a dictionary that supports composite value types 
 - **Keys must be non-null strings** -- copy timing, ordinal name matching, per-entry memoization, and null-key behavior follow the shared contract in [Variable materialization](#variable-materialization).
 
 Supported value types:
-- `null` — treated as undefined (variable is omitted) — see [What counts as undefined](#what-counts-as-undefined).
+- `null` — a permitted value for any entry.
 - `string` — simple string value. Works with all operators and Level 4 prefix modifiers.
-- `IEnumerable<string>` (e.g., `string[]`, `List<string>`) — list value. An empty list is treated as undefined — see [What counts as undefined](#what-counts-as-undefined).
-- `IDictionary<string, string>` (e.g., `Dictionary<string, string>`) — associative array value; pair order is canonicalized per [Associative-array pair order](#associative-array-pair-order). An empty dictionary is treated as undefined — see [What counts as undefined](#what-counts-as-undefined).
-- `IEnumerable<KeyValuePair<string, string>>` — associative array value; pair order is determined by the container type per [Associative-array pair order](#associative-array-pair-order). An empty sequence is treated as undefined — see [What counts as undefined](#what-counts-as-undefined).
+- `IEnumerable<string>` (e.g., `string[]`, `List<string>`) — list value.
+- `IDictionary<string, string>` (e.g., `Dictionary<string, string>`) — associative array value; pair order is canonicalized per [Associative-array pair order](#associative-array-pair-order).
+- `IEnumerable<KeyValuePair<string, string>>` — associative array value; pair order is determined by the container type per [Associative-array pair order](#associative-array-pair-order).
+
+Which of these inputs expand as undefined follows [What counts as undefined](#what-counts-as-undefined).
 
 ```csharp
 var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
@@ -239,7 +241,7 @@ var uri = new UriTemplate("/users/{id}").Expand(
 
 ### `string Expand()`
 
-Expands the URI template with all variables undefined. Every expression is omitted per RFC 6570 rules — equivalent to passing an empty dictionary; see [What counts as undefined](#what-counts-as-undefined).
+Expands the URI template with no variables supplied — equivalent to passing an empty dictionary. Every variable is therefore an absent entry under [What counts as undefined](#what-counts-as-undefined).
 
 ```csharp
 var uri = new UriTemplate("/orders{?status,page}").Expand();
