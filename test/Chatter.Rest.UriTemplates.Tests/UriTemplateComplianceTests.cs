@@ -121,12 +121,20 @@ namespace Chatter.Rest.UriTemplates.Tests
         }
 
         [Fact]
+        public void CopiedTestDataFileNames_MissingDirectory_NamesSubmoduleRemedy()
+        {
+            var missingDirectory = Path.Combine(AppContext.BaseDirectory, "missing-compliance-test-data");
+
+            Action act = () => GetCopiedTestDataFileNames(missingDirectory);
+
+            act.Should().Throw<FileNotFoundException>()
+                .WithMessage("*missing-compliance-test-data*git submodule update --init*");
+        }
+
+        [Fact]
         public void AllCopiedTestDataFiles_AreExercisedByATheory()
         {
-            var copiedFiles = Directory
-                .GetFiles(Path.Combine(AppContext.BaseDirectory, "TestData"), "*.json")
-                .Select(path => Path.GetFileName(path))
-                .ToArray();
+            var copiedFiles = GetCopiedTestDataFileNames(TestDataDirectory);
 
             copiedFiles.Should().BeEquivalentTo(
                 ExercisedTestDataFiles,
@@ -164,9 +172,27 @@ namespace Chatter.Rest.UriTemplates.Tests
             }
         }
 
+        private static string TestDataDirectory =>
+            Path.Combine(AppContext.BaseDirectory, "TestData");
+
+        private static string[] GetCopiedTestDataFileNames(string testDataDirectory)
+        {
+            if (!Directory.Exists(testDataDirectory))
+            {
+                throw new FileNotFoundException(
+                    $"URI template compliance test data was not found at '{testDataDirectory}'. Run 'git submodule update --init' from the repository root and rebuild the test project.",
+                    testDataDirectory);
+            }
+
+            return Directory
+                .GetFiles(testDataDirectory, "*.json")
+                .Select(path => Path.GetFileName(path))
+                .ToArray();
+        }
+
         private static JsonDocument LoadTestFile(string filename)
         {
-            var path = Path.Combine(AppContext.BaseDirectory, "TestData", filename);
+            var path = Path.Combine(TestDataDirectory, filename);
 
             if (!File.Exists(path))
             {
