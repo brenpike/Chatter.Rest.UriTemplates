@@ -211,16 +211,16 @@ internal sealed class UriTemplateExpander : IUriTemplateExpander
 }
 ```
 
-The expander performs runtime type dispatch on each variable value. The type tests are applied in exactly this order:
+The expander performs runtime type dispatch on each variable value. An absent entry or `null` value is handled by the lookup guard before any type test runs; the type tests are then applied in exactly this order:
 
 | Runtime type | Dispatch path | Notes |
 |---|---|---|
+| `null` | Treated as undefined | Handled by the lookup guard (together with absent entries) before any type test runs. Omitted per RFC 6570 §2.3 — caller-facing contract: [What counts as undefined](usage.md#what-counts-as-undefined). |
 | `string` | Scalar string expansion | Checked first (`string` is `IEnumerable<char>`). Supports prefix truncation via `:N` modifier. |
 | `IDictionary<string, string>` | Associative array expansion | Pair order canonicalized (sorted ordinal by key, ordinal by value as tie-break): a keyed map gives the caller no way to define an order. |
 | `ISet<KeyValuePair<string, string>>` | Associative array expansion | Pair order canonicalized, same rule as `IDictionary`: a set defines membership only, not order. |
 | `IEnumerable<KeyValuePair<string, string>>` | Associative array expansion | Any other pair sequence: preserves the supplied order verbatim, duplicate keys included, for deterministic caller-controlled output. |
 | `IEnumerable<string>` | List expansion | Checked after the pair shapes so a pair sequence is not misread as a list. |
-| `null` | Treated as undefined | Omitted per RFC 6570 §2.3 — caller-facing contract: [What counts as undefined](usage.md#what-counts-as-undefined). |
 | Any other type | `FormatException` | Unsupported value type. |
 
 Per-operator expansion algorithm:
@@ -232,10 +232,10 @@ Per-operator expansion algorithm:
      - If `varSpec.PrefixLength` is set, validate the whole original value first (`UriTemplateEncoder.ValidateEncodable`, so an unpaired surrogate beyond the prefix boundary is still rejected), then truncate the value to that many Unicode code points (per RFC 6570 §2.4.1) using the internal `TruncateByCodePoints` method. The method walks the UTF-16 string, pairing valid high+low surrogate pairs as a single code point. This works on both `net8.0` and `netstandard2.0` without a `System.Text.Rune` dependency. Note: combining marks (e.g., `e` + U+0301) count as separate code points, so `{var:1}` on `"é"` keeps only `e`. The caller-facing contract is [Prefix truncation in code points](usage.md#prefix-truncation-in-code-points).
      - If the (possibly truncated) value is empty: apply operator-specific empty-value rule (see [Operator Reference](#operator-reference)).
      - If non-empty: encode per operator encoding rule, then format per operator.
-   - **List values (non-explode):** encode each member, comma-join into a single composite value. For named operators, prepend `varname=`. Empty list is treated as undefined and omitted — see [What counts as undefined](usage.md#what-counts-as-undefined).
+   - **List values (non-explode):** encode each member, comma-join into a single composite value. For named operators, prepend `varname=`. Empty list follows [What counts as undefined](usage.md#what-counts-as-undefined).
    - **List values (explode):** each member becomes a separate part. Named operators emit `varname=encodedMember` per member (with ifEmp rules for empty members); non-named operators emit value-only segments.
    - **Associative array pair order:** determined by which dispatch path the type-dispatch table above selects; the caller-facing ordering contract is [Associative-array pair order](usage.md#associative-array-pair-order).
-   - **Associative array values (non-explode):** flatten to alternating `key,value,key,value,...` — each key and value individually encoded, comma-joined. For named operators, prepend `varname=`. Empty associative array is treated as undefined — see [What counts as undefined](usage.md#what-counts-as-undefined).
+   - **Associative array values (non-explode):** flatten to alternating `key,value,key,value,...` — each key and value individually encoded, comma-joined. For named operators, prepend `varname=`. Empty associative array follows [What counts as undefined](usage.md#what-counts-as-undefined).
    - **Associative array values (explode):** each pair becomes `encodedKey=encodedValue`, joined by operator separator. For named operators with empty values, ifEmp rules apply (`;` omits `=`; `?`/`&` include `=`).
    - **Prefix on composite:** throws `FormatException`; a prefix modifier applies only to scalar string values — see [Prefix truncation in code points](usage.md#prefix-truncation-in-code-points).
    - **Null elements/values in composites:** throws `FormatException`. List elements and associative array values must be non-null strings.
@@ -487,7 +487,7 @@ The table below summarizes explode behavior for list and associative-array value
 - Segments are joined by the operator's separator.
 
 **Empty composite values:**
-- An empty list (`Count == 0`) or empty associative array is treated as undefined per RFC 6570 §2.3 and produces no output — see [What counts as undefined](usage.md#what-counts-as-undefined).
+- An empty list (`Count == 0`) or empty associative array follows [What counts as undefined](usage.md#what-counts-as-undefined) (RFC 6570 §2.3).
 
 ---
 

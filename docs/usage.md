@@ -456,7 +456,7 @@ This is the authoritative statement of which inputs expand as undefined. The map
 
 - **Absent entry** — no supplied entry has the variable's name, under the ordinal, case-sensitive matching of [Variable materialization](#variable-materialization). The no-argument `Expand()` is this case for every variable.
 - **Null value** — the entry's value is `null`. This holds on every overload: the `object?`-typed and `UriTemplateValue`-typed paths, and also the `string`-typed paths, where the value is declared non-nullable but a null that arrives anyway (for example from a caller without nullable reference type analysis) is treated as undefined rather than rejected.
-- **Empty composite** — the entry's value is a list, associative array, or pair sequence that yields no members, on both the `object?` and `UriTemplateValue` paths.
+- **Empty composite** — the entry's value is a list or associative array that yields no members, on both the `object?` and `UriTemplateValue` paths, or a pair sequence that yields no members on the `object?` path (`UriTemplateValue` has no pair-sequence factory, so pair sequences exist only on the `object?` path).
 
 An empty **string** is not undefined: the variable expands under the operator's empty-value rule (`{?status}` with `""` yields `?status=`; `{;x}` with `""` yields `;x`).
 
