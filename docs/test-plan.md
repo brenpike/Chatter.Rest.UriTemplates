@@ -520,7 +520,7 @@ Data-driven harness around https://github.com/uri-templates/uritemplate-test.
 Every test class in the suite, mapped to the area it covers. The method count is the
 number of `[Fact]`/`[Theory]` methods in the class and is approximate by design: a
 `[Theory]` expands to one executed case per data row (the compliance harness in
-particular is four theories that fan out over the entire official suite, plus two
+particular is four theories that fan out over the entire official suite, plus three
 facts), and the counts drift as tests are added. Treat them as a size indicator,
 not a contract.
 
@@ -532,7 +532,7 @@ not a contract.
 | `UriTemplateGetVariablesTests` | Variable discovery via `GetVariables()` | 4 | 13 |
 | `UriTemplateEdgeCaseTests` | Template parsing shape, mixed-level templates, malformed expressions, reserved future operators, Level 4 modifier validation, case sensitivity | 5 | 43 |
 | `UriTemplateLevel4Tests` | Level 4 prefix/explode modifiers, list values, associative arrays, Level 4 edge cases | 6 | 73 |
-| `UriTemplateComplianceTests` | Data-driven harness over the official `uritemplate-test` suite | 7 | 6 |
+| `UriTemplateComplianceTests` | Data-driven harness over the official `uritemplate-test` suite | 7 | 7 |
 | `UriTemplateAssociativeArrayTests` | Associative-array pair-order determinism across container types — the authoritative ordering contract is [Associative-array pair order](usage.md#associative-array-pair-order) | — | 27 |
 | `UriTemplateValueTests` | `UriTemplateValue` factory validation (`From` overloads) and expansion through the `IDictionary<string, UriTemplateValue>` overload | — | 23 |
 | `UriTemplateTupleOverloadTests` | The `params (string, object?)[]` `Expand` overload: argument guards, duplicate keys, value-kind dispatch | — | 11 |
