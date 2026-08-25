@@ -7,6 +7,19 @@ namespace Chatter.Rest.UriTemplates.Tests
 {
     public class UriTemplateComplianceTests
     {
+        private const string SpecExamplesFile = "spec-examples.json";
+        private const string ExtendedTestsFile = "extended-tests.json";
+        private const string NegativeTestsFile = "negative-tests.json";
+        private const string SpecExamplesBySectionFile = "spec-examples-by-section.json";
+
+        private static readonly string[] ExercisedTestDataFiles = new[]
+        {
+            SpecExamplesFile,
+            ExtendedTestsFile,
+            NegativeTestsFile,
+            SpecExamplesBySectionFile
+        };
+
         // --------------------------------------------------------------------
         // 1. Spec Examples — all rows must pass
         // --------------------------------------------------------------------
@@ -15,17 +28,11 @@ namespace Chatter.Rest.UriTemplates.Tests
         [MemberData(nameof(SpecExamplesData))]
         public void SpecExamples_ExpandCorrectly(string section, string template, object expected)
         {
-            var variables = LoadVariablesForSection("spec-examples.json", section);
-            var result = new UriTemplate(template).Expand(variables);
-
-            if (expected is string s)
-                result.Should().Be(s, because: "template '{0}' in section '{1}'", template, section);
-            else if (expected is string[] arr)
-                result.Should().BeOneOf(arr, because: "template '{0}' in section '{1}'", template, section);
+            AssertPositiveCase(SpecExamplesFile, section, template, expected);
         }
 
         public static IEnumerable<object[]> SpecExamplesData() =>
-            LoadPositiveTestCases("spec-examples.json");
+            LoadPositiveTestCases(SpecExamplesFile);
 
         // --------------------------------------------------------------------
         // 2. Extended Tests — some rows may fail (known gaps)
@@ -35,17 +42,11 @@ namespace Chatter.Rest.UriTemplates.Tests
         [MemberData(nameof(ExtendedTestsData))]
         public void ExtendedTests_ExpandCorrectly(string section, string template, object expected)
         {
-            var variables = LoadVariablesForSection("extended-tests.json", section);
-            var result = new UriTemplate(template).Expand(variables);
-
-            if (expected is string s)
-                result.Should().Be(s, because: "template '{0}' in section '{1}'", template, section);
-            else if (expected is string[] arr)
-                result.Should().BeOneOf(arr, because: "template '{0}' in section '{1}'", template, section);
+            AssertPositiveCase(ExtendedTestsFile, section, template, expected);
         }
 
         public static IEnumerable<object[]> ExtendedTestsData() =>
-            LoadPositiveTestCases("extended-tests.json");
+            LoadPositiveTestCases(ExtendedTestsFile);
 
         // --------------------------------------------------------------------
         // 3. Negative Tests — templates must be rejected
@@ -55,7 +56,7 @@ namespace Chatter.Rest.UriTemplates.Tests
         [MemberData(nameof(NegativeTestsData))]
         public void NegativeTests_RejectInvalidTemplates(string section, string template)
         {
-            var variables = LoadVariablesForSection("negative-tests.json", section);
+            var variables = LoadVariablesForSection(NegativeTestsFile, section);
 
             Action act = () =>
             {
@@ -72,7 +73,7 @@ namespace Chatter.Rest.UriTemplates.Tests
 
         public static IEnumerable<object[]> NegativeTestsData()
         {
-            using var doc = LoadTestFile("negative-tests.json");
+            using var doc = LoadTestFile(NegativeTestsFile);
 
             foreach (var sectionProp in doc.RootElement.EnumerateObject())
             {
@@ -96,6 +97,20 @@ namespace Chatter.Rest.UriTemplates.Tests
             }
         }
 
+        // --------------------------------------------------------------------
+        // 4. Spec Examples By Section — all rows must pass
+        // --------------------------------------------------------------------
+
+        [Theory]
+        [MemberData(nameof(SpecExamplesBySectionData))]
+        public void SpecExamplesBySection_ExpandCorrectly(string section, string template, object expected)
+        {
+            AssertPositiveCase(SpecExamplesBySectionFile, section, template, expected);
+        }
+
+        public static IEnumerable<object[]> SpecExamplesBySectionData() =>
+            LoadPositiveTestCases(SpecExamplesBySectionFile);
+
         [Fact]
         public void LoadTestFile_MissingFile_NamesSubmoduleRemedy()
         {
@@ -105,9 +120,34 @@ namespace Chatter.Rest.UriTemplates.Tests
                 .WithMessage("*missing-compliance-test-data.json*git submodule update --init*");
         }
 
+        [Fact]
+        public void AllCopiedTestDataFiles_AreExercisedByATheory()
+        {
+            var copiedFiles = Directory
+                .GetFiles(Path.Combine(AppContext.BaseDirectory, "TestData"), "*.json")
+                .Select(path => Path.GetFileName(path))
+                .ToArray();
+
+            copiedFiles.Should().BeEquivalentTo(
+                ExercisedTestDataFiles,
+                because: "every *.json fixture the test project copies from the uritemplate-test submodule must be loaded by a theory");
+        }
+
         // ====================================================================
         // Helpers
         // ====================================================================
+
+        private static void AssertPositiveCase(
+            string filename, string section, string template, object expected)
+        {
+            var variables = LoadVariablesForSection(filename, section);
+            var result = new UriTemplate(template).Expand(variables);
+
+            if (expected is string s)
+                result.Should().Be(s, because: "template '{0}' in section '{1}'", template, section);
+            else if (expected is string[] arr)
+                result.Should().BeOneOf(arr, because: "template '{0}' in section '{1}'", template, section);
+        }
 
         private static JsonDocument LoadTestFile(string filename)
         {
