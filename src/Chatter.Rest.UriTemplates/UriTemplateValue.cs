@@ -19,6 +19,17 @@ public abstract class UriTemplateValue
     /// <summary>
     /// Creates a <see cref="ListValue"/> representing a list value.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This factory drains <paramref name="values"/> eagerly at construction, so the caller must
+    /// supply a finite sequence; see "Values must be finite sequences" in <c>docs/usage.md</c>.
+    /// </para>
+    /// <para>
+    /// Exception messages this factory constructs never contain supplied value content, and an
+    /// exception raised by the caller's own enumeration is outside that guarantee; see
+    /// "Exception message content" in <c>docs/usage.md</c>.
+    /// </para>
+    /// </remarks>
     /// <param name="values">The list of string values. Must not be null, and no element may be null.</param>
     /// <returns>A new <see cref="ListValue"/> instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="values"/> is null.</exception>
@@ -28,6 +39,17 @@ public abstract class UriTemplateValue
     /// <summary>
     /// Creates a <see cref="DictionaryValue"/> representing an associative array (dictionary) value.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This factory drains <paramref name="pairs"/> eagerly at construction, so the caller must
+    /// supply a finite input; see "Values must be finite sequences" in <c>docs/usage.md</c>.
+    /// </para>
+    /// <para>
+    /// Exception messages this factory constructs never contain supplied value content, and an
+    /// exception raised by the caller's own enumeration is outside that guarantee; see
+    /// "Exception message content" in <c>docs/usage.md</c>.
+    /// </para>
+    /// </remarks>
     /// <param name="pairs">The key-value pairs. Must not be null, and no key or value may be null.</param>
     /// <returns>A new <see cref="DictionaryValue"/> instance.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pairs"/> is null.</exception>
@@ -37,6 +59,10 @@ public abstract class UriTemplateValue
     internal abstract object? ToRawValue();
 }
 
+/// <summary>
+/// A URI template variable value holding a single string.
+/// Created via <see cref="UriTemplateValue.From(string)"/>.
+/// </summary>
 public sealed class StringValue : UriTemplateValue
 {
     internal string Value { get; }
@@ -49,6 +75,10 @@ public sealed class StringValue : UriTemplateValue
     internal override object? ToRawValue() => Value;
 }
 
+/// <summary>
+/// A URI template variable value holding a list of strings.
+/// Created via <see cref="UriTemplateValue.From(IEnumerable{string})"/>.
+/// </summary>
 public sealed class ListValue : UriTemplateValue
 {
     internal IReadOnlyList<string> Values { get; }
@@ -67,6 +97,10 @@ public sealed class ListValue : UriTemplateValue
     internal override object? ToRawValue() => new List<string>(Values);
 }
 
+/// <summary>
+/// A URI template variable value holding an associative array of string key-value pairs.
+/// Created via <see cref="UriTemplateValue.From(IDictionary{string, string})"/>.
+/// </summary>
 public sealed class DictionaryValue : UriTemplateValue
 {
     internal IReadOnlyDictionary<string, string> Pairs { get; }

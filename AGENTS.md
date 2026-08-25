@@ -21,6 +21,8 @@ Review PRs for:
 - maintainability
 - missing or weak tests
 - risky behavior changes
+- universally-quantified behavioral claims, in prose docs or XML doc comments, not keyed per the "Behavioral contract wording" convention in `docs/development.md`
+- shared-step behavioral facts restated per overload rather than referenced from their canonical `docs/usage.md` anchor, even when the restatement is accurate, per the "Behavioral contract keying" rule in `docs/development.md` section 7
 
 ## Severity
 

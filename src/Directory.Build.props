@@ -28,6 +28,7 @@
   <PropertyGroup Label="Analyzer gating">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!--
       Follow-up (issue #26): the three rules below have pre-existing findings
       whose fixes require .cs edits owned by parallel remediation lanes, so

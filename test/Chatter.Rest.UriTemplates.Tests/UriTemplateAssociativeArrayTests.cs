@@ -7,22 +7,9 @@ namespace Chatter.Rest.UriTemplates.Tests
 {
 	/// <summary>
 	/// Associative-array expansion tests covering the determinism guarantee made by
-	/// <c>UriTemplateExpander.ExpandAssociativeArray</c>:
-	///
-	/// 1. A keyed or set container — <see cref="IDictionary{TKey, TValue}"/> of
-	///    <see cref="string"/> to <see cref="string"/>, or <see cref="ISet{T}"/> of
-	///    <see cref="KeyValuePair{TKey, TValue}"/> — gives the caller no way to place
-	///    one pair before another, so its pairs are canonicalized: ordinal by key,
-	///    with an ordinal value comparison as tie-break. This covers
-	///    <see cref="Dictionary{TKey, TValue}"/>,
-	///    <see cref="FrozenDictionary{TKey, TValue}"/>, and hash sets of pairs.
-	/// 2. Every other <see cref="IEnumerable{T}"/> of
-	///    <see cref="KeyValuePair{TKey, TValue}"/> is expanded in the order it
-	///    enumerates, duplicate keys included — <see cref="List{T}"/>, arrays,
-	///    <see cref="ReadOnlyCollection{T}"/>, <see cref="Queue{T}"/>,
-	///    <see cref="LinkedList{T}"/>, iterator methods, and LINQ pipelines. No
-	///    interface distinguishes an ordered sequence from an unordered one, so the
-	///    contract defers to the caller outside the two container shapes above.
+	/// <c>UriTemplateExpander.ExpandAssociativeArray</c>: keyed and set containers are
+	/// canonicalized while every other pair sequence is expanded in its own enumeration
+	/// order. See "Associative-array pair order" in <c>docs/usage.md</c>.
 	///
 	/// Empty member names are legal: RFC 6570 §2.3 models associative-array members as
 	/// (name, value) string pairs and treats only a zero-member composite as undefined.

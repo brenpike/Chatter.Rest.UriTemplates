@@ -27,6 +27,7 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | `src/Chatter.Rest.UriTemplates/` | `Chatter.Rest.UriTemplates` |
 | `src/Chatter.Rest.UriTemplates.DependencyInjection/` | `Chatter.Rest.UriTemplates.DependencyInjection` |
 | `test/Chatter.Rest.UriTemplates.Tests/` | - |
+| `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/` | - |
 
 ## Build and Test Commands
 
@@ -70,9 +71,12 @@ See [docs/development.md](docs/development.md) for editorconfig rules (line endi
 
 Additional conventions observed in the codebase:
 
-- Public API (`Chatter.Rest.UriTemplates` package): `UriTemplate`, `IUriTemplateParser`, `IUriTemplateFactory`, `UriTemplateToken` (abstract base), `UriTemplateLiteralToken`, `UriTemplateExpressionToken`, `UriTemplateOperator`, `UriTemplateVarSpec`; public API (`Chatter.Rest.UriTemplates.DependencyInjection` package): `ServiceCollectionExtensions` (`AddUriTemplates` extension method); internal implementation types (not public): `UriTemplateParser`, `UriTemplateExpander`, `UriTemplateFactory`; `UriTemplateExpression` was removed (replaced by `UriTemplateExpressionToken`)
-- All types use the `Chatter.Rest.UriTemplates` namespace
-- Internal members are exposed to test assembly via `InternalsVisibleTo` in the csproj
+- Public API (`Chatter.Rest.UriTemplates` package — complete list): `UriTemplate`, `IUriTemplateParser`, `IUriTemplateFactory`, `UriTemplateToken` (abstract base), `UriTemplateLiteralToken`, `UriTemplateExpressionToken`, `UriTemplateOperator`, `UriTemplateVarSpec`, `UriTemplateValue` (abstract base with static `From` factory methods), `StringValue`, `ListValue`, `DictionaryValue`
+- Public API (`Chatter.Rest.UriTemplates.DependencyInjection` package — complete list): `ServiceCollectionExtensions` (`AddUriTemplates` extension method)
+- Internal implementation types (not public; non-exhaustive): `UriTemplateParser`, `UriTemplateExpander` (behind `IUriTemplateExpander`), `UriTemplateFactory`, `UriTemplateEncoder`, `OperatorStrategyFactory` with the per-operator `IOperatorStrategy` implementations under `Operators/`, and the memoized snapshot collections (`UriTemplateMemoizedDictionary`, `UriTemplateMemoizedSet`, `UriTemplateMemoizedSequence<T>`)
+- `UriTemplateExpression` was removed (replaced by `UriTemplateExpressionToken`)
+- All core-package types use the `Chatter.Rest.UriTemplates` namespace, with one exception: the internal `IsExternalInit` polyfill lives in `System.Runtime.CompilerServices`. The DI package's `ServiceCollectionExtensions` uses `Microsoft.Extensions.DependencyInjection`, the conventional namespace for DI extension methods
+- Core-package internals are exposed to its test assembly and to the DI package via `InternalsVisibleTo` in the core csproj
 
 ## Test Plan
 
@@ -91,8 +95,8 @@ See [docs/development.md](docs/development.md) for CI/CD workflow details.
 
 | Artifact | NuGet Package ID | Current Version |
 |---|---|---|
-| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.10.0` |
-| `Chatter.Rest.UriTemplates.DependencyInjection` | `Chatter.Rest.UriTemplates.DependencyInjection` | `0.2.0` |
+| `Chatter.Rest.UriTemplates` | `Chatter.Rest.UriTemplates` | `0.11.0` |
+| `Chatter.Rest.UriTemplates.DependencyInjection` | `Chatter.Rest.UriTemplates.DependencyInjection` | `0.3.0` |
 
 ### Canonical Version Source
 
@@ -115,8 +119,9 @@ All of the following must be updated together in the same commit when bumping `C
 ### Bump-Triggering Paths
 
 A version bump is required when a PR modifies any file under:
-- `src/Chatter.Rest.UriTemplates/**`
-- `src/Chatter.Rest.UriTemplates.DependencyInjection/**`
+- `src/Chatter.Rest.UriTemplates/**` (core package bump)
+- `src/Chatter.Rest.UriTemplates.DependencyInjection/**` (DI package bump)
+- `src/Directory.Build.props` (bump for BOTH packages — each CI workflow passes it to `version-check.yml` via `extra-src-path`)
 
 No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root).
 

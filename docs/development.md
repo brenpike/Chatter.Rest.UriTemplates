@@ -11,38 +11,32 @@
 ```
 Chatter.Rest.UriTemplates.sln             <- solution file (repo root)
 src/
+  Directory.Build.props                   <- shared build/analyzer/audit settings for src/ projects
   Chatter.Rest.UriTemplates/
-    Chatter.Rest.UriTemplates.csproj     <- targets net8.0;netstandard2.0
+    Chatter.Rest.UriTemplates.csproj      <- targets net8.0;netstandard2.0
     UriTemplate.cs                        <- public entry point
-    IUriTemplateParser.cs
-    IUriTemplateFactory.cs
-    UriTemplateToken.cs
-    UriTemplateOperator.cs
-    UriTemplateVarSpec.cs
-    UriTemplateParser.cs
-    UriTemplateExpander.cs
-    UriTemplateFactory.cs
+    ...                                   <- parser, expander, encoder, value types,
+                                             operator strategies (Operators/), and more
   Chatter.Rest.UriTemplates.DependencyInjection/
     Chatter.Rest.UriTemplates.DependencyInjection.csproj  <- targets net8.0;netstandard2.0
     ServiceCollectionExtensions.cs        <- AddUriTemplates() extension method
 test/
   Chatter.Rest.UriTemplates.Tests/
     Chatter.Rest.UriTemplates.Tests.csproj  <- targets net8.0
-    UriTemplateLevel1Tests.cs
-    UriTemplateLevel2Tests.cs
-    UriTemplateLevel3Tests.cs
-    UriTemplateLevel4Tests.cs
-    UriTemplateEdgeCaseTests.cs
-    UriTemplateGetVariablesTests.cs
+    *Tests.cs                               <- 15 test classes; complete list in section 4
+    uritemplate-test/                       <- official RFC 6570 test-suite submodule (JSON fixtures)
   Chatter.Rest.UriTemplates.DependencyInjection.Tests/
     Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj  <- targets net8.0
     ServiceCollectionExtensionsTests.cs
 ```
 
+The source-file listing above is deliberately **non-exhaustive** — it names entry
+points only. See the project directories for the full file list.
+
 **Target frameworks:**
 
-- `src/` project multi-targets `net8.0;netstandard2.0`
-- `test/` project targets `net8.0` only
+- both `src/` projects multi-target `net8.0;netstandard2.0`
+- both `test/` projects target `net8.0` only
 
 ## 3. Build Commands
 
@@ -60,9 +54,9 @@ dotnet build
 dotnet build -c Release --no-restore
 ```
 
-**Lock file note:** if `dotnet restore --locked-mode` fails, delete `packages.lock.json` and run `dotnet restore` to regenerate. Commit the regenerated file.
+**Lock file note:** each of the four projects (both `src/` projects and both `test/` projects) has its own `packages.lock.json` in its project directory. If `dotnet restore --locked-mode` fails, delete the failing project's `packages.lock.json` and run `dotnet restore` to regenerate it. Commit the regenerated file(s).
 
-**Warnings:** zero warnings expected on `net8.0`. The `netstandard2.0` target may emit baseline nullable-context warnings (`CS8604`/`CS8603`) — these are pre-existing and not regressions.
+**Warnings:** `src/Directory.Build.props` sets `TreatWarningsAsErrors` with `AnalysisLevel` `latest-recommended` for the `src/` projects, so most warnings fail the build. Three analyzer rules with pre-existing findings are excluded from errors via `WarningsNotAsErrors` and still report as warnings on **both** target frameworks: `CA1305`, `CA1510`, `CA1716` (27 warnings in a full Release build as of this writing — see the follow-up notes in `src/Directory.Build.props`). `NU1900` is permanently exempted so an audit-service outage cannot fail restore. No other warnings are expected; in particular there are no nullable-context warnings on either target framework.
 
 ## 4. Test Commands
 
@@ -96,14 +90,29 @@ dotnet build -c Release --no-restore
 dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj -c Release --no-build
 ```
 
-**Test classes:**
+**Test classes (complete list — update this section when adding or removing a test class):**
+
+Core test project (`test/Chatter.Rest.UriTemplates.Tests/`), 15 classes:
 
 - `UriTemplateLevel1Tests` — simple string expansion
 - `UriTemplateLevel2Tests` — reserved and fragment expansion
 - `UriTemplateLevel3Tests` — multi-variable and operator expansion
 - `UriTemplateLevel4Tests` — prefix modifiers, list values, associative arrays, explode behavior
+- `UriTemplateArgumentContractTests` — argument contracts of the public `Expand` overloads (null handling, at-most-once enumeration, failure ordering)
+- `UriTemplateAssociativeArrayTests` — associative-array expansion determinism guarantees
+- `UriTemplateComplianceTests` — official RFC 6570 suite, read from the `TestData/` JSON fixtures (see section 8)
 - `UriTemplateEdgeCaseTests` — malformed templates, mixed-level, modifier validation
 - `UriTemplateGetVariablesTests` — variable enumeration across all operator types
+- `UriTemplateParserValidationTests` — parser/encoder rejection of invalid input
+- `UriTemplateSecurityTests` — characterization of the expansion security posture
+- `UriTemplateTupleOverloadTests` — tuple-based `Expand` overloads
+- `UriTemplateTypeValidationTests` — construction-time validation of token types and the operator strategy factory
+- `UriTemplateValueTests` — `UriTemplateValue` factory methods and the `UriTemplateValue`-dictionary `Expand` overload
+- `XmlDocExceptionTagShapeTests` — mechanical enforcement of the `<exception>`-tag shape convention against the core assembly's generated XML documentation (see section 7)
+
+DI test project (`test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`), 1 class:
+
+- `ServiceCollectionExtensionsTests` — `AddUriTemplates()` service registration
 
 ## 5. NuGet Packaging
 
@@ -111,7 +120,7 @@ dotnet test test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/Chatter.Res
 dotnet pack src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj -c Release -o publish/nuget
 ```
 
-Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.10.0.
+Output lands in `publish/nuget/`. Package ID: `Chatter.Rest.UriTemplates` v0.11.0.
 
 To pack the DI extension package:
 
@@ -119,7 +128,7 @@ To pack the DI extension package:
 dotnet pack src/Chatter.Rest.UriTemplates.DependencyInjection/Chatter.Rest.UriTemplates.DependencyInjection.csproj -c Release -o publish/nuget
 ```
 
-Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.2.0.
+Package ID: `Chatter.Rest.UriTemplates.DependencyInjection` v0.3.0.
 
 ## 6. CI/CD Parity
 
@@ -129,7 +138,7 @@ Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGe
 
 | Trigger | Condition |
 |---|---|
-| Push | `feature/**`, `bugfix/**`, `hotfix/**`, `refactor/**`, `chore/**`, `docs/**`, `test/**`, `ci/**`, `main` (path-scoped to `src/Chatter.Rest.UriTemplates/`, `src/Directory.Build.props`, `test/Chatter.Rest.UriTemplates.Tests/`, and the workflow files themselves) |
+| Push | `feature/**`, `bugfix/**`, `hotfix/**`, `refactor/**`, `chore/**`, `docs/**`, `test/**`, `ci/**`, `main` (path-scoped to `src/Chatter.Rest.UriTemplates/`, `src/Directory.Build.props`, `test/Chatter.Rest.UriTemplates.Tests/`, plus its own workflow file and the two reusable workflows `version-check.yml` and `create-version-tag.yml`) |
 | Pull request | targeting `main` (same path scope) |
 | Manual | `workflow_dispatch` — runs the build job only; deploy and tag never run for manual dispatches |
 
@@ -137,7 +146,7 @@ Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGe
 
 | Trigger | Condition |
 |---|---|
-| Push | same branch patterns (path-scoped to `src/Chatter.Rest.UriTemplates.DependencyInjection/`, `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`, `src/Chatter.Rest.UriTemplates/` to catch DI integration impact of core changes, `src/Directory.Build.props`, and the workflow files themselves) |
+| Push | same branch patterns (path-scoped to `src/Chatter.Rest.UriTemplates.DependencyInjection/`, `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/`, `src/Chatter.Rest.UriTemplates/` to catch DI integration impact of core changes, `src/Directory.Build.props`, plus its own workflow file and the two reusable workflows `version-check.yml` and `create-version-tag.yml`) |
 | Pull request | targeting `main` (same path scope) |
 | Manual | `workflow_dispatch` — runs the build job only; deploy and tag never run for manual dispatches |
 
@@ -182,11 +191,35 @@ The source set for that decision is the package's own `src/` directory plus `src
 
 All projects have `<Nullable>enable</Nullable>`.
 
+### Behavioral contract wording
+
+Canonical behavioral contracts (in `docs/usage.md` and in XML doc comments) must be keyed so that a guard, a throw site, or a future code change cannot falsify them:
+
+1. State what the caller must guarantee (an obligation), not what the library will do.
+2. Condition consequences on the failure actually occurring, so a guard that fires negates the premise rather than contradicting the sentence.
+3. Write library promises as prescriptive commitments: a future code path that violates one is a bug against the contract, not a counterexample that falsifies the docs.
+4. Mark example lists as explicitly non-exhaustive.
+5. Mirrors (e.g. `README.md`) carry only the obligation or commitment sentence plus a link to the canonical `docs/usage.md` anchor, never a copy of the detail.
+
+The check for every contract sentence: could someone add a validation check tomorrow that makes this sentence false? If yes, it is keyed wrong; reword it as an obligation, a premise-conditioned consequence, or a prescriptive commitment. Worked examples: [Values must be finite sequences](usage.md#values-must-be-finite-sequences) and [Exception message content](usage.md#exception-message-content).
+
+### Behavioral contract keying — single source per primitive
+
+The wording clauses above govern how a contract sentence is phrased. This rule governs where a contract fact may live. The two are orthogonal: a sentence can satisfy every wording clause and still violate this rule.
+
+1. A behavior implemented in one shared internal step is documented at exactly one canonical anchored section in `docs/usage.md`, keyed to that step — not to any of the overloads that expose it.
+2. Every API surface exposing that step — overload prose in `docs/usage.md`, XML doc comments, `README.md` mirrors — carries at most one sentence plus a link to that canonical anchor, never a copy of the detail.
+3. A true sentence restated per-overload is a defect against this rule regardless of its content. Replication is the violation, so a review can flag it without first proving the restatement false or divergent.
+
+Worked examples: [Variable materialization](usage.md#variable-materialization), alongside the two wording examples cited above.
+
+**Enforcement note:** of the two rules above, one slice now has teeth. The `<exception>`-tag shape — at most one sentence carrying the throw condition (semicolon-joined clauses count as one sentence; `e.g.`/`i.e.` abbreviations and dotted references such as `§3.2.1` do not end one), optionally followed by a single trailing `See "…" in docs/usage.md` pointer sentence — is mechanically enforced against the core assembly's generated XML documentation by `XmlDocExceptionTagShapeTests` in `test/Chatter.Rest.UriTemplates.Tests/`. That test checks shape only, not whether a sentence is true. Everything else in this class — `<summary>` and `<remarks>` blocks, `docs/usage.md` overload prose, `README.md` and `docs/architecture.md` mirrors, and whether a canonical sentence actually matches the code — remains convention-only, enforced by review. The residual is tracked in issue #69.
+
 ## 8. Test Conventions
 
 - **Framework:** xunit 2.9.x
-- **Assertions:** FluentAssertions 6.x (preferred); xunit `Assert` also used
+- **Assertions:** FluentAssertions 6.x (used exclusively; no direct xunit `Assert` calls)
 - **Coverage:** coverlet.msbuild
 - **Test naming:** `Method_Scenario_Expected` — e.g., `Expand_WithUndefinedVariable_OmitsVariable`
-- **Test data:** all inline (no JSON fixture files)
-- **InternalsVisibleTo:** configured in `Chatter.Rest.UriTemplates.csproj` — internal types (`UriTemplateParser`, `UriTemplateExpander`, `UriTemplateFactory`) are accessible in tests
+- **Test data:** inline for every test class except `UriTemplateComplianceTests`, which reads JSON fixtures from `TestData/`. The core test csproj copies `uritemplate-test/*.json` (four files from the submodule) into `TestData/` at build time; the compliance tests read three of them — `spec-examples.json`, `extended-tests.json`, `negative-tests.json`. The fourth, `spec-examples-by-section.json`, is copied but not currently read (tracked in issue #56)
+- **InternalsVisibleTo:** configured in `Chatter.Rest.UriTemplates.csproj` for two assemblies: the core test assembly (`Chatter.Rest.UriTemplates.Tests`) and the DI assembly (`Chatter.Rest.UriTemplates.DependencyInjection`). Internal types (e.g. `UriTemplateParser`, `UriTemplateExpander`, `UriTemplateFactory`; non-exhaustive) are accessible in both

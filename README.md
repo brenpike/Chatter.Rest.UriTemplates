@@ -180,62 +180,18 @@ var uri = new UriTemplate("/proxy/{path}")
 ```
 
 **Only expand trusted values with `{+var}` and `{#var}`.** Reserved and
-fragment expansion exist to let reserved URI characters pass through
-unencoded — exactly what RFC 6570 Section 3.2.3 requires — but that also means
-the value can change the meaning of the surrounding URI. Which component the
-value can reach depends on where the expression sits in the template.
-
-With `http://ex.com/a{+p}`, the expression sits in the path, after the
-authority has already ended, so the value can add or rewrite everything from
-the path onward:
-
-- `p = "?admin=1"` produces `http://ex.com/a?admin=1` — the value starts the
-  query string.
-- `p = "#frag"` produces `http://ex.com/a#frag` — the value starts the
-  fragment.
-- `p = "../../etc/passwd"` produces `http://ex.com/a../../etc/passwd` — the
-  traversal sequence passes through raw.
-- `p = "x@evil.com"` produces `http://ex.com/ax@evil.com` and
-  `p = "//evil.com/a"` produces `http://ex.com/a//evil.com/a`. Both stay in
-  the path; they do not rewrite the authority from this position, but they do
-  change the path the request resolves to.
-
-When the expression sits inside or before the authority, the value reaches the
-host itself:
-
-- `http://{+host}/path` with `host = "x@evil.com"` produces
-  `http://x@evil.com/path` — the value has introduced a userinfo component and
-  moved the request to a different host.
-- `http://{+host}/path` with `host = "evil.com"` produces
-  `http://evil.com/path`.
-- `{+p}/path` with `p = "//evil.com"` produces `//evil.com/path`, a
-  scheme-relative URL pointing at another origin.
-
-Under the default `{var}` operator these characters are percent-encoded, so
-none of them can change the URI's structure: `http://{host}/path` with
-`host = "x@evil.com"` produces `http://x%40evil.com/path`, and
-`/proxy/{path}` with `path = "../../etc/passwd"` produces
-`/proxy/..%2F..%2Fetc%2Fpasswd`. Use the default operator for untrusted
-values; if reserved expansion is genuinely required, validate the value
-against a caller-side allowlist first. See [Encoding](#encoding) for how
-pre-encoded sequences behave under `{+}` and `{#}`, and for the limits of what
-percent-encoding guarantees.
-
-**What the default operator does and does not guarantee.** Percent-encoding
-guarantees that the value cannot alter the structure of the URI as parsed —
-the encoded value stays inside the single component it was expanded into. It
-does not sanitize the value's meaning. `/proxy/..%2F..%2Fetc%2Fpasswd`
-decodes straight back to `../../etc/passwd`, so any downstream component that
-percent-decodes before routing or filesystem normalization sees the traversal
-sequence again. Encoding defers that problem to the consumer; it does not
-eliminate it. Validate or normalize untrusted path values on the receiving
-side regardless of which operator produced them.
+fragment expansion let reserved URI characters pass through unencoded, so the
+value can change the meaning of the surrounding URI — see
+[Encoding Rules (section 6)](docs/usage.md#6-encoding-rules) in the usage
+guide for the full trust-boundary contract, including what the default
+`{var}` operator does and does not guarantee.
 
 ### Optional Variables
 
-Variables that are not supplied are omitted. Prefixes such as `?`, `&`, `/`,
-and `.` are only emitted when at least one variable in the expression has a
-value.
+Variables that are not supplied are omitted per RFC 6570, including the
+expression's operator prefix when every variable in it is undefined — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined) in the
+usage guide for exactly which inputs expand as undefined.
 
 ```csharp
 var template = new UriTemplate("/orders/{id}{?status,page}");
@@ -256,7 +212,8 @@ var uri = new UriTemplate("/orders{?status,page}")
 
 ### Empty Values
 
-Empty strings are defined values and are expanded according to the operator.
+Empty strings are defined values and are expanded according to the operator —
+see [What counts as undefined](docs/usage.md#what-counts-as-undefined).
 
 ```csharp
 new UriTemplate("/orders{?status}")
@@ -285,12 +242,10 @@ var variables = template.GetVariables();
 
 ### `new UriTemplate(string template)`
 
-Parses the template eagerly.
-
-- Throws `ArgumentNullException` when `template` is `null`.
-- Throws `FormatException` for malformed templates, such as unclosed braces,
-  nested braces, empty `{}` expressions, or mutually exclusive prefix and
-  explode modifiers.
+Parses the template eagerly on construction, so every parse failure surfaces
+at construction time, never later at `Expand` — see
+[Constructor exceptions](docs/usage.md#constructor-exceptions) in the usage
+guide for the authoritative exception contract.
 
 For dependency injection scenarios, use `IUriTemplateFactory.Create(string)`
 instead of calling the constructor directly. See the
@@ -316,9 +271,12 @@ var uri = new UriTemplate("/search{?q,lang}")
 Expands the template using a dictionary that supports composite value types for
 Level 4 expansion. Supported value types: `string`, `IEnumerable<string>`,
 `IDictionary<string, string>`, `IEnumerable<KeyValuePair<string, string>>`, and
-`null` (treated as undefined). Associative-array pair order is determined by
-the container type supplied — see
-[Associative-Array Pair Order](#associative-array-pair-order).
+`null` (treated as undefined — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined)).
+Associative-array pair order is derived from the container type supplied — see
+[Associative-array pair order](docs/usage.md#associative-array-pair-order).
+Composite values must be
+[finite sequences](docs/usage.md#values-must-be-finite-sequences).
 
 ```csharp
 var uri = new UriTemplate("{?list*}").Expand(new Dictionary<string, object?>
@@ -346,6 +304,9 @@ var uri = new UriTemplate("{?color*}").Expand(new Dictionary<string, UriTemplate
 Factory methods: `From(string)` returning `StringValue`,
 `From(IEnumerable<string>)` returning `ListValue`,
 `From(IDictionary<string, string>)` returning `DictionaryValue`.
+Both eager factories — `From(IEnumerable<string>)` and
+`From(IDictionary<string, string>)` — drain their input at construction, so each
+requires a [finite sequence](docs/usage.md#values-must-be-finite-sequences).
 
 ### `Expand(params (string Key, string Value)[] variables)`
 
@@ -361,8 +322,12 @@ var uri = new UriTemplate("/search{?q}")
 
 ### `Expand(params (string Key, object? Value)[] variables)`
 
-Tuple overload for composite values. Accepts string, list, dictionary, and null
-values via `object?`. First-wins for duplicate keys.
+Tuple overload for composite values. Supported value types via `object?`:
+`string`, `IEnumerable<string>`, `IDictionary<string, string>`,
+`IEnumerable<KeyValuePair<string, string>>`, and `null` (treated as
+undefined — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined)).
+First-wins for duplicate keys.
 
 ```csharp
 var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
@@ -380,7 +345,8 @@ var uri = new UriTemplate("/users/{id}{?tag*}").Expand(
 ### `Expand()`
 
 Expands the template with all variables undefined. Every expression is omitted
-per RFC 6570 rules.
+per RFC 6570 rules — see
+[What counts as undefined](docs/usage.md#what-counts-as-undefined).
 
 ```csharp
 var uri = new UriTemplate("/orders{?status,page}").Expand();
@@ -391,7 +357,8 @@ var uri = new UriTemplate("/orders{?status,page}").Expand();
 ### `GetVariables()`
 
 Returns variable names in first-seen order with duplicates removed. Variable
-names are case-sensitive.
+names are matched case-sensitively — see
+[Variable materialization](docs/usage.md#variable-materialization).
 
 ```csharp
 var variables = new UriTemplate("/{resource}/{id}{?id,format}")
@@ -400,10 +367,10 @@ var variables = new UriTemplate("/{resource}/{id}{?id,format}")
 // ["resource", "id", "format"]
 ```
 
-RFC 6570 permits duplicate variable names, and each occurrence expands:
-`{?x,x}` with `x = "1"` produces `?x=1&x=1`, while `GetVariables()` reports
-`x` once. Callers that count expansion output via `GetVariables()` will
-under-count in that case.
+RFC 6570 permits duplicate variable names, and each occurrence expands while
+`GetVariables()` reports the name once — see
+[`GetVariables()`](docs/usage.md#ireadonlyliststring-getvariables) in the
+usage guide for the under-counting consequence.
 
 ## Supported Template Features
 
@@ -428,14 +395,16 @@ Variables are supplied as `string` for simple values. Level 4 composite values
 `Expand(IDictionary<string, UriTemplateValue>)` overload.
 
 Note: a template that begins with `{/...}` can produce a scheme-relative URL
-when the first variable expands to an empty string — `{/a,b}` with `a = ""`
-and `b = "evil.com"` produces `//evil.com`. This is RFC-conformant, but if a
-template starts with `{/...}` and its values are not trusted, prefix the
-template with a literal path segment.
+when its first variable expands to an empty string — see
+[Path Segment Expansion](docs/usage.md#level-3--path-segment-expansion-var)
+in the usage guide before expanding untrusted values in such a template.
 
 ## Encoding
 
-`Chatter.Rest.UriTemplates` percent-encodes values as UTF-8 bytes.
+`Chatter.Rest.UriTemplates` percent-encodes values as UTF-8 bytes. Supplied
+strings must be well-formed UTF-16: expanding a value that contains an
+unpaired surrogate throws `FormatException` — see
+[Unpaired surrogates in values](docs/usage.md#unpaired-surrogates-in-values).
 
 - Simple, label, path segment, path-style parameter, and query operators encode
   everything except RFC 3986 unreserved characters: `A-Z a-z 0-9 - . _ ~`.
@@ -454,36 +423,22 @@ new UriTemplate("{+url}")
 // "https://example.com/docs?q=uri%20templates"
 ```
 
-Preserving pre-encoded sequences is part of the `{+}`/`{#}` trust boundary: a
-valid-looking percent triplet in the value is kept verbatim, so `{+p}` with
-`p = "%0d%0aX: y"` yields `%0d%0aX:%20y` and `p = "%2e%2e%2fetc"` stays
-`%2e%2e%2fetc` — a downstream server that decodes these sees control
-characters or a traversal sequence. The default operator neutralizes the same
-input by encoding `%` as `%25`. This difference between the two operator
-families is the reason `{+}` and `{#}` values must be trusted; expand
-`{+url}`-style templates only with URLs you already trust.
-
-Even under `{+}` and `{#}`, characters outside the reserved and unreserved
-sets are always percent-encoded: raw CR, LF, NUL, backslash, and
-direction-override characters such as U+202E never pass through (`"a\r\nb"`
-becomes `a%0D%0Ab`), and non-ASCII text is always UTF-8 percent-encoded, so
-raw homograph bytes never appear in the output.
-
-That guarantee is scoped to *raw* control characters in the value. It is not
-an end-to-end guarantee against HTTP header splitting: as described above,
-`{+}` and `{#}` preserve valid percent triplets, so a caller-supplied
-`%0d%0a` survives expansion unchanged and becomes CR LF again in any consumer
-that percent-decodes the value before placing it in a header. If an expanded
-value will be decoded and then used in a header, a host position, or a
-filesystem path, validate it there as well.
+Preserving pre-encoded sequences is part of the `{+}`/`{#}` trust boundary:
+expand `{+url}`-style templates only with URLs you already trust, and if an
+expanded value will be decoded and then used in a header, a host position, or
+a filesystem path, validate it there as well. See
+[Encoding Rules (section 6)](docs/usage.md#6-encoding-rules) in the usage
+guide for what `{+}` and `{#}` preserve and what is always percent-encoded.
 
 ## Level 4: Prefix, Explode, and Composite Values
 
 Level 4 templates use the `Expand(IDictionary<string, object?>)` overload to
-supply list and associative-array values alongside strings.
+supply list and associative-array values alongside strings. A prefix modifier
+truncates a string value in Unicode code points — see
+[Prefix truncation in code points](docs/usage.md#prefix-truncation-in-code-points).
 
 ```csharp
-// Prefix modifier: truncate value to 3 characters
+// Prefix modifier: truncate the value before expansion
 var uri = new UriTemplate("{var:3}").Expand(new Dictionary<string, object?>
 {
     ["var"] = "value"
@@ -517,65 +472,10 @@ string-only values, including templates with prefix modifiers.
 ### Associative-Array Pair Order
 
 RFC 6570 mandates no particular pair order for associative-array values, so
-this library defines one. The order is derived from the ordering contract of
-the value the caller supplies:
-
-| Supplied value | Pair order |
-|---|---|
-| A keyed or set container: `IDictionary<string, string>` (`Dictionary`, `FrozenDictionary`, `ImmutableDictionary`, `ConcurrentDictionary`, `ReadOnlyDictionary`, `SortedDictionary`, `SortedList`), including `UriTemplateValue.From(IDictionary<string, string>)`, or `ISet<KeyValuePair<string, string>>` (`HashSet`, `FrozenSet`, `ImmutableHashSet`) | Canonicalized: sorted ordinally by key (`string.CompareOrdinal`), with an ordinal comparison of the value as tie-break |
-| Every other `IEnumerable<KeyValuePair<string, string>>` — `List<KeyValuePair<string, string>>`, arrays, `ImmutableArray<...>`, `ImmutableList<...>`, `ReadOnlyCollection<...>`, `Queue<...>`, `LinkedList<...>`, `Stack<...>`, iterator methods, LINQ pipelines such as `Select` and `OrderBy`, and custom enumerables | Exactly the order the sequence enumerates, preserved verbatim, duplicate keys included |
-
-Canonicalization is a uniform policy applied to these two interfaces, not an
-inference about each container. Most keyed and set containers genuinely expose
-no way to place one pair before another — a `Dictionary<string, string>`
-enumerates in hash-slot order, which diverges from insertion order once an
-entry is removed and another inserted into the freed slot. A few do carry a
-caller-supplied order: `SortedDictionary`, `SortedList`, and `SortedSet`
-enumerate by their comparer, and the library replaces that order with its own.
-Sorting every implementation of these interfaces the same way means one
-interface always implies one ordering, and makes the expansion reproducible. The sort is ordinal, not
-culture-aware; the value tie-break exists because a set can hold two pairs
-with the same key, while dictionary keys are unique, so for a dictionary the
-order is purely ordinal by key.
-
-No .NET interface distinguishes an ordered sequence from an unordered one — a
-`Queue<T>` and a `HashSet<T>` are both just `IEnumerable<T>` — so the library
-does not guess: it canonicalizes only where the container type proves the
-order is not the caller's, and defers to the caller everywhere else. A
-sequence you deliberately ordered — including one that repeats a key — is
-never reordered. Note that `FrozenDictionary<string, string>` implements
-`IDictionary<string, string>` and `FrozenSet<KeyValuePair<string, string>>`
-implements `ISet<...>`, so both are canonicalized rather than
-order-preserving.
-
-```csharp
-// Dictionary input: keys sorted ordinally, whatever order they were added in
-new UriTemplate("{?keys*}").Expand(new Dictionary<string, object?>
-{
-    ["keys"] = new Dictionary<string, string>
-    {
-        ["semi"] = ";",
-        ["dot"] = ".",
-        ["comma"] = ","
-    }
-});
-// "?comma=%2C&dot=.&semi=%3B"
-
-// Ordered sequence input: supplied order preserved, duplicates included
-new UriTemplate("{?tags*}").Expand(new Dictionary<string, object?>
-{
-    ["tags"] = new List<KeyValuePair<string, string>>
-    {
-        new("tag", "a"),
-        new("tag", "b")
-    }
-});
-// "?tag=a&tag=b"
-```
-
-**Callers who need a specific pair order should pass a
-`List<KeyValuePair<string, string>>`.** See the
-[usage guide](docs/usage.md#associative-array-pair-order) for details.
+this library defines one, derived from the ordering contract of the container
+type the caller supplies — see
+[Associative-array pair order](docs/usage.md#associative-array-pair-order) in
+the usage guide for the authoritative ordering contract.
 
 ## More Documentation
 
@@ -588,9 +488,12 @@ new UriTemplate("{?tags*}").Expand(new Dictionary<string, object?>
 
 ## Development
 
-Build and test locally with the .NET SDK:
+Build and test locally with the .NET SDK. The `uritemplate-test` submodule is
+required — the RFC 6570 compliance tests read their test data from it and
+throw on a clone where it was never initialized:
 
 ```bash
+git submodule update --init
 dotnet restore
 dotnet test
 ```

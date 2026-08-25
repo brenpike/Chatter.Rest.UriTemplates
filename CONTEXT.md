@@ -25,9 +25,9 @@ value is emitted unchanged during expansion. _Avoid_: static text, constant.
 ### Modifiers
 
 **Prefix Modifier**: The `:N` suffix on a variable specifier that truncates a
-string value to its first N Unicode code points — not UTF-16 code units, so a
-surrogate pair is never split, and not grapheme clusters, so a combining mark
-counts on its own. _Avoid_: substring modifier, truncation modifier, max-length.
+string value to its first N Unicode code points, per
+[Prefix truncation in code points](docs/usage.md#prefix-truncation-in-code-points).
+_Avoid_: substring modifier, truncation modifier, max-length.
 
 **Explode Modifier**: The `*` suffix on a variable specifier that expands each member of a list or associative array separately instead of joining them with commas. _Avoid_: star modifier, splat, spread.
 
