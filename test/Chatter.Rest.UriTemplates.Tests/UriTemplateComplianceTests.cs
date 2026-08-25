@@ -96,6 +96,15 @@ namespace Chatter.Rest.UriTemplates.Tests
             }
         }
 
+        [Fact]
+        public void LoadTestFile_MissingFile_NamesSubmoduleRemedy()
+        {
+            Action act = () => LoadTestFile("missing-compliance-test-data.json");
+
+            act.Should().Throw<FileNotFoundException>()
+                .WithMessage("*missing-compliance-test-data.json*git submodule update --init*");
+        }
+
         // ====================================================================
         // Helpers
         // ====================================================================
@@ -103,6 +112,14 @@ namespace Chatter.Rest.UriTemplates.Tests
         private static JsonDocument LoadTestFile(string filename)
         {
             var path = Path.Combine(AppContext.BaseDirectory, "TestData", filename);
+
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException(
+                    $"URI template compliance test data was not found at '{path}'. Run 'git submodule update --init' from the repository root and rebuild the test project.",
+                    path);
+            }
+
             return JsonDocument.Parse(File.ReadAllText(path));
         }
 
