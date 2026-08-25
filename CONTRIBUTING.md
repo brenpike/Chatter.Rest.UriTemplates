@@ -61,7 +61,7 @@ Follow the existing `.editorconfig` rules:
 
 Nullable reference types are enabled in every project (`<Nullable>enable</Nullable>` in each csproj, rather than an `.editorconfig` rule).
 
-Run `dotnet build` before submitting. The `src/` projects treat warnings as errors, so a new warning fails the build; the only expected warnings are the pre-existing `CA1305`/`CA1510`/`CA1716` findings tracked in `src/Directory.Build.props`.
+Run `dotnet build` before submitting. The `src/` projects treat warnings as errors, so a new warning fails the build. Two kinds of warnings are expected: the pre-existing `CA1305`/`CA1510`/`CA1716` findings tracked in `src/Directory.Build.props`, and occasionally `NU1900`, which NuGet emits when vulnerability data cannot be retrieved (audit-service outage or offline restore) — it is exempted permanently by design, is not a tracked code defect, and is not caused by your change.
 
 ## Tests
 
@@ -72,7 +72,7 @@ Run `dotnet build` before submitting. The `src/` projects treat warnings as erro
 ## Pull Request Checklist
 
 - [ ] Branched from `main`
-- [ ] `dotnet build` passes with no new warnings (the pre-existing `CA1305`/`CA1510`/`CA1716` findings are the only expected ones)
+- [ ] `dotnet build` passes with no new warnings (expected: the pre-existing `CA1305`/`CA1510`/`CA1716` findings, plus `NU1900` if the NuGet audit service was unreachable during restore — that one is environmental and not your fault)
 - [ ] `dotnet test` passes
 - [ ] New behavior has test coverage
 - [ ] Code style matches `.editorconfig`
