@@ -324,7 +324,7 @@
     toks.forEach(function (tk) {
       if (!tk.expr) return;
       tk.expr.vars.forEach(function (v) {
-        if (VARS[v.name] !== undefined) used[v.name] = 1;
+        if (Object.prototype.hasOwnProperty.call(VARS, v.name)) used[v.name] = 1;
         else if (missing.indexOf(v.name) < 0) missing.push(v.name);
       });
     });

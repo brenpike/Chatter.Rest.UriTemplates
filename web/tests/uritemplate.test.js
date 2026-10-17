@@ -44,3 +44,8 @@ test("associative-array keys are sorted ordinally, matching the library", () => 
 test("the page's showcase expansions", () => {
   assert.strictEqual(UT.expand("/orders{?status,page}", { status: "shipped", page: "2" }), "/orders?status=shipped&page=2");
 });
+
+test("names inherited from Object.prototype are undefined, not values", () => {
+  assert.strictEqual(UT.expand("{?toString,constructor}", {}), "");
+  assert.strictEqual(UT.expand("/a{/__proto__}{?hasOwnProperty}", {}), "/a");
+});

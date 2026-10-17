@@ -107,7 +107,7 @@ var UT = (function () {
   function expandExpr(ex, values) {
     var o = OPS[ex.op], parts = [];
     ex.vars.forEach(function (vs) {
-      var v = values[vs.name], k = kind(v);
+      var v = Object.prototype.hasOwnProperty.call(values, vs.name) ? values[vs.name] : undefined, k = kind(v);
       if (k === "undef" || (k === "list" && v.length === 0) || (k === "map" && Object.keys(v).length === 0)) return;
       if (vs.prefix != null && k !== "string") throw new UTError("\"" + vs.name + "\" is a " + (k === "list" ? "list" : "dictionary") + ". A prefix like :" + vs.prefix + " only works on strings.", "expand");
       var e = function (s) { return enc(s, o.reserved); };
