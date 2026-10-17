@@ -96,11 +96,71 @@ jobs:
       # pre-merge version check and the post-merge publish gate agree.
       extra-src-path: 'src/Directory.Build.props'
 
+  release-check:
+    name: release-check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+
+    # Decides whether this main push needs the deploy job at all, so pushes
+    # that cannot publish (workflow-only changes such as action bumps) never
+    # reach the Production environment's approval gate. Runs without secrets.
+    # Deploy is still needed when the version is not on nuget.org yet, or when
+    # this push changed package sources: the publish gate then publishes, or
+    # fails loudly on a missing version bump, exactly as before.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check whether deploy is needed
+        id: check
+        shell: bash
+        env:
+          PACKAGE_ID: 'Chatter.Rest.UriTemplates'
+          CSPROJ_PATH: 'src/Chatter.Rest.UriTemplates/Chatter.Rest.UriTemplates.csproj'
+          # Keep identical to the deploy job's SRC_PATTERN.
+          SRC_PATTERN: '^src/Chatter\.Rest\.UriTemplates/|^src/Directory\.Build\.props$'
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          VERSION=$(grep -m1 '<Version>' "$CSPROJ_PATH" | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | tr -d ' \r')
+          PACKAGE_ID_LOWER=$(printf '%s' "$PACKAGE_ID" | tr '[:upper:]' '[:lower:]')
+          INDEX_URL="https://api.nuget.org/v3-flatcontainer/${PACKAGE_ID_LOWER}/index.json"
+          INDEX_FILE=$(mktemp)
+          HTTP_STATUS=$(curl -sS -o "$INDEX_FILE" -w '%{http_code}' "$INDEX_URL" || echo "000")
+
+          # Anything other than a clear "already published" leaves the decision
+          # to the deploy job's publish gate.
+          if [ "$HTTP_STATUS" != "200" ] || ! jq -e --arg v "$VERSION" '.versions | index($v) != null' "$INDEX_FILE" > /dev/null 2>&1; then
+            echo "$PACKAGE_ID $VERSION is not confirmed on nuget.org (HTTP $HTTP_STATUS); deploy is needed."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BASE_SHA="$BEFORE_SHA"
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            BASE_SHA="${CURRENT_SHA}^"
+          fi
+          CHANGED_SOURCES=$(git diff --name-only "$BASE_SHA" "$CURRENT_SHA" | grep -E "$SRC_PATTERN" | grep -v '\.md$' || true)
+
+          if [ -n "$CHANGED_SOURCES" ]; then
+            echo "This push changed $PACKAGE_ID sources; deploy is needed."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$PACKAGE_ID $VERSION is already published and this push did not change package sources; skipping deploy."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
     name: deploy
-    needs: build
+    needs: [build, release-check]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # only the push produced by merging to protected main; never workflow_dispatch
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release-check.outputs.needed == 'true' # only the push produced by merging to protected main, and only when it can publish; never workflow_dispatch
 
     # Mutual exclusion for the publish gate and NuGet push per package: two
     # overlapping main pushes must not both observe a version as unpublished
