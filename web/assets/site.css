@@ -389,9 +389,9 @@ h3 { font-size: var(--step-1); font-weight: 600; }
 p { margin: 0; text-wrap: pretty; }
 .lede { font-size: var(--step-1); line-height: 1.55; color: var(--ink2); }
 .muted { color: var(--ink2); opacity: .85; }
-.byline { font-size: var(--step--1); color: var(--mute); margin-top: -.5rem; }
+.byline { font-size: var(--step--1); color: var(--ink2); margin-top: -.5rem; }
 .byline a { text-decoration-thickness: 1px; text-underline-offset: 3px; }
-.byline a:hover { color: var(--ink2); }
+.byline a:hover { color: var(--ink); }
 .story p code, .lede code, .fine code { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: var(--sunk); color: var(--ink); }
 pre.block {
   margin: 0; padding: 14px 16px; background: var(--sunk); border-radius: 12px;
