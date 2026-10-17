@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chatter.Rest.UriTemplates</title>
+<meta name="description" content="RFC 6570 URI Templates for .NET. Watch a URI template expand step by step, then try your own templates in the browser.">
+<meta property="og:title" content="Chatter.Rest.UriTemplates">
+<meta property="og:description" content="RFC 6570 URI Templates for .NET, Levels 1 to 4, with zero dependencies.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151821'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='monospace' font-size='18' font-weight='700' fill='%238b80ff'%3E%7B%7D%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="fx fx-grid" aria-hidden="true"></div>
+<div class="fx fx-glow" aria-hidden="true"></div>
+<canvas class="fx" id="glyphs" aria-hidden="true"></canvas>
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<div class="shell">
+  <header class="topbar">
+    <span class="mark">Chatter.Rest.<b>{</b>UriTemplates<b>}</b></span>
+    <nav aria-label="Project links">
+      <a href="#play">Playground</a>
+      <a href="https://github.com/brenpike/Chatter.Rest.UriTemplates" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://datatracker.ietf.org/doc/html/rfc6570" target="_blank" rel="noopener">RFC 6570</a>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <!-- ================= STAGE ================= -->
+    <div class="stage-wrap">
+      <div class="stage" id="stage" data-level="0" data-node="0" aria-label="Animated URI template stage">
+        <div class="stage-head">
+          <span>UriTemplate · Expand</span>
+          <span class="status" id="status" aria-live="polite">template</span>
+        </div>
+
+        <div class="lines">
+          <div class="machine" id="machine" aria-label="/menus{/city}/search{?q,diet*}"><span class="lit">/menus</span><span class="x"><span class="br l">{</span><span class="t op">/</span><span class="t vn">city</span><span class="o sep" style="--i:0">/</span><span class="o v" style="--i:0">Montr<span class="c"><span class="r">é</span><span class="e">%C3%A9</span></span>al</span><span class="br r">}</span></span><span class="lit">/search</span><span class="x"><span class="br l">{</span><span class="t op">?</span><span class="t vn">q</span><span class="t cm">,</span><span class="t vn">diet</span><span class="t md">*</span><span class="o sep" style="--i:1">?q=</span><span class="o v" style="--i:1">caf<span class="c"><span class="r">é</span><span class="e">%C3%A9</span></span><span class="c"><span class="r">␣</span><span class="e">%20</span></span><span class="c"><span class="r">&amp;</span><span class="e">%26</span></span><span class="c"><span class="r">␣</span><span class="e">%20</span></span>cr<span class="c"><span class="r">ê</span><span class="e">%C3%AA</span></span>pes</span><span class="o sep" style="--i:2">&amp;diet=</span><span class="o v" style="--i:2">vegan</span><span class="o sep" style="--i:3">&amp;diet=</span><span class="o v" style="--i:3">gluten-free</span><span class="br r">}</span></span></div>
+
+          <div class="naive" aria-hidden="true">/menus/Montr<mark data-n="1" data-first>é</mark>al/search?q=caf<mark data-n="1">é</mark><mark data-n="2" data-first>␣</mark><mark data-n="3" data-first>&amp;</mark><mark data-n="2">␣</mark>cr<mark data-n="1">ê</mark>pes<mark data-n="4" data-first>&amp;diet=vegan,gluten-free</mark></div>
+
+          <div class="fail" aria-hidden="true">/menus<span class="bad">{</span>/city/search<span class="bad">{</span>?q,diet*}<span class="err">FormatException · thrown by the constructor, before any URI exists</span></div>
+        </div>
+
+        <div class="scenes">
+          <div class="scene on" data-scene="legend">
+            <div class="label">How to read the stage</div>
+            <div class="legend">
+              <span><i style="background:var(--ink)"></i>literal</span>
+              <span><i style="background:var(--brace)"></i>expression</span>
+              <span><i style="background:var(--op)"></i>operator</span>
+              <span><i style="background:var(--var)"></i>variable</span>
+              <span><i style="background:var(--val)"></i>value</span>
+              <span><i style="background:var(--enc)"></i>percent-encoded</span>
+            </div>
+            <p class="givens" style="margin-top:.8rem">Keep scrolling. Every change on this stage is driven by the story.</p>
+          </div>
+
+          <div class="scene" data-scene="naive">
+            <div class="label">The hand-built way</div>
+<pre class="code"><span class="k">var</span> url = <span class="s">"/menus/"</span> + city + <span class="s">"/search?q="</span> + q
+        + <span class="s">"&amp;diet="</span> + <span class="k">string</span>.Join(<span class="s">","</span>, diet);</pre>
+            <ol class="bugs">
+              <li><b>1</b>Non-ASCII letters go out raw</li>
+              <li><b>2</b>Spaces are not legal in a URI</li>
+              <li><b>3</b>The &amp; splits <code>q</code> in two</li>
+              <li><b>4</b>Lists have no agreed shape</li>
+            </ol>
+          </div>
+
+          <div class="scene" data-scene="levels">
+            <div class="label">RFC 6570 · four levels, each adds to the last</div>
+            <div class="levels">
+              <div class="lv"><span class="num">1</span><span class="what">Simple string expansion</span><code>{hello} → <em>Hello%20World%21</em></code></div>
+              <div class="lv"><span class="num">2</span><span class="what">Reserved and fragment</span><code>{+path} → <em>/foo/bar</em></code></div>
+              <div class="lv"><span class="num">3</span><span class="what">Many variables, more operators</span><code>{?x,y} → <em>?x=1024&amp;y=768</em></code></div>
+              <div class="lv"><span class="num">4</span><span class="what">Prefix and explode modifiers</span><code>{var:3} → <em>val</em></code></div>
+            </div>
+          </div>
+
+          <div class="scene" data-scene="vars">
+            <div class="label">Variables</div>
+            <div class="vars">
+              <div style="--i:0"><span class="nm">city</span><span class="vl">"Montréal"</span><span class="ty">string</span></div>
+              <div style="--i:1"><span class="nm">q</span><span class="vl">"café &amp; crêpes"</span><span class="ty">string</span></div>
+              <div style="--i:2"><span class="nm">diet</span><span class="vl">["vegan", "gluten-free"]</span><span class="ty">list</span></div>
+            </div>
+            <div class="ledger" id="ledger" aria-label="Characters that need percent-encoding">
+              <span class="lg"><b>é</b>U+00E9 → <em>%C3%A9</em></span>
+              <span class="lg"><b>é</b>U+00E9 → <em>%C3%A9</em></span>
+              <span class="lg"><b>␣</b>U+0020 → <em>%20</em></span>
+              <span class="lg"><b>&amp;</b>U+0026 → <em>%26</em></span>
+              <span class="lg"><b>␣</b>U+0020 → <em>%20</em></span>
+              <span class="lg"><b>ê</b>U+00EA → <em>%C3%AA</em></span>
+            </div>
+          </div>
+
+          <div class="scene" data-scene="ops">
+            <div class="label">Eight operators</div>
+            <div class="ops" id="ops">
+              <div class="opc" data-ex="{x,y}" data-res="1024,768" data-note="No operator: comma-separated, reserved characters encoded."><span class="sym">∅</span><span class="nm">Simple</span></div>
+              <div class="opc" data-ex="{+path}/here" data-res="/foo/bar/here" data-note="Reserved characters like / pass through untouched."><span class="sym">+</span><span class="nm">Reserved</span></div>
+              <div class="opc" data-ex="{#path}" data-res="#/foo/bar" data-note="Like reserved, with a leading #."><span class="sym">#</span><span class="nm">Fragment</span></div>
+              <div class="opc" data-ex="{.x,y}" data-res=".1024.768" data-note="Dot-prefixed labels, as in domain names or file extensions."><span class="sym">.</span><span class="nm">Label</span></div>
+              <div class="opc" data-ex="{/list*}" data-res="/red/green/blue" data-note="One path segment per value."><span class="sym">/</span><span class="nm">Path</span></div>
+              <div class="opc" data-ex="{;x,y}" data-res=";x=1024;y=768" data-note="Path-style name=value parameters."><span class="sym">;</span><span class="nm">Params</span></div>
+              <div class="opc" data-ex="{?x,y}" data-res="?x=1024&amp;y=768" data-note="Starts a form-style query string."><span class="sym">?</span><span class="nm">Query</span></div>
+              <div class="opc" data-ex="?fixed=yes{&amp;x}" data-res="?fixed=yes&amp;x=1024" data-note="Continues a query that already exists."><span class="sym">&amp;</span><span class="nm">Continue</span></div>
+            </div>
+            <div class="op-detail" id="opDetail"><code>{x,y}</code><span class="arrow">→</span><span class="res">1024,768</span><span class="note">No operator: comma-separated, reserved characters encoded.</span></div>
+            <p class="givens"><b>x</b>=1024 <b>y</b>=768 <b>path</b>="/foo/bar" <b>list</b>=[red, green, blue]</p>
+          </div>
+
+          <div class="scene" data-scene="mods">
+            <div class="label">Value modifiers × value kinds</div>
+            <div class="mods">
+              <div style="--i:0"><span class="ty">string</span><code>{var<i>:3</i>}</code><span class="res">val</span></div>
+              <div style="--i:1"><span class="ty">list</span><code>{/list}</code><span class="res">/red,green,blue</span></div>
+              <div style="--i:2"><span class="ty">list</span><code>{/list<i>*</i>}</code><span class="res">/red/green/blue</span></div>
+              <div style="--i:3"><span class="ty">map</span><code>{keys}</code><span class="res">comma,%2C,dot,.,semi,%3B</span></div>
+              <div style="--i:4"><span class="ty">map</span><code>{?keys<i>*</i>}</code><span class="res">?comma=%2C&amp;dot=.&amp;semi=%3B</span></div>
+            </div>
+            <p class="givens"><b>var</b>="value" <b>list</b>=[red, green, blue] <b>keys</b>={semi: ";", dot: ".", comma: ","}</p>
+          </div>
+
+          <div class="scene" data-scene="pipe">
+            <div class="label">Inside the engine</div>
+            <div class="pipe" id="pipe">
+              <div class="track"><div class="fill"></div><div class="packet"></div></div>
+              <div class="node" data-cap="The template string is parsed once, when the &lt;code&gt;UriTemplate&lt;/code&gt; is built. A malformed template throws right there."><i>1</i><span>Parse</span></div>
+              <div class="node" data-cap="Parsing yields a list of tokens: literal text, and expressions that hold an operator and variable specs."><i>2</i><span>Tokens</span></div>
+              <div class="node" data-cap="Each operator has its own strategy that knows its prefix, separator and naming rules."><i>3</i><span>Strategy</span></div>
+              <div class="node" data-cap="Values are UTF-8 percent-encoded with the character set that operator allows."><i>4</i><span>Encode</span></div>
+              <div class="node" data-cap="The pieces join into one URI string. Same template, same values, same result."><i>5</i><span>URI</span></div>
+            </div>
+            <p class="pipe-cap" id="pipeCap">The template string is parsed once, when the <code>UriTemplate</code> is built. A malformed template throws right there.</p>
+          </div>
+
+          <div class="scene" data-scene="pkgs">
+            <div class="label">Two packages</div>
+            <div class="pkgs">
+              <div class="pkg a">
+                <h4>Chatter.Rest.<b>UriTemplates</b></h4>
+                <p>The engine. Parse, expand, encode.</p>
+                <div class="chips"><span class="chip">0 dependencies</span><span class="chip">netstandard2.0</span><span class="chip">net8.0</span></div>
+              </div>
+              <svg class="link" viewBox="0 0 54 20" aria-hidden="true"><path d="M52 10 H6"/><polygon points="0,10 9,5 9,15"/></svg>
+              <div class="pkg b">
+                <h4>…UriTemplates.<b>DependencyInjection</b></h4>
+                <p><code>AddUriTemplates()</code> registers the parser and factory.</p>
+                <div class="chips"><span class="chip">IUriTemplateParser</span><span class="chip">IUriTemplateFactory</span></div>
+              </div>
+            </div>
+            <p class="pkg-foot">Use the core alone, or add the companion for Microsoft.Extensions.DependencyInjection.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= STORY ================= -->
+    <div class="story">
+      <section class="chapter" aria-labelledby="h-hero">
+        <div class="beat" data-scene="legend" data-phase="tpl" data-status="template">
+          <p class="eyebrow">RFC 6570 URI Templates for .NET</p>
+          <h1 id="h-hero">Write the shape of a URL once. <em>Let the values fill it in.</em></h1>
+          <p class="lede">Chatter.Rest.UriTemplates turns a template like the one on the stage into a correct, fully encoded URI, for every operator in the spec.</p>
+          <p class="scroll-cue"><span aria-hidden="true"></span>Scroll to watch one template expand</p>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="h-problem">
+        <div class="beat" data-scene="naive" data-phase="naive" data-status="string concatenation">
+          <p class="eyebrow">The problem</p>
+          <h2 id="h-problem">URLs built by hand break quietly.</h2>
+          <p>Gluing strings together looks harmless. The compiler is happy, and the first test with plain ASCII passes.</p>
+        </div>
+        <div class="beat" data-scene="naive" data-phase="naive" data-marks="1" data-status="4 bugs, 0 errors">
+          <p>Then real data shows up. An accented city name, a search with an ampersand in it, a list nobody agreed how to format. The URL still gets sent. It just means something else.</p>
+          <p class="muted">Every caller ends up re-solving encoding, separators and optional parts, and solving them slightly differently.</p>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="h-answer">
+        <div class="beat long" data-scene="levels" data-phase="tpl" data-prog="level" data-status="template">
+          <p class="eyebrow">The answer</p>
+          <h2 id="h-answer">A standard for describing URLs: RFC 6570.</h2>
+          <p>A URI template is a URL with holes in it. Each hole is an <em>expression</em> in braces. The expression says which variables go there and, through its operator, how they should be joined and encoded.</p>
+          <p>The spec grows in four levels. Level 1 substitutes a single value. Level 4 handles lists, maps, prefixes and exploded values. This library implements all four.</p>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="h-expand">
+        <div class="beat" data-scene="vars" data-phase="open" data-status="braces open">
+          <p class="eyebrow">Watch it expand</p>
+          <h2 id="h-expand">The braces open.</h2>
+          <p>Each expression's operator decides what comes before its values. The <code>/</code> in <code>{/city}</code> means "a path segment". The <code>?</code> in <code>{?q,diet*}</code> means "start a query string, with names".</p>
+        </div>
+        <div class="beat" data-scene="vars" data-phase="fill" data-status="values in">
+          <h2>The values arrive.</h2>
+          <p>Two strings and a list. The <code>*</code> on <code>diet</code> explodes the list, so each item gets its own <code>diet=</code> pair instead of one comma-joined value.</p>
+        </div>
+        <div class="beat long" data-scene="vars" data-phase="encode" data-prog="enc" data-status="encoding">
+          <h2>Every unsafe character is encoded.</h2>
+          <p>Non-ASCII letters become their UTF-8 bytes. Spaces become <code>%20</code>. The ampersand inside the search becomes <code>%26</code>, so it can no longer pose as a parameter separator.</p>
+          <p class="muted">Which characters count as unsafe depends on the operator. Query and path expressions encode everything outside the unreserved set. <code>{+path}</code> and <code>{#path}</code> let reserved characters through.</p>
+        </div>
+        <div class="beat" data-scene="vars" data-phase="snap" data-status="expanded">
+          <h2>One string. Correct every time.</h2>
+<pre class="block"><code><span class="k">var</span> uri = <span class="k">new</span> UriTemplate(<span class="s">"/menus{/city}/search{?q,diet*}"</span>)
+    .Expand(<span class="k">new</span> Dictionary&lt;<span class="k">string</span>, UriTemplateValue&gt;
+    {
+        [<span class="s">"city"</span>] = UriTemplateValue.From(<span class="s">"Montréal"</span>),
+        [<span class="s">"q"</span>]    = UriTemplateValue.From(<span class="s">"café &amp; crêpes"</span>),
+        [<span class="s">"diet"</span>] = UriTemplateValue.From(<span class="k">new</span>[] { <span class="s">"vegan"</span>, <span class="s">"gluten-free"</span> })
+    });</code></pre>
+          <p class="muted">The template is the contract. The values change; the rules for joining and encoding them never do.</p>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="h-ops">
+        <div class="beat long" data-scene="ops" data-phase="done" data-prog="op" data-status="expanded">
+          <p class="eyebrow">The vocabulary</p>
+          <h2 id="h-ops">Eight operators cover every part of a URL.</h2>
+          <p>The first character inside the braces picks the operator. Each one knows its prefix, its separator, whether it names values, and which characters it allows through.</p>
+          <div class="optable">
+            <table>
+              <thead><tr><th>Op</th><th>Use</th><th>Template</th><th>Result</th></tr></thead>
+              <tbody>
+                <tr><td>none</td><td>Simple string</td><td><code>{x,y}</code></td><td class="res"><code>1024,768</code></td></tr>
+                <tr><td>+</td><td>Reserved</td><td><code>{+path}/here</code></td><td class="res"><code>/foo/bar/here</code></td></tr>
+                <tr><td>#</td><td>Fragment</td><td><code>{#path}</code></td><td class="res"><code>#/foo/bar</code></td></tr>
+                <tr><td>.</td><td>Label</td><td><code>{.x,y}</code></td><td class="res"><code>.1024.768</code></td></tr>
+                <tr><td>/</td><td>Path segments</td><td><code>{/list*}</code></td><td class="res"><code>/red/green/blue</code></td></tr>
+                <tr><td>;</td><td>Path parameters</td><td><code>{;x,y}</code></td><td class="res"><code>;x=1024;y=768</code></td></tr>
+                <tr><td>?</td><td>Query</td><td><code>{?x,y}</code></td><td class="res"><code>?x=1024&amp;y=768</code></td></tr>
+                <tr><td>&amp;</td><td>Query continuation</td><td><code>?fixed=yes{&amp;x}</code></td><td class="res"><code>?fixed=yes&amp;x=1024</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="beat" data-scene="mods" data-phase="done" data-status="expanded">
+          <h2>Modifiers shape the values.</h2>
+          <p>A value can be a string, a list, or a map of names to values. Two modifiers change how it lands. <code>:N</code> keeps only the first N characters of a string. <code>*</code> explodes a list or map into separate parts.</p>
+          <p class="muted">The two can't be combined on one variable; the parser rejects that. Map keys are sorted, so the same map always expands to the same URI.</p>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="h-engine">
+        <div class="beat" data-scene="pipe" data-phase="fail" data-node="0" data-status="FormatException">
+          <p class="eyebrow">How it works</p>
+          <h2 id="h-engine">Parsed up front. Mistakes fail fast.</h2>
+          <p>The template is parsed when you construct it, not when you expand it. An unclosed or nested brace, an empty expression or a doubled operator throws a <code>FormatException</code> straight away, long before a request is made.</p>
+        </div>
+        <div class="beat" data-scene="pipe" data-phase="tokens" data-node="1" data-status="tokens">
+          <h2>Text and expressions become tokens.</h2>
+          <p>The parser splits the template into literal tokens and expression tokens. Literal text is checked and encoded too, so stray characters can't slip into the result.</p>
+        </div>
+        <div class="beat" data-scene="pipe" data-phase="open" data-node="2" data-status="strategy">
+          <h2>Each operator gets its own strategy.</h2>
+          <p>Expansion hands every expression to the strategy for its operator. One small class per rule set keeps each operator's behavior in one place.</p>
+        </div>
+        <div class="beat" data-scene="pipe" data-phase="fill" data-enc="all" data-node="3" data-status="encode">
+          <h2>Encoding follows RFC 3986.</h2>
+          <p>Values are encoded as UTF-8 with the character set the operator allows. Undefined variables simply drop out, along with their separators.</p>
+        </div>
+        <div class="beat" data-scene="pipe" data-phase="snap" data-node="4" data-status="expanded">
+          <h2>Out comes the URI.</h2>
+          <p>Parse once, expand as often as you like. The template object holds no per-call state, so one instance can serve every request.</p>
+        </div>
+      </section>
+
+      <section class="chapter" aria-labelledby="h-pkgs">
+        <div class="beat" data-scene="pkgs" data-phase="done" data-status="expanded">
+          <p class="eyebrow">The packages</p>
+          <h2 id="h-pkgs">A small core, and an optional companion.</h2>
+          <div class="facts">
+            <div><b>Core</b><span>Chatter.Rest.UriTemplates. The whole engine, with no external dependencies.</span></div>
+            <div><b>DI</b><span>Chatter.Rest.UriTemplates.DependencyInjection. Wires the engine into an app's service container.</span></div>
+          </div>
+<pre class="block"><code>builder.Services.AddUriTemplates();
+
+<span class="k">public sealed class</span> MenuClient(IUriTemplateFactory templates)
+{
+    <span class="k">private readonly</span> UriTemplate _search =
+        templates.Create(<span class="s">"/menus{/city}/search{?q,diet*}"</span>);
+}</code></pre>
+          <p class="muted">Inject <code>IUriTemplateFactory</code> where you build URLs, and swap it out in tests.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ================= FINALE ================= -->
+  <div class="finale">
+    <section id="play" aria-labelledby="h-play">
+      <div class="sec-head">
+        <p class="eyebrow">Your turn</p>
+        <h2 id="h-play">Now the stage is yours.</h2>
+        <p class="lede">Pick a template or type your own. Watch it split into tokens, then see each expression turn into its piece of the URI.</p>
+      </div>
+      <div class="play">
+        <div class="play-main">
+          <label for="pg-tpl">Template</label>
+          <input id="pg-tpl" type="text" value="/menus{/city}/search{?q,diet*}" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">
+          <div class="presets" id="presets" aria-label="Try a template"></div>
+          <span class="label">Tokens → expansions</span>
+          <div class="slots" id="pg-slots"></div>
+          <p class="pg-note" id="pg-note" aria-live="polite"></p>
+          <span class="label">Result</span>
+          <div class="pg-out" id="pg-out" aria-live="polite"></div>
+        </div>
+        <aside class="play-side" aria-label="Sample variables">
+          <span class="label">Variables</span>
+          <div class="varlist" id="pg-vars"></div>
+          <p class="fine">Variables the template uses light up. This playground runs a JavaScript port of the RFC 6570 rules that passes the official uritemplate-test suite. The library itself is the source of truth.</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="start" aria-labelledby="h-start">
+      <div class="sec-head">
+        <p class="eyebrow">Get started</p>
+        <h2 id="h-start">One package. One line.</h2>
+        <p class="lede">Add the package and expand your first template. Strings, lists, dictionaries and every operator work the same way.</p>
+      </div>
+      <div class="start-grid">
+        <div class="panel">
+          <h3>Install</h3>
+          <div class="install">
+            <pre id="installCmd">dotnet add package Chatter.Rest.UriTemplates</pre>
+            <button class="copy" id="copyBtn" type="button">Copy</button>
+          </div>
+          <p class="fine" id="copyMsg" aria-live="polite">Using dependency injection too? Add Chatter.Rest.UriTemplates.DependencyInjection.</p>
+        </div>
+        <div class="panel">
+          <h3>First expansion</h3>
+<pre class="block"><code><span class="k">using</span> Chatter.Rest.UriTemplates;
+
+<span class="k">var</span> template = <span class="k">new</span> UriTemplate(<span class="s">"/orders{?status,page}"</span>);
+
+<span class="k">var</span> uri = template.Expand(<span class="k">new</span> Dictionary&lt;<span class="k">string</span>, <span class="k">string</span>&gt;
+{
+    [<span class="s">"status"</span>] = <span class="s">"shipped"</span>,
+    [<span class="s">"page"</span>] = <span class="s">"2"</span>
+});
+<span class="cmt">// "/orders?status=shipped&amp;page=2"</span></code></pre>
+        </div>
+      </div>
+      <div class="links">
+        <a class="btn" href="https://github.com/brenpike/Chatter.Rest.UriTemplates" target="_blank" rel="noopener">View on GitHub</a>
+        <a class="btn ghost" href="https://datatracker.ietf.org/doc/html/rfc6570" target="_blank" rel="noopener">Read RFC 6570</a>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <span>Chatter.Rest.UriTemplates · MIT licensed</span>
+    <span>Implements RFC 6570 Levels 1–4</span>
+  </footer>
+</div>
+<script src="assets/uritemplate.js"></script>
+<script src="assets/site.js"></script>
+</body>
+</html>
