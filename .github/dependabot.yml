@@ -8,3 +8,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # One weekly PR for all action bumps. This also keeps the CodeQL
+    # init/autobuild/analyze steps on the same version: CodeQL fails when they
+    # differ, so separate PRs for them can never pass on their own.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
