@@ -42,7 +42,7 @@ body {
   font-size: var(--step-0);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 body::before {
   content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px);
@@ -836,9 +836,75 @@ footer a { color: var(--mute); }
     pipeCap.innerHTML = nodes[n].dataset.cap.replace(/&lt;/g, '<').replace(/&gt;/g, '>');
   }
 
+  // particle bursts: braces burst open, values spray in, the finished URI detonates on snap
+  var still = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var fx = document.createElement('canvas');
+  fx.setAttribute('aria-hidden', 'true');
+  fx.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:40';
+  document.body.appendChild(fx);
+  var ctx = fx.getContext('2d'), parts = [], running = false, dpr = 1;
+  var css = getComputedStyle(document.documentElement);
+  var PAL = ['--brace', '--op', '--val'].map(function (t) { return css.getPropertyValue(t).trim(); });
+  var GLYPHS = '{}/?&=;.#*%';
+  function sizeFx() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    fx.width = innerWidth * dpr; fx.height = innerHeight * dpr;
+  }
+  sizeFx();
+  function burst(els, n, speed, color) {
+    if (still.matches) return;
+    els.forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight) return;
+      for (var k = 0; k < n; k++) {
+        var a = Math.random() * Math.PI * 2, s = speed * (0.35 + Math.random());
+        parts.push({
+          x: r.left + Math.random() * r.width, y: r.top + Math.random() * r.height,
+          vx: Math.cos(a) * s, vy: Math.sin(a) * s - speed * 0.3,
+          life: 1, decay: 0.012 + Math.random() * 0.02,
+          size: 9 + Math.random() * 9, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3,
+          ch: Math.random() < 0.55 ? GLYPHS[Math.floor(Math.random() * GLYPHS.length)] : null,
+          c: color || PAL[Math.floor(Math.random() * PAL.length)]
+        });
+      }
+    });
+    if (!running) { running = true; requestAnimationFrame(tick); }
+  }
+  function tick() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    parts = parts.filter(function (p) { return p.life > 0; });
+    parts.forEach(function (p) {
+      p.vy += 0.12; p.vx *= 0.985; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= p.decay;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.c;
+      if (p.ch) {
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+        ctx.font = '600 ' + p.size + 'px ui-monospace, monospace';
+        ctx.fillText(p.ch, 0, 0); ctx.restore();
+      } else {
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size / 6, 0, Math.PI * 2); ctx.fill();
+      }
+    });
+    ctx.globalAlpha = 1;
+    if (parts.length) requestAnimationFrame(tick); else running = false;
+  }
+  var brs = Array.prototype.slice.call(stage.querySelectorAll('.machine .br'));
+  var vals = Array.prototype.slice.call(stage.querySelectorAll('.machine .o.v'));
+  var machine = document.getElementById('machine');
+
   function setBeat(i) {
     var b = beats[i], d = b.dataset;
     var prevSnapped = stage.classList.contains('is-snapped');
+    var prevOpen = stage.classList.contains('is-open');
+    var prevFilled = stage.classList.contains('is-filled');
+    var ph = PHASES[d.phase] || [];
+    if (active >= 0) {
+      if (ph.indexOf('is-open') >= 0 && !prevOpen) burst(brs, 16, 6, PAL[0]);
+      if (ph.indexOf('is-filled') >= 0 && !prevFilled) setTimeout(function () { burst(vals, 14, 4.5); }, 350);
+      if (d.phase === 'snap' && !prevSnapped) burst([machine], 140, 9);
+    }
     beats.forEach(function (x, k) { x.classList.toggle('is-active', k === i); });
     ALL.forEach(function (c) { stage.classList.remove(c); });
     (PHASES[d.phase] || []).forEach(function (c) { stage.classList.add(c); });
@@ -891,7 +957,7 @@ footer a { color: var(--mute); }
 
   function request() { if (!ticking) { ticking = true; requestAnimationFrame(update); } }
   window.addEventListener('scroll', request, { passive: true });
-  window.addEventListener('resize', request);
+  window.addEventListener('resize', function () { sizeFx(); request(); });
   update();
 
   // copy button
