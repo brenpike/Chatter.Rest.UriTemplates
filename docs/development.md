@@ -28,6 +28,10 @@ test/
   Chatter.Rest.UriTemplates.DependencyInjection.Tests/
     Chatter.Rest.UriTemplates.DependencyInjection.Tests.csproj  <- targets net8.0
     ServiceCollectionExtensionsTests.cs
+web/                                      <- project site, deployed to GitHub Pages (see section 6)
+  index.html
+  assets/                                 <- site.css, site.js, uritemplate.js (in-browser RFC 6570 expander)
+  tests/                                  <- Node test checking uritemplate.js against uritemplate-test
 ```
 
 The source-file listing above is deliberately **non-exhaustive** — it names entry
@@ -172,6 +176,22 @@ Two per-project workflows in `.github/workflows/`. Each workflow covers one NuGe
 The source set for that decision is the package's own `src/` directory plus `src/Directory.Build.props` — identical to what `version-check` examines pre-merge.
 
 **tag:** calls `create-version-tag.yml`. Runs after a successful deploy, under the same `main`-push-only condition as deploy (so it also never runs for `workflow_dispatch`). Tag format: `uritemplate/vX.Y.Z` (core) or `uritemplate-di/vX.Y.Z` (DI).
+
+### Project site — `pages.yml`
+
+Deploys `web/` to GitHub Pages. Separate from the package pipelines: it never builds, packs, or publishes a NuGet package, and site-only changes never trigger `uritemplate-cicd.yml` or `uritemplate-di-cicd.yml` (both are path-scoped to `src/` and `test/` projects).
+
+| Trigger | Scope |
+|---|---|
+| Push | `main` only, path-scoped to `web/**`, the `uritemplate-test` submodule pointer, and `pages.yml` itself |
+| Pull request | `main`, same paths — runs the build job only (test, no deploy) |
+| Manual | `workflow_dispatch` — deploys only when dispatched on `main` |
+
+**build:** checks out with submodules, runs `node --test web/tests/uritemplate.test.js` (the site's in-browser expander against the official RFC 6570 suite, plus the library's ordinal key order), stages `web/` without `tests/`, and uploads the Pages artifact (skipped on pull requests).
+
+**deploy:** `configure-pages` + `deploy-pages` into the `github-pages` environment, holding the `pages` concurrency group with `cancel-in-progress: false`. Requires the repository's Pages source to be set to **GitHub Actions** (Settings → Pages → Build and deployment).
+
+Run the site locally with any static server from `web/` (for example `python3 -m http.server -d web`), and its test with `node --test web/tests/uritemplate.test.js` after `git submodule update --init`.
 
 ### Workflow hardening
 

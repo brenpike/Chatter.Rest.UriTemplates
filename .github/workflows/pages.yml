@@ -1,0 +1,90 @@
+name: pages
+
+# Deploys the project site in web/ to GitHub Pages. Path-scoped so it runs only
+# when the site or one of its dependencies changes:
+#   - web/**                                   the site itself
+#   - the uritemplate-test submodule           the suite the site's expander is checked against
+#   - this workflow file
+# The package pipelines (uritemplate-cicd.yml, uritemplate-di-cicd.yml) are
+# path-scoped to src/ and test/ projects, so site-only changes never trigger them.
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - 'web/**'
+      - 'test/Chatter.Rest.UriTemplates.Tests/uritemplate-test'
+      - '.github/workflows/pages.yml'
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'web/**'
+      - 'test/Chatter.Rest.UriTemplates.Tests/uritemplate-test'
+      - '.github/workflows/pages.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      # The playground expands templates with web/assets/uritemplate.js; this
+      # checks it against the official RFC 6570 suite before anything ships.
+      - name: Test site expander
+        run: node --test web/tests/uritemplate.test.js
+
+      - name: Stage site
+        run: |
+          mkdir _site
+          cp -R web/. _site/
+          rm -rf _site/tests _site/README.md
+
+      - name: Upload site artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    name: deploy
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

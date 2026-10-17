@@ -1,0 +1,1163 @@
+<title>Operator Arcade</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Chatter.Rest.UriTemplates expands RFC 6570 URI templates in .NET. Play with all eight operators.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=DM+Mono:wght@400;500&family=Rubik:wght@400;500;700&display=swap">
+<style>
+/* Layout: an arcade cabinet. Marquee ticker, attract-mode hero, then the board:
+   a 4x2 card grid with a value tray and the free-play machine docked beside it.
+   Deliberately single-theme (a lit cabinet at night), every colour set explicitly. */
+:root {
+  color-scheme: dark;
+  --cab: #0c1631;        /* cabinet navy */
+  --panel: #13234a;      /* control panel */
+  --panel-2: #1a2e5e;
+  --line: #2a4178;
+  --ink: #eef2ff;
+  --muted: #a6b4da;
+  --dim: #7182b0;
+  --gold: #ffb935;       /* coin slot / UI accent */
+  --tilt: #ff5468;
+  --on-band: #0c1631;
+  --dot: #182a57;
+
+  /* one hue per operator card */
+  --op-none: #d6def5;
+  --op-plus: #ff6b4a;
+  --op-hash: #ffb935;
+  --op-dot: #6fdc8c;
+  --op-slash: #3cc7e6;
+  --op-semi: #8a93ff;
+  --op-q: #c77dff;
+  --op-amp: #ff6fae;
+
+  --display: 'Bungee', Impact, 'Arial Black', system-ui, sans-serif;
+  --body: 'Rubik', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'DM Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --step--1: 0.8125rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.6rem;
+  --step-3: clamp(1.9rem, 4.2vw, 2.6rem);
+  --step-4: clamp(2.15rem, 5.6vw, 3.7rem);
+  --radius: 14px;
+  --spring: cubic-bezier(.34, 1.56, .64, 1);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background-color: var(--cab);
+  background-image: radial-gradient(var(--dot) 1.2px, transparent 1.3px);
+  background-size: 18px 18px;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: var(--step-0);
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  overflow-x: clip;
+}
+a { color: var(--gold); text-underline-offset: 3px; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; border-radius: 6px; }
+code, kbd, pre { font-family: var(--mono); }
+p code, li code { font-size: .9em; color: var(--ink); background: rgba(255,255,255,.07); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+button { font: inherit; color: inherit; }
+
+.wrap { max-width: 1240px; margin: 0 auto; }
+.section { padding-block: clamp(56px, 9vw, 104px); }
+.eyebrow {
+  font-family: var(--mono); font-size: var(--step--1); letter-spacing: .14em;
+  text-transform: uppercase; color: var(--gold);
+}
+.h2 { font-family: var(--display); font-weight: 400; font-size: var(--step-3); line-height: 1.08; letter-spacing: .01em; }
+.lede { color: var(--muted); max-width: 62ch; font-size: 1.075rem; }
+.sec-head { display: grid; gap: 14px; margin-bottom: clamp(28px, 4vw, 44px); }
+
+/* ───────── marquee ───────── */
+.marquee {
+  margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+  border-bottom: 2px solid var(--line);
+  background: var(--panel);
+  overflow: hidden; white-space: nowrap;
+  font-family: var(--mono); font-size: var(--step--1); color: var(--muted);
+  padding-block: 9px;
+}
+.marquee-track { display: inline-flex; gap: 40px; padding-left: 40px; animation: ticker 48s linear infinite; }
+.marquee-track span b { font-weight: 500; }
+@keyframes ticker { to { transform: translateX(-50%); } }
+
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; flex-wrap: wrap; }
+.logo { font-family: var(--display); font-size: 1.05rem; letter-spacing: .02em; color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 10px; }
+.logo-mark { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--gold); color: var(--on-band); font-size: .9rem; box-shadow: 0 3px 0 #a86f0c; }
+.topnav { display: flex; gap: 18px; flex-wrap: wrap; font-size: .95rem; }
+.topnav a { color: var(--muted); text-decoration: none; }
+.topnav a:hover { color: var(--ink); }
+
+/* ───────── hero ───────── */
+.hero { display: grid; gap: clamp(32px, 5vw, 64px); align-items: center; padding-block: clamp(28px, 6vw, 72px) clamp(40px, 7vw, 88px); }
+@media (min-width: 940px) { .hero { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); } }
+.hero-copy { display: grid; gap: 22px; min-width: 0; }
+.hero h1 { font-family: var(--display); font-weight: 400; font-size: var(--step-4); line-height: 1.02; }
+.hero h1 .hl { color: var(--gold); }
+.hero .lede { font-size: 1.15rem; }
+.cta { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px; border: 0; cursor: pointer; text-decoration: none;
+  font-family: var(--display); font-size: .95rem; letter-spacing: .03em; padding: 14px 20px; border-radius: 12px;
+  transition: transform .15s var(--spring), box-shadow .15s;
+}
+.btn-coin { background: var(--gold); color: var(--on-band); box-shadow: 0 5px 0 #a86f0c; }
+.btn-coin:hover { color: var(--on-band); transform: translateY(-2px); box-shadow: 0 7px 0 #a86f0c; }
+.btn-coin:active { transform: translateY(4px); box-shadow: 0 1px 0 #a86f0c; }
+.btn-ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px var(--line); }
+.btn-ghost:hover { color: var(--ink); box-shadow: inset 0 0 0 2px var(--muted); }
+.facts { display: flex; gap: 8px 22px; flex-wrap: wrap; font-family: var(--mono); font-size: var(--step--1); color: var(--dim); }
+.facts span::before { content: "■ "; color: var(--gold); }
+
+/* attract-mode screen */
+.screen {
+  position: relative; min-width: 0;
+  background: #070e22; border-radius: 22px; padding: clamp(18px, 3vw, 28px);
+  box-shadow: 0 0 0 2px var(--line), 0 0 0 10px var(--panel), 0 0 0 12px var(--line), 0 30px 60px -20px #000;
+  margin: 12px; overflow: hidden;
+}
+.screen::after { /* scanlines */
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(255,255,255,.03) 0 1px, transparent 1px 3px);
+}
+.screen-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-family: var(--mono); font-size: var(--step--1); color: var(--dim); letter-spacing: .12em; text-transform: uppercase; }
+.blink { color: var(--tilt); animation: blink 1.1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .15; } }
+.scr-label { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-top: 22px; }
+.scr-tpl { font-family: var(--mono); font-size: clamp(1.05rem, 2.6vw, 1.45rem); color: var(--ink); min-height: 1.6em; overflow-wrap: anywhere; }
+.scr-tpl .caret { display: inline-block; width: .55em; height: 1.05em; vertical-align: -.15em; background: var(--gold); animation: blink .9s steps(2) infinite; margin-left: 2px; }
+.scr-arrow { font-family: var(--display); color: var(--gold); font-size: 1.3rem; margin-top: 8px; }
+.scr-out { font-family: var(--mono); font-size: clamp(1.05rem, 2.6vw, 1.45rem); min-height: 3.2em; overflow-wrap: anywhere; word-break: break-all; }
+.scr-vars { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 6px; }
+.scr-vars span { font-family: var(--mono); font-size: .75rem; color: var(--muted); background: #0f1a38; border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; overflow-wrap: anywhere; }
+
+/* result glyphs (shared) */
+.ch { display: inline-block; white-space: pre; }
+.ch.p { color: var(--c, var(--gold)); font-weight: 500; }
+.ch.e { color: var(--ink); background: rgba(255,255,255,.1); border-radius: 4px; padding: 0 2px; margin: 0 1px; }
+.pop .ch { animation: pop .52s var(--spring) both; animation-delay: calc(var(--i) * 16ms); }
+@keyframes pop { from { opacity: 0; transform: translateY(-.7em) scale(.3) rotate(-14deg); } }
+
+/* ───────── problem ───────── */
+.vs { display: grid; gap: 18px; }
+@media (min-width: 860px) { .vs { grid-template-columns: 1fr 1fr; } }
+.vs-col { background: var(--panel); border-radius: var(--radius); padding: clamp(18px, 3vw, 26px); display: grid; gap: 14px; align-content: start; min-width: 0; }
+.vs-col h3 { font-family: var(--display); font-weight: 400; font-size: 1.05rem; letter-spacing: .02em; display: flex; align-items: center; gap: 10px; }
+.tag { font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; padding: 3px 8px; border-radius: 99px; }
+.tag-bad { background: rgba(255,84,104,.16); color: #ff8a99; }
+.tag-good { background: rgba(111,220,140,.16); color: #8ff0a8; }
+.code { background: #091127; border-radius: 10px; padding: 14px 16px; font-family: var(--mono); font-size: .86rem; line-height: 1.6; overflow-x: auto; color: var(--muted); }
+.code pre { margin: 0; }
+.out-line { font-family: var(--mono); font-size: .95rem; overflow-wrap: anywhere; word-break: break-all; padding: 10px 14px; border-radius: 10px; background: #091127; }
+.bad { color: #ff8a99; text-decoration: wavy underline var(--tilt); text-underline-offset: 4px; }
+.good { color: #8ff0a8; }
+.bugs { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: .95rem; }
+.bugs li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; }
+.bugs li::before { content: "✕"; color: var(--tilt); font-weight: 700; }
+.bugs.ok li::before { content: "✓"; color: var(--op-dot); }
+.kw { color: #8a93ff; } .str { color: #ffb935; } .cm { color: var(--dim); } .ty { color: #3cc7e6; }
+
+/* ───────── board ───────── */
+.arena { display: grid; gap: 22px; align-items: start; }
+@media (min-width: 1120px) { .arena { grid-template-columns: minmax(0, 1fr) 380px; } }
+.board { display: grid; gap: 18px; min-width: 0; }
+.board-head { display: flex; justify-content: space-between; align-items: center; gap: 12px 20px; flex-wrap: wrap; }
+.how { color: var(--muted); font-size: .95rem; max-width: 56ch; }
+.collection { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: var(--step--1); color: var(--dim); }
+.stamps { display: flex; gap: 4px; }
+.stamp { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; font-family: var(--display); font-size: .72rem; background: var(--panel); color: var(--dim); border: 1px dashed var(--line); transition: background .3s, color .3s, transform .4s var(--spring); }
+.stamp.got { background: var(--c); color: var(--on-band); border-color: transparent; transform: rotate(-6deg); }
+.score { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* tray */
+.tray {
+  background: var(--panel); border-radius: 18px; padding: 14px; display: grid; gap: 12px;
+  box-shadow: 0 0 0 2px var(--line);
+  z-index: 20;
+}
+.tray-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.tray-label { font-family: var(--mono); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-right: 4px; }
+.chip {
+  display: inline-grid; gap: 1px; text-align: left; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  background: var(--panel-2); border: 0; border-radius: 10px; padding: 7px 11px; box-shadow: inset 0 0 0 1.5px var(--line), 0 3px 0 #0a1430;
+  transition: transform .2s var(--spring), box-shadow .2s;
+  min-width: 0;
+}
+.chip:hover { transform: translateY(-2px); }
+.chip[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--gold), 0 3px 0 #a86f0c; transform: translateY(-3px); }
+.chip .nm { font-family: var(--mono); font-weight: 500; font-size: .88rem; color: var(--ink); }
+.chip .ty { font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.chip .pv { font-family: var(--mono); font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 18ch; }
+.chip.dragging { opacity: .35; }
+.seg { display: inline-flex; background: #0b1431; border-radius: 10px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: transparent; cursor: pointer; font-family: var(--mono); font-size: .82rem; color: var(--muted); padding: 6px 11px; border-radius: 8px; transition: background .2s, color .2s; }
+.seg button[aria-pressed="true"] { background: var(--gold); color: var(--on-band); }
+.mod-note { color: var(--muted); font-size: .85rem; flex: 1 1 220px; min-width: 0; }
+
+.ghost {
+  position: fixed; left: 0; top: 0; z-index: 100; pointer-events: none;
+  background: var(--gold); color: var(--on-band); border-radius: 12px; padding: 8px 13px;
+  font-family: var(--mono); font-weight: 500; font-size: .9rem; box-shadow: 0 16px 30px -10px #000;
+  will-change: transform;
+}
+
+/* cards */
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 760px) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; } }
+.card { perspective: 1100px; min-width: 0; }
+.card-lift { height: 100%; will-change: transform; }
+.card-flip { display: grid; height: 100%; transform-style: preserve-3d; transition: transform .7s var(--spring); }
+.card.flipped .card-flip { transform: rotateY(180deg); }
+.face {
+  grid-area: 1 / 1; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  border-radius: var(--radius); background: var(--panel); overflow: hidden; display: flex; flex-direction: column;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 40%, var(--line)), 0 10px 24px -14px #000;
+  position: relative; min-width: 0;
+}
+.face.back { transform: rotateY(180deg); background: var(--panel-2); }
+.card.hot .face.front { box-shadow: 0 0 0 3px var(--c), 0 0 34px -4px var(--c); }
+.face.front::after { /* holo sheen follows the pointer */
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 0%), rgba(255,255,255,.14), transparent 60%);
+}
+.card:hover .face.front::after { opacity: 1; }
+.band { background: var(--c); color: var(--on-band); padding: 12px 14px 10px; display: grid; gap: 0; position: relative; }
+.band::after { content: ""; position: absolute; left: 0; right: 0; bottom: -8px; height: 8px; background: radial-gradient(circle at 6px 0, var(--c) 5px, transparent 5.5px) 0 0 / 12px 8px repeat-x; }
+.glyph { font-family: var(--display); font-size: clamp(2rem, 5vw, 2.7rem); line-height: 1; }
+.cname { font-weight: 700; font-size: .82rem; letter-spacing: .02em; }
+.drop {
+  flex: 1; display: grid; gap: 8px; align-content: start; text-align: left; background: transparent; border: 0; cursor: pointer;
+  padding: 18px 14px 10px; min-width: 0;
+}
+.tpl { font-family: var(--mono); font-size: .8rem; color: var(--c); background: #0b1431; border-radius: 6px; padding: 2px 7px; justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
+.res { font-family: var(--mono); font-size: clamp(.86rem, 1.6vw, 1rem); line-height: 1.45; min-height: 2.9em; word-break: break-all; color: var(--ink); }
+.res.none { color: var(--dim); font-style: italic; word-break: normal; }
+.note { font-size: .76rem; color: var(--dim); line-height: 1.35; min-height: 2.7em; }
+.tilt .res { color: var(--tilt); font-family: var(--display); font-style: normal; letter-spacing: .04em; word-break: normal; }
+.tilt .note { color: #ff98a5; }
+.shake { animation: shake .5s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes shake { 15%,85% { transform: translateX(-2px) rotate(-1deg); } 30%,70% { transform: translateX(5px) rotate(1.5deg); } 45%,55% { transform: translateX(-6px) rotate(-1.5deg); } }
+.foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px 10px 14px; border-top: 1px dashed var(--line); }
+.loaded { font-family: var(--mono); font-size: .7rem; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.flipbtn { border: 0; background: #0b1431; color: var(--muted); font-size: .72rem; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; padding: 6px 9px; border-radius: 8px; cursor: pointer; flex: none; }
+.flipbtn:hover { color: var(--ink); }
+.back-body { padding: 14px; display: grid; gap: 10px; align-content: start; flex: 1; }
+.back-title { font-family: var(--display); font-size: .95rem; color: var(--c); display: flex; gap: 8px; align-items: baseline; }
+.back-desc { font-size: .82rem; color: var(--muted); line-height: 1.45; }
+.rules { display: grid; gap: 4px; margin: 0; font-size: .76rem; }
+.rules div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dotted var(--line); padding-bottom: 3px; }
+.rules dt { color: var(--dim); }
+.rules dd { margin: 0; font-family: var(--mono); color: var(--ink); text-align: right; }
+
+/* phone: tray docks to the bottom while the cards are on screen */
+@media (max-width: 759px) {
+  .board .cards { order: 1; }
+  .board .tray { order: 2; position: sticky; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); box-shadow: 0 0 0 2px var(--line), 0 -12px 30px -6px rgba(0,0,0,.6); padding: 10px; gap: 8px; }
+  .tray .chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .tray .tray-label { display: none; }
+  .chip { padding: 6px 8px; }
+  .chip .pv { display: none; }
+  .mod-note { display: none; }
+  .seg { width: 100%; }
+  .seg button { flex: 1; padding: 7px 4px; }
+  .note { font-size: .72rem; }
+}
+@media (min-width: 760px) and (max-width: 1119px) { .board .tray { order: 0; } }
+@media (min-width: 1120px) { .board .tray { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); } }
+
+/* machine */
+.machine {
+  background: var(--panel); border-radius: 22px; padding: 18px; display: grid; gap: 14px; min-width: 0;
+  box-shadow: 0 0 0 2px var(--line), 0 6px 0 #0a1430;
+}
+@media (min-width: 1120px) { .machine { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); } }
+.machine h3 { font-family: var(--display); font-weight: 400; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.lamp { width: 12px; height: 12px; border-radius: 50%; background: var(--op-dot); box-shadow: 0 0 12px var(--op-dot); transition: background .2s, box-shadow .2s; }
+.machine.err .lamp { background: var(--tilt); box-shadow: 0 0 12px var(--tilt); }
+.machine label { font-family: var(--mono); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.tpl-input {
+  width: 100%; font-family: var(--mono); font-size: 1rem; color: var(--ink); background: #070e22;
+  border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px; outline: none;
+}
+.tpl-input:focus { border-color: var(--gold); }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.presets button { border: 0; background: #0b1431; color: var(--muted); font-family: var(--mono); font-size: .74rem; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+.presets button:hover { color: var(--ink); background: var(--panel-2); }
+.presets button.broken { color: #ff98a5; }
+.m-screen { background: #070e22; border-radius: 12px; padding: 14px; display: grid; gap: 10px; min-height: 120px; }
+.m-out { font-family: var(--mono); font-size: 1.05rem; word-break: break-all; min-height: 1.5em; }
+.m-err { color: #ff98a5; font-size: .92rem; }
+.m-err b { font-family: var(--display); font-weight: 400; color: var(--tilt); letter-spacing: .05em; margin-right: 6px; }
+.tokens { display: flex; flex-wrap: wrap; gap: 6px; }
+.tok { display: grid; gap: 2px; padding: 5px 8px; border-radius: 8px; background: #0f1a38; border: 1px solid var(--line); font-family: var(--mono); font-size: .78rem; min-width: 0; max-width: 100%; }
+.tok b { font-weight: 500; overflow-wrap: anywhere; }
+.tok small { font-family: var(--body); font-size: .62rem; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
+.tok.x { border-color: var(--c); }
+.tok.x b { color: var(--c); }
+.tokens.pop .tok { animation: pop .45s var(--spring) both; animation-delay: calc(var(--i) * 40ms); }
+details.vars { font-size: .82rem; color: var(--muted); }
+details.vars summary { cursor: pointer; font-family: var(--mono); font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.var-list { display: grid; gap: 3px; margin-top: 8px; font-family: var(--mono); font-size: .76rem; }
+.var-list div { overflow-wrap: anywhere; }
+.var-list span { color: var(--gold); }
+
+/* ───────── levels: high-score table ───────── */
+.scores { background: #070e22; border-radius: 22px; padding: clamp(16px, 3vw, 30px); box-shadow: 0 0 0 2px var(--line), 0 0 0 10px var(--panel), 0 0 0 12px var(--line); margin: 12px; }
+.scores-head { display: flex; justify-content: space-between; gap: 12px; font-family: var(--display); color: var(--gold); font-size: clamp(1rem, 2.6vw, 1.4rem); margin-bottom: 14px; flex-wrap: wrap; }
+.scores-head small { font-family: var(--mono); font-size: .78rem; color: var(--dim); align-self: center; letter-spacing: .1em; }
+.lvl { display: grid; gap: 6px 22px; padding: 16px 4px; border-top: 1px dashed var(--line); align-items: baseline; }
+@media (min-width: 820px) { .lvl { grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1.25fr); } }
+.lvl-n { font-family: var(--display); font-size: 1.15rem; color: var(--c); }
+.lvl-what { display: grid; gap: 2px; min-width: 0; }
+.lvl-what b { font-weight: 500; }
+.lvl-what span { color: var(--muted); font-size: .9rem; }
+.lvl-ex { font-family: var(--mono); font-size: .88rem; min-width: 0; display: grid; gap: 2px; }
+.lvl-ex .t { color: var(--c); overflow-wrap: anywhere; }
+.lvl-ex .r { color: var(--ink); word-break: break-all; }
+.lvl-ex .r::before { content: "→ "; color: var(--dim); }
+
+/* ───────── engine conveyor ───────── */
+.conveyor { position: relative; display: grid; gap: 16px; }
+@media (min-width: 900px) { .conveyor { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.belt { position: absolute; background: var(--line); border-radius: 4px; overflow: hidden; }
+.belt i { position: absolute; background: var(--gold); border-radius: 4px; transition: width .9s ease, height .9s ease; }
+@media (min-width: 900px) { .belt { left: 8%; right: 8%; top: 31px; height: 4px; } .belt i { left: 0; top: 0; bottom: 0; width: var(--fill, 0%); } }
+@media (max-width: 899px) { .belt { top: 30px; bottom: 30px; left: 30px; width: 4px; } .belt i { top: 0; left: 0; right: 0; height: var(--fill, 0%); } }
+.station { position: relative; display: grid; gap: 10px; align-content: start; min-width: 0; }
+@media (max-width: 899px) { .station { grid-template-columns: 64px minmax(0, 1fr); column-gap: 14px; } .station > :not(.st-badge) { grid-column: 2; } .st-badge { grid-row: 1 / span 3; } }
+.st-badge { width: 64px; height: 64px; border-radius: 18px; background: var(--panel); display: grid; place-items: center; font-family: var(--display); font-size: 1.4rem; color: var(--dim); box-shadow: 0 0 0 2px var(--line); position: relative; z-index: 1; transition: background .3s, color .3s, transform .5s var(--spring), box-shadow .3s; }
+.station.on .st-badge { background: var(--gold); color: var(--on-band); transform: scale(1.1) rotate(-4deg); box-shadow: 0 0 0 2px var(--gold), 0 0 26px -2px var(--gold); }
+.station h3 { font-family: var(--display); font-weight: 400; font-size: 1.05rem; }
+.station p { color: var(--muted); font-size: .92rem; }
+.readout { font-family: var(--mono); font-size: .8rem; background: #091127; border-radius: 10px; padding: 10px 12px; color: var(--muted); overflow-wrap: anywhere; display: grid; gap: 4px; transition: box-shadow .3s; }
+.station.on .readout { box-shadow: 0 0 0 1.5px var(--gold); color: var(--ink); }
+.readout em { font-style: normal; color: var(--gold); }
+.promises { margin-top: 34px; display: grid; gap: 14px; }
+@media (min-width: 760px) { .promises { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.promise { border-top: 2px solid var(--line); padding-top: 14px; display: grid; gap: 6px; min-width: 0; }
+.promise b { font-weight: 500; }
+.promise span { color: var(--muted); font-size: .92rem; }
+
+/* ───────── packages: cartridges ───────── */
+.carts { display: grid; gap: 22px; }
+@media (min-width: 900px) { .carts { grid-template-columns: 1fr 1fr; } }
+.cart { position: relative; background: var(--panel); border-radius: 18px 18px 26px 26px; padding: clamp(20px, 3vw, 30px); padding-top: 46px; display: grid; gap: 14px; align-content: start; min-width: 0; box-shadow: 0 0 0 2px var(--line), 0 8px 0 #0a1430; transition: transform .35s var(--spring); }
+.cart:hover { transform: translateY(-6px) rotate(-.4deg); }
+.cart::before { /* cartridge notch + ridges */
+  content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 46%; height: 20px;
+  border-radius: 0 0 12px 12px; background: repeating-linear-gradient(90deg, #0b1431 0 6px, var(--panel-2) 6px 10px);
+}
+.cart-label { background: var(--c); color: var(--on-band); border-radius: 10px; padding: 14px 16px; display: grid; gap: 2px; }
+.cart-label small { font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; opacity: .75; }
+.cart-label b { font-family: var(--display); font-weight: 400; font-size: clamp(.95rem, 2.2vw, 1.15rem); overflow-wrap: anywhere; line-height: 1.2; }
+.cart p { color: var(--muted); }
+.cart ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: .94rem; display: grid; gap: 4px; }
+
+/* ───────── start ───────── */
+.start { display: grid; gap: 24px; }
+@media (min-width: 900px) { .start { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: center; } }
+.install { display: flex; align-items: center; gap: 10px; background: #070e22; border-radius: 12px; padding: 12px 12px 12px 16px; box-shadow: 0 0 0 2px var(--line); min-width: 0; }
+.install code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: .92rem; color: var(--ink); }
+.install code::before { content: "$ "; color: var(--gold); }
+.copy { border: 0; background: var(--gold); color: var(--on-band); font-weight: 700; font-size: .8rem; padding: 8px 12px; border-radius: 8px; cursor: pointer; flex: none; }
+.links { display: flex; gap: 12px; flex-wrap: wrap; }
+footer { border-top: 2px solid var(--line); padding-block: 28px 40px; color: var(--dim); font-size: .88rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+footer a { color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  .marquee-track { animation: none; }
+}
+</style>
+
+<div class="marquee" aria-hidden="true"><div class="marquee-track" id="ticker"></div></div>
+
+<div class="wrap">
+  <header class="topbar">
+    <a class="logo" href="#top" id="top"><span class="logo-mark">{ }</span>Chatter.Rest.UriTemplates</a>
+    <nav class="topnav" aria-label="Sections">
+      <a href="#play">Play</a><a href="#why">Why</a><a href="#levels">Levels</a><a href="#engine">Engine</a><a href="#packages">Packages</a><a href="#start">Start</a>
+    </nav>
+  </header>
+
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <p class="eyebrow">RFC 6570 URI Templates for .NET</p>
+      <h1 id="hero-title">Insert a template. <span class="hl">Win a perfect URI.</span></h1>
+      <p class="lede">Chatter.Rest.UriTemplates turns templates like <code>/users/{id}{?fields*}</code> into correct URIs. Eight operators handle the separators, the optional parts and the percent-encoding, so you stop gluing URL strings together by hand.</p>
+      <div class="cta">
+        <a class="btn btn-coin" href="#play">Play the board</a>
+        <a class="btn btn-ghost" href="https://github.com/brenpike/Chatter.Rest.UriTemplates" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+      <div class="facts"><span>All four RFC levels</span><span>Zero dependencies</span><span>Optional DI package</span></div>
+    </div>
+    <div class="screen" aria-label="Attract mode: example expansions">
+      <div class="screen-top"><span>Attract mode</span><span class="blink">● Insert coin</span></div>
+      <div class="scr-label">Template</div>
+      <div class="scr-tpl" id="att-tpl">/users/{id}{?fields*,lang}</div>
+      <div class="scr-arrow" aria-hidden="true">↓</div>
+      <div class="scr-label">Expands to</div>
+      <div class="scr-out" id="att-out">/users/42?fields=name&amp;fields=email&amp;lang=en</div>
+      <div class="scr-vars" id="att-vars"></div>
+    </div>
+  </section>
+</div>
+
+<!-- ───────── PLAY ───────── -->
+<section class="section" id="play" aria-labelledby="play-title" style="padding-top: 0;">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">The board</p>
+      <h2 class="h2" id="play-title">Eight operators. Collect them all.</h2>
+    </div>
+    <div class="arena">
+      <div class="board">
+        <div class="board-head">
+          <p class="how">Drag a value onto a card, or tap a value and then tap a card. Flip a card to read its rules. Each card is one RFC 6570 operator, the character right after the opening brace.</p>
+          <div class="collection" aria-live="polite"><span>Collected <span class="score" id="score">0/8</span></span><div class="stamps" id="stamps"></div></div>
+        </div>
+        <div class="tray" id="tray">
+          <div class="tray-row">
+            <span class="tray-label">Values</span>
+            <div class="tray-row chips" id="chips" role="group" aria-label="Values"></div>
+          </div>
+          <div class="tray-row">
+            <span class="tray-label">Modifier</span>
+            <div class="seg" role="group" aria-label="Modifier" id="mods">
+              <button type="button" data-mod="" aria-pressed="true">Plain</button>
+              <button type="button" data-mod="*" aria-pressed="false">Explode *</button>
+              <button type="button" data-mod=":3" aria-pressed="false">Prefix :3</button>
+            </div>
+            <p class="mod-note" id="mod-note"></p>
+          </div>
+        </div>
+        <div class="cards" id="cards"></div>
+      </div>
+
+      <aside class="machine" id="machine" aria-labelledby="machine-title">
+        <h3 id="machine-title">Free play <span class="lamp" aria-hidden="true"></span></h3>
+        <div style="display:grid; gap:6px;">
+          <label for="tpl-input">Your template</label>
+          <input class="tpl-input" id="tpl-input" type="text" value="/users/{id}{?fields*,lang}{#section}" spellcheck="false" autocomplete="off" autocapitalize="off">
+        </div>
+        <div class="presets" id="presets"></div>
+        <div class="m-screen" aria-live="polite">
+          <div class="m-out" id="m-out"></div>
+          <div class="tokens" id="m-tokens"></div>
+        </div>
+        <details class="vars">
+          <summary>Sample variables</summary>
+          <div class="var-list" id="var-list"></div>
+        </details>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── WHY ───────── -->
+<section class="section" id="why" aria-labelledby="why-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">The problem</p>
+      <h2 class="h2" id="why-title">Hand-built URLs break in three places.</h2>
+      <p class="lede">Concatenation looks fine until a value has a space or an ampersand, a parameter is missing, or a list needs repeating. A URI template states the shape once, and the expander gets every edge case right.</p>
+    </div>
+    <div class="vs">
+      <div class="vs-col">
+        <h3>Glued string <span class="tag tag-bad">Game over</span></h3>
+        <div class="code"><pre><span class="kw">var</span> url = <span class="str">"/search?q="</span> + q
+        + <span class="str">"&amp;page="</span> + page
+        + <span class="str">"&amp;tag="</span> + <span class="ty">string</span>.Join(<span class="str">","</span>, tags);</pre></div>
+        <div class="out-line">/search?q=<span class="bad">R&amp;D tools</span>&amp;<span class="bad">page=</span>&amp;tag=<span class="bad">a,b</span></div>
+        <ul class="bugs">
+          <li>The &amp; in “R&amp;D” starts a new parameter, and the space is invalid.</li>
+          <li>The missing page still leaves an empty <code>page=</code> behind.</li>
+          <li>The tags collapse into one value instead of repeating.</li>
+        </ul>
+      </div>
+      <div class="vs-col">
+        <h3>URI template <span class="tag tag-good">High score</span></h3>
+        <div class="code"><pre><span class="kw">var</span> url = <span class="kw">new</span> <span class="ty">UriTemplate</span>(<span class="str">"/search{?q,page,tag*}"</span>)
+    .Expand(values);</pre></div>
+        <div class="out-line good" id="why-good"></div>
+        <ul class="bugs ok">
+          <li>Values are percent-encoded for the part of the URI they land in.</li>
+          <li>Undefined variables drop out, separator and all.</li>
+          <li>The explode modifier <code>*</code> repeats each list item.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── LEVELS ───────── -->
+<section class="section" id="levels" aria-labelledby="levels-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">The four levels</p>
+      <h2 class="h2" id="levels-title">Every level unlocked.</h2>
+      <p class="lede">RFC 6570 grades templates in four levels, each adding syntax to the last. This library supports all four and is checked against the official RFC 6570 test suite.</p>
+    </div>
+    <div class="scores" role="table" aria-label="RFC 6570 levels">
+      <div class="scores-head" role="row"><span role="columnheader">Level select</span><small role="columnheader">Example · result</small></div>
+      <div id="levels-rows"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── ENGINE ───────── -->
+<section class="section" id="engine" aria-labelledby="engine-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Inside the cabinet</p>
+      <h2 class="h2" id="engine-title">How a template becomes a URI.</h2>
+      <p class="lede">Four stages, each with one job. Follow <code>/search{?q,lang}</code> through the machine.</p>
+    </div>
+    <div class="conveyor" id="conveyor">
+      <div class="belt" aria-hidden="true"><i></i></div>
+      <div class="station">
+        <div class="st-badge" aria-hidden="true">1</div>
+        <h3>Parse</h3>
+        <p>The template is parsed once, when you construct it. A malformed template fails right there with a <code>FormatException</code>, never later.</p>
+        <div class="readout"><span>"/search{?q,lang}"</span><em>✓ valid</em></div>
+      </div>
+      <div class="station">
+        <div class="st-badge" aria-hidden="true">2</div>
+        <h3>Tokenize</h3>
+        <p>Text splits into literal tokens, copied as written, and expression tokens, which hold an operator and its variables.</p>
+        <div class="readout"><span>literal <em>/search</em></span><span>expression <em>{?q,lang}</em></span></div>
+      </div>
+      <div class="station">
+        <div class="st-badge" aria-hidden="true">3</div>
+        <h3>Strategy</h3>
+        <p>Each operator has its own strategy that decides the leading character, the separator and whether values carry their names.</p>
+        <div class="readout"><span>operator <em>?</em></span><span>starts <em>?</em> · joins <em>&amp;</em> · named</span></div>
+      </div>
+      <div class="station">
+        <div class="st-badge" aria-hidden="true">4</div>
+        <h3>Encode</h3>
+        <p>Values are UTF-8 percent-encoded to RFC 3986. Only <code>+</code> and <code>#</code> keep reserved characters such as <code>/</code> and <code>?</code>.</p>
+        <div class="readout"><span>R&amp;D tools → <em>R%26D%20tools</em></span><span id="engine-final"></span></div>
+      </div>
+    </div>
+    <div class="promises">
+      <div class="promise"><b>Same input, same URI</b><span>Dictionary pairs expand in a stable sorted order, so output never depends on hash order.</span></div>
+      <div class="promise"><b>Safe to log</b><span>Exception messages about your values never include the values themselves.</span></div>
+      <div class="promise"><b>Plain .NET values</b><span>Pass strings, lists and dictionaries, or build them with <code>UriTemplateValue.From</code>.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── PACKAGES ───────── -->
+<section class="section" id="packages" aria-labelledby="packages-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Two cartridges</p>
+      <h2 class="h2" id="packages-title">The engine, and an easy way to plug it in.</h2>
+    </div>
+    <div class="carts">
+      <article class="cart" style="--c: var(--gold);">
+        <div class="cart-label"><small>Core package</small><b>Chatter.Rest.UriTemplates</b></div>
+        <p>The whole RFC 6570 engine: parsing, all eight operators, prefix and explode modifiers, and encoding.</p>
+        <ul><li>No external dependencies</li><li>Targets .NET Standard 2.0 and .NET 8</li></ul>
+        <div class="code"><pre><span class="kw">var</span> template = <span class="kw">new</span> <span class="ty">UriTemplate</span>(<span class="str">"/orders{?status,page}"</span>);
+
+<span class="kw">var</span> uri = template.Expand(<span class="kw">new</span> <span class="ty">Dictionary</span>&lt;<span class="kw">string</span>, <span class="kw">string</span>&gt;
+{
+    [<span class="str">"status"</span>] = <span class="str">"shipped"</span>,
+    [<span class="str">"page"</span>] = <span class="str">"2"</span>
+});
+<span class="cm">// /orders?status=shipped&amp;page=2</span></pre></div>
+      </article>
+      <article class="cart" style="--c: var(--op-slash);">
+        <div class="cart-label"><small>Dependency injection</small><b>Chatter.Rest.UriTemplates.DependencyInjection</b></div>
+        <p>One call registers the parser and a template factory with the Microsoft dependency injection container. Inject the factory wherever you build links.</p>
+        <ul><li>Adds <code>services.AddUriTemplates()</code></li><li>Inject <code>IUriTemplateFactory</code> and call <code>Create</code></li></ul>
+        <div class="code"><pre>services.AddUriTemplates();
+
+<span class="kw">public class</span> <span class="ty">OrderLinks</span>(<span class="ty">IUriTemplateFactory</span> templates)
+{
+    <span class="kw">public string</span> Page(<span class="kw">string</span> page) =&gt;
+        templates.Create(<span class="str">"/orders{?page}"</span>)
+                 .Expand((<span class="str">"page"</span>, page));
+}</pre></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── START ───────── -->
+<section class="section" id="start" aria-labelledby="start-title">
+  <div class="wrap start">
+    <div class="sec-head" style="margin:0;">
+      <p class="eyebrow">Player one</p>
+      <h2 class="h2" id="start-title">Press start.</h2>
+      <p class="lede">Add the package, write a template, call <code>Expand</code>. The RFC is worth a read if you want every rule.</p>
+    </div>
+    <div style="display:grid; gap:16px; min-width:0;">
+      <div class="install"><code id="install-cmd">dotnet add package Chatter.Rest.UriTemplates</code><button class="copy" type="button" id="copy">Copy</button></div>
+      <div class="links">
+        <a class="btn btn-coin" href="https://github.com/brenpike/Chatter.Rest.UriTemplates" target="_blank" rel="noopener">GitHub repository</a>
+        <a class="btn btn-ghost" href="https://datatracker.ietf.org/doc/html/rfc6570" target="_blank" rel="noopener">Read RFC 6570</a>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <footer style="margin-top: clamp(48px, 8vw, 88px);">
+      <span>MIT licensed · by Brennan Pike</span>
+      <span>Implements <a href="https://datatracker.ietf.org/doc/html/rfc6570" target="_blank" rel="noopener">RFC 6570</a> Levels 1–4</span>
+    </footer>
+  </div>
+</section>
+
+<script>
+const UT = (() => {
+  const OPS = {
+    '':  { first: '',  sep: ',', named: false, ifemp: '',  reserved: false, name: 'Simple string' },
+    '+': { first: '',  sep: ',', named: false, ifemp: '',  reserved: true,  name: 'Reserved' },
+    '#': { first: '#', sep: ',', named: false, ifemp: '',  reserved: true,  name: 'Fragment' },
+    '.': { first: '.', sep: '.', named: false, ifemp: '',  reserved: false, name: 'Label' },
+    '/': { first: '/', sep: '/', named: false, ifemp: '',  reserved: false, name: 'Path segment' },
+    ';': { first: ';', sep: ';', named: true,  ifemp: '',  reserved: false, name: 'Path-style parameter' },
+    '?': { first: '?', sep: '&', named: true,  ifemp: '=', reserved: false, name: 'Form-style query' },
+    '&': { first: '&', sep: '&', named: true,  ifemp: '=', reserved: false, name: 'Query continuation' }
+  };
+  const UNRES = /[A-Za-z0-9\-._~]/;
+  const RES = /[:\/?#\[\]@!$&'()*+,;=]/;
+  const pct = ch => Array.from(new TextEncoder().encode(ch), b => '%' + b.toString(16).toUpperCase().padStart(2, '0')).join('');
+  function checkScalars(s) {
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c >= 0xD800 && c <= 0xDBFF) { const d = s.charCodeAt(i + 1); if (d >= 0xDC00 && d <= 0xDFFF) { i++; continue; } }
+      if (c >= 0xD800 && c <= 0xDFFF) throw new UTError('A value contains a broken Unicode character and cannot be encoded.');
+    }
+  }
+  function enc(s, reserved) {
+    checkScalars(s);
+    let out = '';
+    const cps = Array.from(s);
+    for (let i = 0; i < cps.length; i++) {
+      const ch = cps[i];
+      if (UNRES.test(ch)) out += ch;
+      else if (reserved && RES.test(ch)) out += ch;
+      else if (reserved && ch === '%' && /^[0-9A-Fa-f]{2}$/.test((cps[i + 1] || '') + (cps[i + 2] || ''))) { out += ch + cps[i + 1] + cps[i + 2]; i += 2; }
+      else out += pct(ch);
+    }
+    return out;
+  }
+  class UTError extends Error {}
+  // literals: RFC 6570 §2.1. Disallowed ASCII is rejected; non-ASCII is percent-encoded.
+  const LIT_BAD = new Set([' ', '"', '<', '>', '\\', '^', '`', '{', '|', '}']);
+  function inUcs(cp) {
+    return (cp >= 0xA0 && cp <= 0xD7FF) || (cp >= 0xF900 && cp <= 0xFDCF) || (cp >= 0xFDF0 && cp <= 0xFFEF) ||
+      (cp >= 0x10000 && cp <= 0xEFFFD && (cp & 0xFFFF) <= 0xFFFD) || (cp >= 0xE000 && cp <= 0xF8FF) ||
+      (cp >= 0xF0000 && cp <= 0x10FFFD && (cp & 0xFFFF) <= 0xFFFD);
+  }
+  function literal(text, at) {
+    let out = '', p = at;
+    const cps = Array.from(text);
+    for (let i = 0; i < cps.length; i++, p++) {
+      const ch = cps[i], cp = ch.codePointAt(0);
+      if (ch === '}') throw new UTError(`There's a closing } at position ${p + 1} with no { before it.`);
+      if (LIT_BAD.has(ch) || cp < 0x21 || cp === 0x7F) throw new UTError(`The ${ch === ' ' ? 'space' : 'character ' + ch} at position ${p + 1} isn't allowed in a URI. Percent-encode it or move it into a variable.`);
+      if (ch === '%') {
+        if (!/^[0-9A-Fa-f]{2}$/.test((cps[i + 1] || '') + (cps[i + 2] || ''))) throw new UTError(`The % at position ${p + 1} must start a percent-encoded triplet like %20.`);
+        out += ch + cps[i + 1] + cps[i + 2]; i += 2; p += 2; continue;
+      }
+      if (cp > 0x7F) { if (!inUcs(cp)) throw new UTError(`The character at position ${p + 1} can't appear in a URI template.`); out += pct(ch); continue; }
+      out += ch;
+    }
+    return out;
+  }
+  const VARNAME = /^(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+(?:\.(?:[A-Za-z0-9_]|%[0-9A-Fa-f]{2})+)*$/;
+  function parseExpr(body, at) {
+    if (body === '') throw new UTError(`The expression at position ${at + 1} is empty. Put a variable name inside the braces.`);
+    let op = '';
+    if ('+#./;?&'.includes(body[0])) { op = body[0]; body = body.slice(1); }
+    else if ('=,!@|'.includes(body[0])) throw new UTError(`The operator "${body[0]}" is reserved by RFC 6570 for future use.`);
+    if (body === '') throw new UTError(`The expression at position ${at + 1} has an operator but no variable.`);
+    const vars = body.split(',').map(spec => {
+      let m, name = spec, explode = false, prefix = null;
+      if (spec.endsWith('*')) { explode = true; name = spec.slice(0, -1); }
+      else if ((m = /^(.*):(.*)$/.exec(spec))) {
+        name = m[1];
+        if (!/^[1-9][0-9]{0,3}$/.test(m[2])) throw new UTError(`The prefix ":${m[2]}" must be a whole number from 1 to 9999.`);
+        prefix = +m[2];
+      }
+      if (name.includes(':') || name.includes('*')) throw new UTError(`"${spec}" uses both a prefix and explode. Pick one.`);
+      if (!VARNAME.test(name)) throw new UTError(name === '' ? 'A variable name is missing between commas.' : `"${name}" isn't a valid variable name. Use letters, digits, _ and dots.`);
+      return { name, explode, prefix };
+    });
+    return { op, vars };
+  }
+  function parse(tpl) {
+    const tokens = [];
+    let i = 0;
+    while (i < tpl.length) {
+      const open = tpl.indexOf('{', i);
+      if (open === -1) { tokens.push({ lit: literal(tpl.slice(i), i), raw: tpl.slice(i) }); break; }
+      if (open > i) tokens.push({ lit: literal(tpl.slice(i, open), i), raw: tpl.slice(i, open) });
+      const close = tpl.indexOf('}', open);
+      const nested = tpl.indexOf('{', open + 1);
+      if (close === -1) throw new UTError(`The { at position ${open + 1} is never closed. Add a } to finish the expression.`);
+      if (nested !== -1 && nested < close) throw new UTError(`Expressions can't be nested. There's a { inside the expression at position ${open + 1}.`);
+      tokens.push({ expr: parseExpr(tpl.slice(open + 1, close), open), raw: tpl.slice(open, close + 1) });
+      i = close + 1;
+    }
+    return tokens;
+  }
+  const kind = v => v == null ? 'undef' : Array.isArray(v) ? 'list' : typeof v === 'object' ? 'map' : 'string';
+  function pairs(v) { return Object.keys(v).sort((a, b) => a < b ? -1 : a > b ? 1 : 0).map(k => [k, String(v[k])]); }
+  function expandExpr({ op, vars }, values) {
+    const o = OPS[op], parts = [];
+    for (const vs of vars) {
+      const v = values[vs.name], k = kind(v);
+      if (k === 'undef' || (k === 'list' && v.length === 0) || (k === 'map' && Object.keys(v).length === 0)) continue;
+      if (vs.prefix != null && k !== 'string') throw new UTError(`"${vs.name}" is a ${k === 'list' ? 'list' : 'dictionary'}. A prefix like :${vs.prefix} only works on strings.`);
+      const e = s => enc(s, o.reserved);
+      if (k === 'string') {
+        let s = String(v);
+        if (vs.prefix != null) s = Array.from(s).slice(0, vs.prefix).join('');
+        parts.push(o.named ? (s === '' ? vs.name + o.ifemp : vs.name + '=' + e(s)) : e(s));
+      } else if (!vs.explode) {
+        const flat = k === 'list' ? v.map(x => e(String(x))) : pairs(v).flatMap(([a, b]) => [e(a), e(b)]);
+        const s = flat.join(',');
+        parts.push(o.named ? vs.name + (s === '' ? o.ifemp : '=' + s) : s);
+      } else if (k === 'list') {
+        parts.push(v.map(x => { x = String(x); return o.named ? (x === '' ? vs.name + o.ifemp : vs.name + '=' + e(x)) : e(x); }).join(o.sep));
+      } else {
+        parts.push(pairs(v).map(([a, b]) => o.named ? (b === '' ? e(a) + o.ifemp : e(a) + '=' + e(b)) : e(a) + '=' + e(b)).join(o.sep));
+      }
+    }
+    return parts.length ? o.first + parts.join(o.sep) : '';
+  }
+  function expand(tpl, values) {
+    return parse(tpl).map(t => t.expr ? expandExpr(t.expr, values) : t.lit).join('');
+  }
+  return { OPS, parse, expand, expandExpr, UTError, enc };
+})();
+if (typeof module !== 'undefined') module.exports = UT;
+</script>
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const $ = (s, r = document) => r.querySelector(s);
+  const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  const VARS = {
+    hello: 'Hello World!', path: '/foo/bar', empty: '', list: ['red', 'green', 'blue'],
+    keys: { semi: ';', dot: '.', comma: ',' }, id: '42', fields: ['name', 'email'], lang: 'en',
+    q: 'R&D tools', x: '1024', y: '768', var: 'value', section: 'reviews'
+  };
+  const showVal = v => v === undefined ? 'undefined' : Array.isArray(v) ? '[' + v.map(x => JSON.stringify(x)).join(', ') + ']'
+    : typeof v === 'object' ? '{ ' + Object.entries(v).map(([k, x]) => k + ': ' + JSON.stringify(x)).join(', ') + ' }' : JSON.stringify(v);
+
+  const CARD_OPS = [
+    { op: '', key: 'none', glyph: '{ }', desc: 'Drops a value into any part of a URI. Anything outside letters, digits and - . _ ~ is percent-encoded.' },
+    { op: '+', key: 'plus', glyph: '+', desc: 'For values that already hold URI syntax, such as a path. Reserved characters like / and ? pass through.' },
+    { op: '#', key: 'hash', glyph: '#', desc: 'Builds a fragment. Works like reserved expansion with a leading #.' },
+    { op: '.', key: 'dot', glyph: '.', desc: 'Adds dot-prefixed labels, as in a host name or a file extension.' },
+    { op: '/', key: 'slash', glyph: '/', desc: 'Adds path segments, one slash per value.' },
+    { op: ';', key: 'semi', glyph: ';', desc: 'Adds path-style parameters like ;x=1;y=2. An empty value leaves just the name.' },
+    { op: '?', key: 'q', glyph: '?', desc: 'Starts a query string. Each value becomes name=value, joined with &.' },
+    { op: '&', key: 'amp', glyph: '&', desc: 'Continues a query string when the literal text already has a ?.' }
+  ];
+  const CHIPS = [
+    { name: 'hello', type: 'string' }, { name: 'path', type: 'string' }, { name: 'empty', type: 'empty string' },
+    { name: 'list', type: 'list' }, { name: 'keys', type: 'dictionary' }, { name: 'missing', type: 'undefined' }
+  ];
+  const START = { '': 'hello', '+': 'path', '#': 'hello', '.': 'list', '/': 'list', ';': 'empty', '?': 'keys', '&': 'list' };
+  const MOD_NOTES = {
+    '': 'Plain expands the value as a single part. Lists and dictionaries become comma-separated.',
+    '*': 'Explode gives each list item, or each dictionary pair, its own part.',
+    ':3': 'Prefix keeps the first 3 characters of a string. It can’t apply to lists or dictionaries.'
+  };
+
+  /* ── glyph renderer ── */
+  function renderChars(target, str, color, animate) {
+    target.textContent = '';
+    target.classList.remove('pop');
+    const parts = str.match(/%[0-9A-F]{2}|[\s\S]/gu) || [];
+    parts.forEach((p, i) => {
+      const s = el('span', 'ch' + (p.length === 3 && p[0] === '%' ? ' e' : /[?#&=;\/.,+]/.test(p) ? ' p' : ''));
+      s.textContent = p;
+      s.style.setProperty('--i', Math.min(i, 60));
+      target.appendChild(s);
+    });
+    if (color) target.style.setProperty('--c', color);
+    if (animate && !reduce) { void target.offsetWidth; target.classList.add('pop'); }
+  }
+
+  /* ── spring physics ── */
+  function spring({ from, to, v = 0, k = 380, c = 16, onUpdate, onDone }) {
+    if (reduce) { onUpdate(to); onDone && onDone(); return () => {}; }
+    let x = from, last = performance.now(), id;
+    const step = t => {
+      const dt = Math.min(0.032, (t - last) / 1000); last = t;
+      const a = -k * (x - to) - c * v; v += a * dt; x += v * dt;
+      if (Math.abs(v) < 0.002 && Math.abs(x - to) < 0.0005) { onUpdate(to); onDone && onDone(); return; }
+      onUpdate(x); id = requestAnimationFrame(step);
+    };
+    id = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(id);
+  }
+
+  /* ── ticker ── */
+  const tickerTpls = ['{hello}', '{+path}/here', '{#section}', 'X{.list*}', '{/list*}', '{;x,y,empty}', '{?x,y}', '?fixed=yes{&x}', '{?keys*}', '{hello:5}'];
+  const tick = $('#ticker');
+  const tickHtml = tickerTpls.map(t => `<span><b style="color:var(--ink)">${esc(t)}</b> → ${esc(UT.expand(t, VARS))}</span>`).join('');
+  tick.innerHTML = tickHtml + tickHtml;
+
+  /* ── attract mode ── */
+  const ATTRACT = ['/users/{id}{?fields*,lang}', '/search{?q,lang}', '{+path}/here{#section}', 'map{?x,y}', '/colors{/list*}{?keys*}'];
+  const attTpl = $('#att-tpl'), attOut = $('#att-out'), attVars = $('#att-vars');
+  function varsIn(tpl) {
+    const names = new Set();
+    UT.parse(tpl).forEach(t => t.expr && t.expr.vars.forEach(v => names.add(v.name)));
+    return [...names];
+  }
+  function showAttractVars(tpl) {
+    attVars.innerHTML = varsIn(tpl).map(n => `<span>${esc(n)} = ${esc(showVal(VARS[n]))}</span>`).join('');
+  }
+  renderChars(attOut, UT.expand(ATTRACT[0], VARS), null, false);
+  showAttractVars(ATTRACT[0]);
+  let attI = 0;
+  function attractNext() {
+    attI = (attI + 1) % ATTRACT.length;
+    const t = ATTRACT[attI];
+    showAttractVars(t);
+    attOut.style.opacity = '.25';
+    if (reduce) { attTpl.textContent = t; renderChars(attOut, UT.expand(t, VARS)); attOut.style.opacity = ''; setTimeout(attractNext, 4200); return; }
+    let n = 0;
+    const type = () => {
+      attTpl.innerHTML = esc(t.slice(0, n)) + '<span class="caret"></span>';
+      if (n++ < t.length) setTimeout(type, 34 + Math.random() * 40);
+      else setTimeout(() => {
+        attTpl.textContent = t; attOut.style.opacity = '';
+        renderChars(attOut, UT.expand(t, VARS), null, true);
+        setTimeout(attractNext, 3600);
+      }, 260);
+    };
+    type();
+  }
+  setTimeout(attractNext, 3600);
+
+  /* ── problem section ── */
+  renderChars($('#why-good'), UT.expand('/search{?q,page,tag*}', { q: 'R&D tools', tag: ['a', 'b'] }), 'var(--op-dot)', false);
+
+  /* ── board ── */
+  const state = { mod: '', selected: null, collected: new Set() };
+  const stamps = $('#stamps');
+  CARD_OPS.forEach(c => {
+    const s = el('span', 'stamp'); s.textContent = c.op || '∅'; s.style.setProperty('--c', `var(--op-${c.key})`); s.dataset.op = c.op; s.title = UT.OPS[c.op].name;
+    stamps.appendChild(s);
+  });
+  function collect(op) {
+    if (state.collected.has(op)) return;
+    state.collected.add(op);
+    stamps.querySelector(`[data-op="${CSS.escape(op)}"]`).classList.add('got');
+    $('#score').textContent = state.collected.size + '/8';
+  }
+
+  // chips
+  const chipsBox = $('#chips');
+  CHIPS.forEach(c => {
+    const b = el('button', 'chip');
+    b.type = 'button'; b.dataset.name = c.name; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `<span class="nm">${c.name}</span><span class="ty">${c.type}</span><span class="pv">${esc(showVal(VARS[c.name]))}</span>`;
+    b.setAttribute('aria-label', `${c.name}, ${c.type}: ${showVal(VARS[c.name])}`);
+    chipsBox.appendChild(b);
+  });
+
+  // cards
+  const cardsBox = $('#cards');
+  const cards = new Map();
+  CARD_OPS.forEach(c => {
+    const o = UT.OPS[c.op];
+    const card = el('div', 'card');
+    card.style.setProperty('--c', `var(--op-${c.key})`);
+    card.dataset.op = c.op;
+    const named = o.named ? 'yes' : 'no';
+    const emptyForm = o.named ? (o.ifemp ? `${c.op}x=` : `${c.op}x`) : c.op ? c.op : '(nothing)';
+    card.innerHTML = `
+      <div class="card-lift"><div class="card-flip">
+        <div class="face front">
+          <div class="band"><span class="glyph" aria-hidden="true">${esc(c.glyph)}</span><span class="cname">${o.name}</span></div>
+          <button class="drop" type="button" aria-label="Load the selected value onto the ${o.name} card">
+            <code class="tpl"></code><span class="res"></span><span class="note"></span>
+          </button>
+          <div class="foot"><span class="loaded"></span><button class="flipbtn" type="button" aria-label="Show the rules for ${o.name}">Rules ↻</button></div>
+        </div>
+        <div class="face back" inert>
+          <div class="back-body">
+            <div class="back-title"><span>${esc(c.glyph)}</span><span>${o.name}</span></div>
+            <p class="back-desc">${esc(c.desc)}</p>
+            <dl class="rules">
+              <div><dt>Starts with</dt><dd>${o.first ? esc(o.first) : 'nothing'}</dd></div>
+              <div><dt>Joins with</dt><dd>${esc(o.sep)}</dd></div>
+              <div><dt>Names values</dt><dd>${named}</dd></div>
+              <div><dt>Empty x gives</dt><dd>${esc(emptyForm)}</dd></div>
+              <div><dt>Keeps / ? # as-is</dt><dd>${o.reserved ? 'yes' : 'no'}</dd></div>
+            </dl>
+          </div>
+          <div class="foot"><span class="loaded">RFC 6570 · ${c.op ? 'Level ' + (c.op === '+' || c.op === '#' ? 2 : 3) : 'Level 1'}</span><button class="flipbtn" type="button" aria-label="Back to the ${o.name} card">Back ↺</button></div>
+        </div>
+      </div></div>`;
+    cardsBox.appendChild(card);
+    const rec = { card, op: c.op, value: START[c.op], color: `var(--op-${c.key})`, cancel: null };
+    cards.set(card, rec);
+
+    card.querySelectorAll('.flipbtn').forEach(b => b.addEventListener('click', () => {
+      const flipped = card.classList.toggle('flipped');
+      card.querySelector('.front').inert = flipped;
+      card.querySelector('.back').inert = !flipped;
+      collect(c.op);
+      (flipped ? card.querySelector('.back .flipbtn') : card.querySelector('.front .flipbtn')).focus({ preventScroll: true });
+    }));
+    card.querySelector('.drop').addEventListener('click', () => {
+      if (state.selected) { load(rec, state.selected, true); }
+      else { bump(rec, 0.94); flashTray(); }
+    });
+    card.addEventListener('pointermove', e => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+      card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+    });
+  });
+
+  function bump(rec, from = 0.82, spin = 0) {
+    const lift = rec.card.querySelector('.card-lift');
+    rec.cancel && rec.cancel();
+    rec.cancel = spring({ from: 0, to: 1, k: 300, c: 13, onUpdate: t => {
+      const s = from + (1 - from) * t, r = spin * (1 - t);
+      lift.style.transform = `scale(${s}) rotate(${r}deg)`;
+    }, onDone: () => { lift.style.transform = ''; } });
+  }
+
+  function render(rec, animate) {
+    const name = rec.value, mod = state.mod, op = rec.op;
+    const tpl = `{${op}${name}${mod}}`;
+    const front = rec.card.querySelector('.front');
+    const tEl = front.querySelector('.tpl'), res = front.querySelector('.res'), note = front.querySelector('.note');
+    tEl.textContent = tpl;
+    const chip = CHIPS.find(c => c.name === name);
+    front.querySelector('.loaded').textContent = `${name} · ${chip.type}`;
+    rec.card.classList.remove('tilt');
+    res.classList.remove('none');
+    let out;
+    try { out = UT.expand(tpl, VARS); }
+    catch (e) {
+      rec.card.classList.add('tilt');
+      res.textContent = 'TILT!';
+      note.textContent = e.message;
+      if (animate && !reduce) { rec.card.classList.remove('shake'); void rec.card.offsetWidth; rec.card.classList.add('shake'); }
+      return;
+    }
+    if (out === '') {
+      res.classList.add('none');
+      res.textContent = '(nothing)';
+      note.textContent = VARS[name] === undefined ? 'Undefined values vanish, operator and all.' : 'An empty string adds nothing here.';
+    } else {
+      renderChars(res, out, rec.color, animate);
+      note.textContent = noteFor(rec.op, name, mod, out);
+    }
+  }
+  function noteFor(op, name, mod, out) {
+    const v = VARS[name];
+    if (v === '') return UT.OPS[op].named ? 'Empty, but the name stays.' : 'Empty, but the operator stays.';
+    if (mod === ':3') return 'Trimmed to the first 3 characters.';
+    if (out.includes('%')) return UT.OPS[op].reserved ? 'Reserved characters kept, the rest encoded.' : 'Unsafe characters percent-encoded.';
+    if (mod === '*' && typeof v === 'object') return Array.isArray(v) ? 'Each item became its own part.' : 'Each pair became its own part.';
+    if (UT.OPS[op].reserved && /[\/?]/.test(out)) return 'Slashes passed straight through.';
+    return 'Expanded cleanly.';
+  }
+  function load(rec, name, animate) {
+    rec.value = name;
+    render(rec, animate);
+    collect(rec.op);
+    if (animate) bump(rec, 0.78, (Math.random() < .5 ? -1 : 1) * 7);
+  }
+  cards.forEach(rec => render(rec, false));
+
+  // modifiers
+  const modNote = $('#mod-note');
+  modNote.textContent = MOD_NOTES[''];
+  $('#mods').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    state.mod = b.dataset.mod;
+    $('#mods').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    modNote.textContent = MOD_NOTES[state.mod];
+    let i = 0;
+    cards.forEach(rec => { const d = i++ * 55; setTimeout(() => { render(rec, true); bump(rec, 0.92); }, reduce ? 0 : d); });
+  });
+
+  // selection
+  function select(name) {
+    state.selected = state.selected === name ? null : name;
+    chipsBox.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.name === state.selected)));
+  }
+  function flashTray() {
+    const tray = $('#tray');
+    spring({ from: 0, to: 1, k: 420, c: 12, v: 0, onUpdate: t => { tray.style.transform = `translateX(${Math.sin(t * Math.PI * 3) * (1 - t) * 8}px)`; }, onDone: () => { tray.style.transform = ''; } });
+  }
+
+  // drag with pointer events + spring-follow ghost
+  let drag = null, suppressClick = false;
+  chipsBox.addEventListener('pointerdown', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    drag = { chip, id: e.pointerId, sx: e.clientX, sy: e.clientY, active: false };
+    chip.setPointerCapture(e.pointerId);
+  });
+  chipsBox.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.active && Math.hypot(dx, dy) > 6) startDrag(e);
+    if (drag.active) {
+      drag.tx = e.clientX; drag.ty = e.clientY;
+      const hit = document.elementFromPoint(e.clientX, e.clientY);
+      const card = hit && hit.closest('.card');
+      if (card !== drag.hot) { drag.hot && drag.hot.classList.remove('hot'); card && card.classList.add('hot'); drag.hot = card; }
+    }
+  });
+  function startDrag(e) {
+    drag.active = true;
+    drag.chip.classList.add('dragging');
+    const g = el('div', 'ghost'); g.textContent = drag.chip.dataset.name; document.body.appendChild(g);
+    drag.ghost = g; drag.x = e.clientX; drag.y = e.clientY; drag.vx = 0; drag.vy = 0; drag.tx = e.clientX; drag.ty = e.clientY;
+    let last = performance.now();
+    const follow = t => {
+      if (!drag || !drag.ghost) return;
+      const dt = Math.min(0.032, (t - last) / 1000); last = t;
+      const k = reduce ? 4000 : 520, c = reduce ? 130 : 34;
+      drag.vx += (-k * (drag.x - drag.tx) - c * drag.vx) * dt;
+      drag.vy += (-k * (drag.y - drag.ty) - c * drag.vy) * dt;
+      drag.x += drag.vx * dt; drag.y += drag.vy * dt;
+      const tilt = Math.max(-22, Math.min(22, drag.vx * 0.025));
+      g.style.transform = `translate(${drag.x}px, ${drag.y}px) translate(-50%, -130%) rotate(${tilt}deg) scale(1.08)`;
+      drag.raf = requestAnimationFrame(follow);
+    };
+    drag.raf = requestAnimationFrame(follow);
+  }
+  function endDrag(e, cancelled) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null;
+    if (!d.active) return;
+    suppressClick = true; setTimeout(() => { suppressClick = false; }, 0);
+    cancelAnimationFrame(d.raf);
+    d.chip.classList.remove('dragging');
+    d.hot && d.hot.classList.remove('hot');
+    const g = d.ghost;
+    if (!cancelled && d.hot) {
+      load(cards.get(d.hot), d.chip.dataset.name, true);
+      g.remove();
+    } else {
+      // spring back home
+      const r = d.chip.getBoundingClientRect(), hx = r.left + r.width / 2, hy = r.top + r.height * 1.3;
+      const x0 = d.x, y0 = d.y;
+      spring({ from: 0, to: 1, k: 260, c: 22, onUpdate: t => {
+        g.style.transform = `translate(${x0 + (hx - x0) * t}px, ${y0 + (hy - y0) * t}px) translate(-50%, -130%) scale(${1.08 - .3 * t})`;
+        g.style.opacity = String(1 - t * .8);
+      }, onDone: () => g.remove() });
+    }
+  }
+  chipsBox.addEventListener('pointerup', e => endDrag(e, false));
+  chipsBox.addEventListener('pointercancel', e => endDrag(e, true));
+  chipsBox.addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if (!chip || suppressClick) return;
+    select(chip.dataset.name);
+  });
+
+  /* ── free-play machine ── */
+  const input = $('#tpl-input'), mOut = $('#m-out'), mTok = $('#m-tokens'), machine = $('#machine');
+  const OPKEY = { '': 'none', '+': 'plus', '#': 'hash', '.': 'dot', '/': 'slash', ';': 'semi', '?': 'q', '&': 'amp' };
+  const PRESETS = ['/search{?q,lang}', '{+path}/here', 'map{?x,y}', 'X{.list*}', '{/list*}', '{;x,y,empty}', '{?keys*}', '{hello:5}', '/users/{id'];
+  const presetBox = $('#presets');
+  PRESETS.forEach(p => {
+    const b = el('button', p === '/users/{id' ? 'broken' : ''); b.type = 'button'; b.textContent = p;
+    if (p === '/users/{id') b.title = 'A broken template';
+    b.addEventListener('click', () => { input.value = p; runMachine(true); });
+    presetBox.appendChild(b);
+  });
+  $('#var-list').innerHTML = Object.entries(VARS).map(([k, v]) => `<div><span>${esc(k)}</span> = ${esc(showVal(v))}</div>`).join('');
+  let lastTokSig = '';
+  function runMachine(animate) {
+    const tpl = input.value;
+    let tokens, out;
+    try { tokens = UT.parse(tpl); out = UT.expand(tpl, VARS); }
+    catch (e) {
+      machine.classList.add('err');
+      mOut.innerHTML = `<div class="m-err"><b>TILT!</b>${esc(e.message)}</div>`;
+      mTok.textContent = ''; lastTokSig = '';
+      if (animate && !reduce) { mOut.classList.remove('shake'); void mOut.offsetWidth; mOut.classList.add('shake'); }
+      return;
+    }
+    machine.classList.remove('err');
+    if (out === '') { mOut.innerHTML = '<span style="color:var(--dim)">(empty result)</span>'; }
+    else renderChars(mOut, out, null, animate);
+    const sig = tokens.map(t => t.raw).join('\u0000');
+    mTok.textContent = '';
+    tokens.forEach((t, i) => {
+      const d = el('div', 'tok' + (t.expr ? ' x' : ''));
+      d.style.setProperty('--i', i);
+      if (t.expr) d.style.setProperty('--c', `var(--op-${OPKEY[t.expr.op]})`);
+      d.innerHTML = `<b>${esc(t.raw)}</b><small>${t.expr ? esc(UT.OPS[t.expr.op].name) : 'literal'}</small>`;
+      mTok.appendChild(d);
+    });
+    mTok.classList.remove('pop');
+    if (animate && sig !== lastTokSig && !reduce) { void mTok.offsetWidth; mTok.classList.add('pop'); }
+    lastTokSig = sig;
+  }
+  input.addEventListener('input', () => runMachine(true));
+  runMachine(false);
+
+  /* ── levels ── */
+  const LEVELS = [
+    { n: 1, c: 'var(--op-none)', what: 'Simple strings', more: 'Single variables, encoded safely.', t: '{hello}' },
+    { n: 2, c: 'var(--op-plus)', what: 'Reserved and fragment', more: 'The + and # operators keep URI syntax intact.', t: '{+path}/here{#section}' },
+    { n: 3, c: 'var(--op-slash)', what: 'Many variables, five more operators', more: 'Labels, path segments, parameters and queries.', t: 'map{?x,y}' },
+    { n: 4, c: 'var(--op-q)', what: 'Modifiers and composite values', more: 'Prefix :N, explode *, lists and dictionaries.', t: '{/list*}{?keys*}' }
+  ];
+  $('#levels-rows').innerHTML = LEVELS.map(l => `
+    <div class="lvl" role="row" style="--c:${l.c}">
+      <div class="lvl-n" role="cell">Level ${l.n}</div>
+      <div class="lvl-what" role="cell"><b>${l.what}</b><span>${l.more}</span></div>
+      <div class="lvl-ex" role="cell"><span class="t">${esc(l.t)}</span><span class="r">${esc(UT.expand(l.t, VARS))}</span></div>
+    </div>`).join('');
+
+  /* ── engine conveyor ── */
+  $('#engine-final').innerHTML = '<em>' + esc(UT.expand('/search{?q,lang}', VARS)) + '</em>';
+  const stations = [...document.querySelectorAll('.station')];
+  const belt = $('.belt');
+  let st = 3;
+  function stepConveyor() {
+    st = (st + 1) % stations.length;
+    stations.forEach((s, i) => s.classList.toggle('on', i === st));
+    belt.style.setProperty('--fill', (st / (stations.length - 1) * 100) + '%');
+  }
+  stepConveyor();
+  if (!reduce) setInterval(stepConveyor, 1700);
+
+  /* ── copy ── */
+  $('#copy').addEventListener('click', () => {
+    const b = $('#copy'), text = $('#install-cmd').textContent;
+    const done = ok => { b.textContent = ok ? 'Copied' : 'Select'; setTimeout(() => { b.textContent = 'Copy'; }, 1600); };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents($('#install-cmd')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done(false); };
+    try { navigator.clipboard.writeText(text).then(() => done(true), fallback); } catch (_) { fallback(); }
+  });
+})();
+</script>

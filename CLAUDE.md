@@ -19,6 +19,7 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | [docs/development.md](docs/development.md) | Build commands, test commands, NuGet packaging, CI/CD parity, code style, test conventions |
 | [docs/backlog.md](docs/backlog.md) | Deferred work and follow-ups |
 | [AGENTS.md](AGENTS.md) | External AI reviewer (Codex) guidance |
+| [web/README.md](web/README.md) | Project site (GitHub Pages): layout, local preview, deploy |
 
 ## Solution Structure
 
@@ -28,6 +29,7 @@ Chatter.Rest.UriTemplates is a standalone .NET/C# library implementing RFC 6570 
 | `src/Chatter.Rest.UriTemplates.DependencyInjection/` | `Chatter.Rest.UriTemplates.DependencyInjection` |
 | `test/Chatter.Rest.UriTemplates.Tests/` | - |
 | `test/Chatter.Rest.UriTemplates.DependencyInjection.Tests/` | - |
+| `web/` | - (project site, deployed to GitHub Pages by `pages.yml`) |
 
 ## Build and Test Commands
 
@@ -123,7 +125,7 @@ A version bump is required when a PR modifies any file under:
 - `src/Chatter.Rest.UriTemplates.DependencyInjection/**` (DI package bump)
 - `src/Directory.Build.props` (bump for BOTH packages — each CI workflow passes it to `version-check.yml` via `extra-src-path`)
 
-No bump required for changes to: `test/**`, `docs/**`, `.github/**`, `*.md` (root).
+No bump required for changes to: `test/**`, `docs/**`, `web/**`, `.github/**`, `*.md` (root).
 
 ### Changelog
 
