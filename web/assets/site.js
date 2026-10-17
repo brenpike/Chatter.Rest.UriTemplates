@@ -300,9 +300,11 @@
     slotsEl.textContent = "";
     outEl.className = "pg-out err";
     outEl.textContent = "";
-    outEl.appendChild(el("b", null, "FormatException · thrown by " + (e.phase === "expand" ? "Expand" : "the UriTemplate constructor")));
+    outEl.appendChild(el("b", null, e.type + " · thrown by " + (e.phase === "expand" ? "Expand" : "the UriTemplate constructor")));
     outEl.appendChild(document.createTextNode(e.message));
-    noteEl.textContent = e.phase === "expand" ? "The template parsed fine. This value can't be expanded with that modifier." : "Nothing is expanded. A malformed template never becomes a UriTemplate.";
+    noteEl.textContent = e.phase === "expand" ? "The template parsed fine. This value can't be expanded with that modifier."
+      : e.type === "NotSupportedException" ? "Nothing is expanded. Reserved operators aren't supported, so the template never becomes a UriTemplate."
+      : "Nothing is expanded. A malformed template never becomes a UriTemplate.";
     Object.keys(vrows).forEach(function (n) { vrows[n].classList.remove("used"); });
   }
 

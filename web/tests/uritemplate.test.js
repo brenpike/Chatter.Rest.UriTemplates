@@ -49,3 +49,19 @@ test("names inherited from Object.prototype are undefined, not values", () => {
   assert.strictEqual(UT.expand("{?toString,constructor}", {}), "");
   assert.strictEqual(UT.expand("/a{/__proto__}{?hasOwnProperty}", {}), "/a");
 });
+
+test("literal scalars follow ucschar / iprivate, including the plane-14 gap", () => {
+  const throws = (t) => assert.throws(() => UT.expand(t, {}), UT.UTError, t);
+  throws("a\u{E0001}");          // U+E0001 LANGUAGE TAG: excluded block U+E0000-U+E0FFF
+  throws("a\u{E0FFF}");
+  throws("a\u{DFFFE}");          // plane-13 noncharacter
+  assert.strictEqual(UT.expand("a\u{E1000}", {}), "a%F3%A1%80%80");
+  assert.strictEqual(UT.expand("a\u{DFFFD}", {}), "a%F3%9F%BF%BD");
+});
+
+test("reserved operators report NotSupportedException, like the library", () => {
+  for (const t of ["{=x}", "{,x}", "{!x}", "{@x}", "{|x}"]) {
+    assert.throws(() => UT.parse(t), (e) => e instanceof UT.UTError && e.type === "NotSupportedException", t);
+  }
+  assert.throws(() => UT.parse("{x"), (e) => e.type === "FormatException");
+});

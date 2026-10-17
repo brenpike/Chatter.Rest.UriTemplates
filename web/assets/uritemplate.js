@@ -14,7 +14,7 @@ var UT = (function () {
   var UNRES = /[A-Za-z0-9\-._~]/;
   var RES = /[:\/?#\[\]@!$&'()*+,;=]/;
   var opts = { sortKeys: true };
-  function UTError(message, phase) { this.message = message; this.phase = phase || "parse"; }
+  function UTError(message, phase, type) { this.message = message; this.phase = phase || "parse"; this.type = type || "FormatException"; }
   UTError.prototype = Object.create(Error.prototype);
   UTError.prototype.name = "UTError";
   function pct(ch) {
@@ -44,7 +44,7 @@ var UT = (function () {
   var LIT_BAD = " \"<>\\^`{|}";
   function inUcs(cp) {
     return (cp >= 0xA0 && cp <= 0xD7FF) || (cp >= 0xF900 && cp <= 0xFDCF) || (cp >= 0xFDF0 && cp <= 0xFFEF) ||
-      (cp >= 0x10000 && cp <= 0xEFFFD && (cp & 0xFFFF) <= 0xFFFD) || (cp >= 0xE000 && cp <= 0xF8FF) ||
+      (cp >= 0x10000 && cp <= 0xDFFFD && (cp & 0xFFFF) <= 0xFFFD) || (cp >= 0xE1000 && cp <= 0xEFFFD) || (cp >= 0xE000 && cp <= 0xF8FF) ||
       (cp >= 0xF0000 && cp <= 0x10FFFD && (cp & 0xFFFF) <= 0xFFFD);
   }
   function literal(text, at) {
@@ -67,7 +67,7 @@ var UT = (function () {
     if (body === "") throw new UTError("The expression at position " + (at + 1) + " is empty. Put a variable name inside the braces.");
     var op = "";
     if ("+#./;?&".indexOf(body[0]) >= 0) { op = body[0]; body = body.slice(1); }
-    else if ("=,!@|".indexOf(body[0]) >= 0) throw new UTError("The operator \"" + body[0] + "\" is reserved by RFC 6570 for future use.");
+    else if ("=,!@|".indexOf(body[0]) >= 0) throw new UTError("The operator \"" + body[0] + "\" is reserved by RFC 6570 for future use.", "parse", "NotSupportedException");
     if (body === "") throw new UTError("The expression at position " + (at + 1) + " has an operator but no variable.");
     if (op && "+#./;?&=,!@|".indexOf(body[0]) >= 0) throw new UTError("The expression at position " + (at + 1) + " has two operators. Only one is allowed, right after the {.");
     var vars = body.split(",").map(function (spec) {
