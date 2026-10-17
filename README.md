@@ -12,6 +12,8 @@ RFC 6570 URI Template expansion for .NET.
 when working with REST APIs, HAL links, OpenAPI-style client code, or any API
 that returns URI templates for clients to fill in.
 
+**[Watch a template expand and try your own on the project site →](https://brenpike.github.io/Chatter.Rest.UriTemplates/)**
+
 ```csharp
 using Chatter.Rest.UriTemplates;
 
